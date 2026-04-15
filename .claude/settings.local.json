@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python src/main.py)"
+      "Bash(python src/main.py)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
     ]
   }
 }
