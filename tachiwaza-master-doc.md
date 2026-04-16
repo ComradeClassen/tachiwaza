@@ -416,7 +416,7 @@ Same simulation. Different depths of reading. Neither player is wrong. The game 
 - **Phase 1 — Skeleton** (✅ complete, April 13, 2026)
 - **Phase 2 — Real Combat + Grip Graph + Sub-Loop + Ne-Waza + Referee**
   - Session 1 (✅ complete, April 14, 2026): throw resolution, scoring, fatigue, match-end conditions
-  - Session 2 (current target): grip graph + position state machine + ne-waza window + Referee class — see `phase-2-session-2-plan.md`
+  - Session 2 (✅ complete, April 15, 2026): grip graph + position state machine + ne-waza window + Referee class — see `phase-2-session-2-recap.md`
 - **Phase 3 — Calibration** (watch many matches, tune thresholds, adjust curves; single long session)
 
 After Ring 1 Phase 3, work opens onto Ring 2 Phase 1 (first real Matte window). The ring-phase-session architecture holds for the entire project.
@@ -623,28 +623,41 @@ This section remains here because the two projects are architecturally related a
 
 - ✅ Phase 1 skeleton — April 13, 2026
 - ✅ Phase 2 Session 1 — April 14, 2026 (throw resolution, scoring, fatigue)
+- ✅ Phase 2 Session 2 — April 15, 2026 (grip graph, position machine, ne-waza, Referee class)
+  - `src/enums.py` — 8 new enums, 24-part BodyPart, symbolic aliases
+  - `src/judoka.py` — 24 body parts, InjuryState, stun_ticks, cultural layer hooks
+  - `src/grip_graph.py` — GripEdge bipartite graph, 3-tier per-tick resolution, satisfies()
+  - `src/throws.py` — EdgeRequirement prerequisites, ThrowDef, THROW_DEFS for all 8 throws, ne-waza defs
+  - `src/position_machine.py` — legal transition table, throw gating, ne-waza start position
+  - `src/referee.py` — Referee class, Suzuki-sensei + Petrov personalities, personality-driven scoring
+  - `src/ne_waza.py` — OsaekomiClock, NewazaResolver, choke/armbar/pin commitment chains
+  - `src/match.py` — full conductor rewrite, 8-step tick pipeline, sub-loop FSM
+  - `src/main.py` — CLI args, 24-part fighter builds, UTF-8 output
 - ✅ `data-model.md` v0.4 — 24 body parts, GripEdge fields, landing angles, coach IQ visibility hooks
 - ✅ `grip-graph.md` v0.1 — bipartite graph spec, multi-turn chains, throw prerequisites
 - ✅ `grip-sub-loop.md` v0.2 — sub-loop math operates on GripEdge list
 - ✅ `biomechanics.md` v0.1 — physics layer
 - ✅ `cultural-layer.md` v0.1 — 13 styles, style_dna, seminars
 - ✅ `dojo-as-institution.md` v0.2 — Attention Economy, Lineage, Economy
-- ✅ `phase-2-session-2-plan.md` — Claude Code brief for next session
+- ✅ `phase-2-session-2-recap.md` — Session 2 recap with calibration notes
 - ✅ `play-as-judoka-mode.md` — sketch of future mode
 - ✅ Coaching bible — research doc on national styles
 - ✅ Tissue layers research doc — DF architecture translation
 
 ## WHAT'S NEXT
 
-1. **Phase 2 Session 2 — The Grip Graph, the Position Machine, the Ne-Waza Door, and the Referee** (next Claude Code session)
-   - Follow `phase-2-session-2-plan.md` file by file
-   - Build order: enums → judoka → grip_graph → throws → position_machine → referee → ne_waza → match → main
-   - Validation: 20 match runs showing grip war development, prerequisite-gated throws, ne-waza windows, varied match lengths
-   - Write `phase-2-session-2-recap.md` after the session
-2. **Phase 3 — Ring 1 Calibration** — watch many matches, tune thresholds
-3. Review `biomechanics.md` with physics collaborator (Adrian) when the sub-loop is producing real data to react to
-4. Consider whether to start sketching `referee.md` as its own design note after Session 2 ships and the Referee class is real
+1. **Phase 3 — Ring 1 Calibration** (next Claude Code session)
+   - Watch 50–100 matches, tune thresholds until rhythm feels like real judo
+   - Priority calibration targets (see `phase-2-session-2-recap.md`):
+     - Lower draw rate from 62% to 30–40% (try KUZUSHI_THRESHOLD 0.35–0.40)
+     - Raise Sato win probability from ~6% to 30–40%
+     - Tune BASE_ESCAPE_PROB downward so pin waza-ari scores sometimes
+     - Wire golden score / overtime for draws
+     - Consider counting grip establishment as "activity" for passivity tracking
+   - After calibration: update `grip-sub-loop.md` to v0.3 with real match data
+2. Review `biomechanics.md` with physics collaborator (Adrian) — now there's real match data to react to
+3. Consider sketching `referee.md` as its own design note (the personality system earned it)
 
 ---
 
-*Document version: April 14, 2026. Updated alongside grip-graph.md v0.1, data-model.md v0.4, grip-sub-loop.md v0.2, and phase-2-session-2-plan.md v0.1.*
+*Document version: April 15, 2026. Updated after Phase 2 Session 2 shipped. Next update: after Phase 3 calibration.*

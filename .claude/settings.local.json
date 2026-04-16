@@ -3,7 +3,13 @@
     "allow": [
       "Bash(python src/main.py)",
       "Bash(git add:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(python src/main.py --runs 5)",
+      "Bash(python src/main.py --runs 5 --seed 42)",
+      "Bash(python src/main.py --runs 50 --seed 7)",
+      "Bash(python src/main.py --runs 20 --seed 42)",
+      "Bash(python src/main.py --runs 3 --seed 1337)",
+      "Bash(python src/main.py --referee petrov --runs 3 --seed 42)"
     ]
   }
 }

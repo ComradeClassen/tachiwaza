@@ -1,365 +1,285 @@
 # judoka.py
 # Defines the three-layer Judoka model: Identity, Capability, and State.
-# These three dataclasses are composed into a single Judoka object.
 #
-# The key design principle: keep the layers structurally separate.
-# Identity = who they are (static).
-# Capability = what they can do when fresh (changes slowly via dojo training).
-# State = what's true right now in this match (resets each match).
+# Phase 2 Session 2 changes:
+#   - BODY_PARTS expanded from 15 to 24 (added head, hips, thighs, knees, wrists)
+#   - Capability: 9 new body part fields with defaults; keep right_leg/left_leg intact
+#   - BodyPartState: injury_state (InjuryState enum) replaces bool injured
+#   - State: stun_ticks field + grip_configuration replaced by grip_graph reference slot
+#   - Identity: cultural layer hooks added (arm_reach_cm, hip_height_cm, etc.)
+#   - effective_body_part(): updated to use InjuryState.multiplier() + stun_ticks
 #
-# This separation is what lets the same fighter have a great match one day
-# and a terrible one the next: same Capability, different State trajectory.
+# Design principle: layers remain structurally separate.
+#   Identity = who they are (static/slow)
+#   Capability = what they can do fresh (dojo-trained)
+#   State = what's true right now (match-volatile)
 
-from __future__ import annotations       # allows forward references in type hints
-from dataclasses import dataclass, field # 'field' lets us specify defaults for mutable types
-from typing import Optional              # Optional[X] means the value can be X or None
+from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Optional
 
-# Import all enums from the shared enums module
 from enums import (
     BodyArchetype, BeltRank, DominantSide,
-    Position, Posture, Stance, EmotionalState,
+    Position, Posture, Stance, EmotionalState, InjuryState,
 )
-# Import throw/combo types from the throws module
 from throws import ThrowID, ComboID, JudokaThrowProfile
 
 
 # ---------------------------------------------------------------------------
-# BODY PARTS LIST
-# A single source of truth for all 15 body part names. Both Capability (which
-# stores integer scores) and State (which tracks fatigue/injury) reference this
-# list to stay in sync. If we ever add a 16th part, we add it here and both
-# layers automatically pick it up.
+# BODY PARTS LIST — 24 parts (v0.4)
+# Single source of truth for all body part keys. Both Capability (scores) and
+# State (fatigue/injury) initialize from this list.
 # ---------------------------------------------------------------------------
 BODY_PARTS: list[str] = [
-    # Hands — grip security and finger strength
-    "right_hand",   "left_hand",
+    # Hands — primary grip units
+    "right_hand",    "left_hand",
     # Forearms — grip endurance and pulling power
     "right_forearm", "left_forearm",
     # Biceps — pulling strength, frame-breaking
-    "right_bicep",  "left_bicep",
+    "right_bicep",   "left_bicep",
     # Shoulders — throw entry, posture maintenance
     "right_shoulder", "left_shoulder",
-    # Legs — throw power and defensive base
-    "right_leg",    "left_leg",
+    # Legs — throw power and defensive base (whole-leg unit)
+    "right_leg",     "left_leg",
     # Feet — footwork precision and sweep accuracy
-    "right_foot",   "left_foot",
-    # Core — rotational power and posture stability
-    "core",
-    # Lower back — throw lift and posture defense
-    "lower_back",
-    # Neck — resistance to forward-bend kuzushi
-    "neck",
-]  # 15 parts total — confirmed against spec
+    "right_foot",    "left_foot",
+    # Core structures
+    "core",          "lower_back",    "neck",
+    # New in v0.4: ne-waza graspers, joint targets, head
+    "head",
+    "right_hip",     "left_hip",
+    "right_thigh",   "left_thigh",
+    "right_knee",    "left_knee",
+    "right_wrist",   "left_wrist",
+]  # 24 parts total
 
 
 # ---------------------------------------------------------------------------
 # AGE MODIFIER (STUB)
-# In Phase 2+, each attribute cluster follows its own peak-and-decline curve.
-# For example: explosive power peaks at 24-28, fight IQ keeps climbing into
-# the mid-30s, grip strength holds late but recovery rate declines from 25+.
-# For Phase 1, this stub returns 1.0 for everything — no age effect yet.
-# Real curves get added and tuned once we can watch matches and calibrate.
+# Phase 1/2 stub — returns 1.0 for all attributes. Real curves added Phase 3.
 # ---------------------------------------------------------------------------
 def age_modifier(attribute_name: str, age: int) -> float:
-    """Phase 1 stub: returns 1.0 for all attributes and ages.
-
-    Phase 2 will replace this with real bell curves per attribute cluster,
-    based on the table in data-model.md (fight IQ peaks 30-35+, explosive
-    power peaks 24-28, recovery rate declines from 25, etc.).
-    """
-    return 1.0  # No age adjustment yet — everyone performs at their raw baseline
+    return 1.0
 
 
 # ---------------------------------------------------------------------------
 # EFFECTIVE CAPABILITY HELPER
-# Computes the age-adjusted capability value for a given attribute.
-# Called at runtime rather than pre-computed, so that changing a judoka's age
-# (e.g., across a multi-year career) automatically updates their effective stats.
 # ---------------------------------------------------------------------------
 def effective_capability(attribute_name: str, base_value: int, age: int) -> float:
-    """Returns base_value scaled by the age modifier for that attribute."""
-    modifier = age_modifier(attribute_name, age)  # currently always 1.0
-    return base_value * modifier                  # result is float for consistency
+    return base_value * age_modifier(attribute_name, age)
 
 
 # ===========================================================================
 # LAYER 1 — IDENTITY
-# Who the judoka IS. Static or near-static across a career.
-# These values shape how Capability and State behave, but they don't store
-# combat stats themselves. The archetype, dominant side, and personality
-# are the 'DNA' that the simulation interprets.
 # ===========================================================================
 @dataclass
 class Identity:
-    """Identity layer — static attributes that define who this judoka is.
+    """Static attributes that define who this judoka is."""
+    name: str
+    age: int
+    weight_class: str
+    height_cm: int
+    body_archetype: BodyArchetype
+    belt_rank: BeltRank
+    dominant_side: DominantSide
 
-    These don't change tick-to-tick or even match-to-match. They shift slowly
-    across a career (e.g., age increments annually, belt rank progresses).
-    """
-    name: str              # Display name used in the match log
-    age: int               # 16–40; feeds the age modifier system
-    weight_class: str      # e.g. "-90kg"; Phase 1 hardcodes everyone to -90kg
-    height_cm: int         # 165–195; affects throw success biases in Phase 2
-    body_archetype: BodyArchetype   # Primary fighting style (LEVER, MOTOR, etc.)
-    belt_rank: BeltRank             # Determines throw vocabulary size ceiling
-    dominant_side: DominantSide     # RIGHT or LEFT; drives the grip asymmetry system
-
-    # Personality facets — each is a 0–10 sliding scale between two poles.
-    # 0 = the left pole, 10 = the right pole.
-    # Example: aggressive=2 means closer to "aggressive"; aggressive=8 means "patient".
-    # These bias decision-making in close calls during combat (Phase 2+).
+    # Personality facets: 0–10 scale between two poles
     personality_facets: dict[str, int] = field(default_factory=dict)
-    # Keys: "aggressive" (0=aggressive ↔ 10=patient)
-    #       "technical"  (0=technical  ↔ 10=athletic)
-    #       "confident"  (0=confident  ↔ 10=anxious)
-    #       "loyal_to_plan" (0=loyal   ↔ 10=improvisational)
+
+    # -----------------------------------------------------------------------
+    # Cultural / physical layer (v0.4 additions) — declared now, read Ring 2+
+    # -----------------------------------------------------------------------
+    # Physical variables from biomechanics.md
+    arm_reach_cm: int = 185      # Grip control radius; who grips first at engagement
+    hip_height_cm: int = 98      # Kuzushi geometry — affects throw moment arm
+    # weight_distribution encoded as a string for now (FRONT_LOADED/NEUTRAL/BACK_LOADED)
+    weight_distribution: str = "NEUTRAL"
+    mass_density: str = "AVERAGE"   # LIGHT / AVERAGE / DENSE
+
+    # Cultural layer hooks (Ring 2+)
+    nationality: str = ""
+    training_lineage: list[str] = field(default_factory=list)
+    style_dna: dict[str, float] = field(default_factory=dict)
+    stance_matchup_comfort: dict[str, float] = field(default_factory=dict)
 
 
 # ===========================================================================
 # LAYER 2 — CAPABILITY
-# What this judoka's body and mind can do at their BEST — when unfatigued
-# and uninjured. These values change slowly through dojo training (Ring 3+).
-# Each value represents the maximum possible performance for that attribute.
-#
-# At runtime: effective = capability × age_modifier × (1 - fatigue)
 # ===========================================================================
 @dataclass
 class Capability:
-    """Capability layer — maximum physical and mental performance when fully fresh.
+    """Maximum performance when fully fresh. Changes slowly through training."""
 
-    Values on a 0–10 scale. 10 = world-class for that attribute.
-    5 = solid club-level. 2 = an exploitable weak point.
-    These persist between matches and change only through dojo training.
-    """
-    # --- BODY PARTS (0–10 each) ---
-    # Declared individually (not as a dict) so they're named, type-safe, and
-    # easy to assign specific values when hand-building a judoka in main.py.
-
-    # Hands: grip security and finger strength
+    # --- BODY PARTS (0–10 each) — original 15 ---
     right_hand: int
     left_hand: int
-
-    # Forearms: grip endurance; how long they can hold under pulling resistance
     right_forearm: int
     left_forearm: int
-
-    # Biceps: pulling strength; used to break an opponent's frame or posture
     right_bicep: int
     left_bicep: int
-
-    # Shoulders: throw entry power and posture maintenance during engagement
     right_shoulder: int
     left_shoulder: int
-
-    # Legs: the engine for throw power and the first line of defensive balance
     right_leg: int
     left_leg: int
-
-    # Feet: footwork precision and sweeping accuracy (ko-uchi-gari, de-ashi-barai, etc.)
     right_foot: int
     left_foot: int
-
-    # Core: rotational power (seoi-nage, harai-goshi) and posture stability
     core: int
-
-    # Lower back: lift strength for throws and resistance to forward kuzushi
     lower_back: int
-
-    # Neck: resistance to the opponent bending them forward into broken posture
     neck: int
 
-    # --- CARDIO (global, not per-body-part) ---
-    # Cardio is lung and heart — it affects recovery rate for every body part.
-    cardio_capacity: int   # Total endurance pool; how long they last at full output
-    cardio_efficiency: int # How slowly cardio drains under sustained load
+    # --- CARDIO ---
+    cardio_capacity: int
+    cardio_efficiency: int
 
     # --- MIND ---
-    composure_ceiling: int  # Max composure when calm; State.composure_current starts here
-    fight_iq: int           # Read speed, combo recognition, opening detection
-    ne_waza_skill: int      # Ground work competence — separate from standing technique
+    composure_ceiling: int
+    fight_iq: int
+    ne_waza_skill: int
 
     # --- THROW VOCABULARY ---
-    # throw_vocabulary: every throw this judoka knows at all (can attempt)
     throw_vocabulary: list[ThrowID] = field(default_factory=list)
-
-    # throw_profiles: per-throw effectiveness ratings from each side
-    # Maps ThrowID → JudokaThrowProfile (dominant/off-side effectiveness)
     throw_profiles: dict[ThrowID, JudokaThrowProfile] = field(default_factory=dict)
-
-    # signature_throws: the 2–4 throws they've truly specialised in
-    # These get bonus success rates in Phase 2 combat rolls
     signature_throws: list[ThrowID] = field(default_factory=list)
-
-    # signature_combos: drilled chains; these chain at higher probability than
-    # non-signature combos when the opener partially lands
     signature_combos: list[ComboID] = field(default_factory=list)
+
+    # --- NEW BODY PARTS (v0.4 — 9 additions with sensible defaults) ---
+    # These default to moderate values; hand-crafted judoka can override in main.py.
+    head: int = 5           # Head pressure, impact resistance
+    right_hip: int = 7      # Hip rotation power for throws; ne-waza base
+    left_hip: int = 7
+    right_thigh: int = 7    # Inner thigh reap power; leg-lock target
+    left_thigh: int = 7
+    right_knee: int = 6     # Footwork precision; joint-lock vulnerability
+    left_knee: int = 6
+    right_wrist: int = 7    # Fine-motor grip and joint-lock target
+    left_wrist: int = 7
 
 
 # ===========================================================================
 # STATE — BODY PART STATE
-# A small dataclass for per-body-part runtime tracking.
-# One BodyPartState exists for each of the 15 body parts during a match.
 # ===========================================================================
 @dataclass
 class BodyPartState:
     """Tracks the real-time condition of one body part during a match."""
-    fatigue: float = 0.0   # 0.0 = completely fresh; 1.0 = completely cooked
-    injured: bool  = False  # True if a serious event (throw impact, twist) hit this part
-    # When injured=True, the effective contribution of this part is capped at 30%:
-    #   effective = capability_age_modified × (1 - fatigue) × (0.3 if injured else 1.0)
+    fatigue: float = 0.0                         # 0.0 = fresh; 1.0 = cooked
+    injury_state: InjuryState = InjuryState.HEALTHY  # severity of current injury
+    stun_ticks: int = 0                          # ticks of temporary impairment remaining
+
+    @property
+    def injured(self) -> bool:
+        """Backward-compatible accessor: True if anything worse than HEALTHY."""
+        return self.injury_state != InjuryState.HEALTHY
 
 
 # ===========================================================================
 # LAYER 3 — STATE
-# Everything that is true RIGHT NOW, in THIS match.
-# Initialized fresh from Capability at the start of each match.
-# Updated every tick. Fully resets before the next match
-# (with one exception: Tournament Carryover, a Ring 2+ feature).
 # ===========================================================================
 @dataclass
 class State:
-    """State layer — the live, moment-to-moment condition of a judoka in a match.
+    """Live, moment-to-moment condition of a judoka in a match. Resets each match."""
 
-    This layer is volatile: it changes constantly during a match and is
-    (mostly) discarded afterward. The same Capability can produce a wildly
-    different State trajectory depending on opponent, fatigue trajectory, and
-    coach instructions.
-    """
     # --- BODY STATE ---
-    # One BodyPartState per body part, keyed by the part's name string.
-    # Using a dict here (rather than named fields) so the tick loop can
-    # update parts by name: state.body["right_hand"].fatigue += 0.002
-    body: dict[str, BodyPartState]
+    body: dict[str, BodyPartState]   # one entry per BODY_PARTS key
 
-    # --- CARDIO STATE ---
-    cardio_current: float  # Starts at 1.0 (full), depletes with sustained action
-                           # Cardio drain is a global tax — it slows recovery for all body parts
+    # --- CARDIO ---
+    cardio_current: float   # 1.0 = full; depletes with sustained action
 
-    # --- MIND STATE ---
-    composure_current: float        # Starts at composure_ceiling; drops after stuffed throws,
-                                    # scoring events, or being dominated in the grip war
-    last_event_emotional_weight: float  # A spike value; decays over ticks. Large events
-                                        # (being thrown for waza-ari) cause a bigger spike.
+    # --- MIND ---
+    composure_current: float         # drops after stuffed throws, scoring events, etc.
+    last_event_emotional_weight: float  # spike value; decays over ticks
 
-    # --- MATCH POSITION STATE ---
-    position: Position   # Where in the match space the judoka currently is
-    posture: Posture     # How upright they are right now (broken posture = vulnerable)
-    current_stance: Stance  # Can switch mid-match via a coach instruction
+    # --- MATCH POSITION ---
+    position: Position   # where the judoka is in the match space
+    posture: Posture     # how upright (BROKEN = vulnerable to throw entry)
+    current_stance: Stance
 
     # --- GRIP STATE ---
-    # Which hand has what grip on which part of the opponent's gi.
-    # Empty dict in Phase 1 — populated in Phase 2 when the grip graph is built.
-    grip_configuration: dict  # e.g. {"right": "collar", "left": "sleeve"}
+    # Phase 1 was a dict. Phase 2: grip state lives on the Match's GripGraph.
+    # This field kept as an empty dict for backward compat; not read in Phase 2.
+    grip_configuration: dict
+
+    # --- STUN ---
+    stun_ticks: int = 0   # match-level stun (composure hit, disorientation)
+                           # decays 1 per tick; while > 0, effective values are penalised
 
     # --- SCORING ---
-    score: dict   # {"waza_ari": 0, "ippon": False} — IJF scoring
-    shidos: int   # Penalty count; 3 = hansoku-make (disqualification)
+    score: dict = field(default_factory=lambda: {"waza_ari": 0, "ippon": False})
+    shidos: int = 0
 
     # --- INSTRUCTION TRACKING ---
-    # The most recent coach instruction, and how cleanly it's being executed.
-    # reception = composure × trust × fight_iq × (1 - fatigue) — computed in Phase 3.
-    recent_events: list        # Last N tick events; used for short-term decision context
-    current_instruction: str   # Biases decision-making until overwritten
-    instruction_received_strength: float  # 0.0 = ignored; 1.0 = executing perfectly
+    recent_events: list = field(default_factory=list)
+    current_instruction: str = ""
+    instruction_received_strength: float = 0.0
 
     # --- RING 2+ HOOKS ---
-    # These fields are declared now so the data model is complete from day one.
-    # They are NOT used in Phase 1 — the simulation doesn't read them yet.
+    relationship_with_sensei: dict = field(default_factory=dict)
+    matches_today: int = 0
+    cumulative_fatigue_debt: dict = field(default_factory=dict)
+    emotional_state_from_last_match: Optional[EmotionalState] = None
 
-    # Trust and relationship with the coach — grows slowly over dojo time (Ring 3+)
-    relationship_with_sensei: dict  # keys: chair_time_received, chair_time_denied,
-                                    #       perceived_priority, loyalty (0.0–10.0)
-
-    # Tournament carryover — fatigue that doesn't fully recover between matches
-    # on the same tournament day. A key reason veterans fade in semi-finals.
-    matches_today: int                      # How many matches they've fought today
-    cumulative_fatigue_debt: dict[str, float]  # Residual fatigue per body part
-    emotional_state_from_last_match: Optional[EmotionalState]  # None = fresh day
-
-    # ---------------------------------------------------------------------------
-    # CLASS METHOD: fresh()
-    # Creates a brand-new State initialized from a Capability, as if the judoka
-    # is walking onto the mat for a first match of the day, fully rested.
-    # In Ring 2+, a second classmethod (from_residual) will initialize from
-    # a previous match's leftover fatigue instead.
-    # ---------------------------------------------------------------------------
     @classmethod
     def fresh(cls, capability: Capability) -> "State":
-        """Initialize a clean match-start State from the judoka's Capability.
-
-        All body parts start at 0.0 fatigue (fresh). Cardio starts at 1.0 (full).
-        Composure starts at its ceiling. Position is STANDING_DISTANT.
-        """
+        """Initialize a clean match-start State from a Capability."""
         return cls(
-            # Build the body dict: one fresh BodyPartState for every named body part
             body={part: BodyPartState() for part in BODY_PARTS},
-            # Cardio starts full
             cardio_current=1.0,
-            # Composure starts at its maximum ceiling value
             composure_current=float(capability.composure_ceiling),
-            # No emotional events have happened yet
             last_event_emotional_weight=0.0,
-            # Both judoka start distant — grips not yet established
             position=Position.STANDING_DISTANT,
             posture=Posture.UPRIGHT,
-            current_stance=Stance.ORTHODOX,  # everyone starts orthodox; switch via instruction
-            # No grips established yet
+            current_stance=Stance.ORTHODOX,
             grip_configuration={},
-            # Zero score
+            stun_ticks=0,
             score={"waza_ari": 0, "ippon": False},
             shidos=0,
-            # No events have happened yet
             recent_events=[],
             current_instruction="",
             instruction_received_strength=0.0,
-            # Ring 2+ fields: empty/zero for now
             relationship_with_sensei={},
             matches_today=0,
             cumulative_fatigue_debt={part: 0.0 for part in BODY_PARTS},
-            emotional_state_from_last_match=None,  # None = no previous match today
+            emotional_state_from_last_match=None,
         )
 
 
 # ===========================================================================
 # JUDOKA
-# The top-level object that composes all three layers.
-# Everything the simulation needs to know about a fighter lives here —
-# accessed as judoka.identity, judoka.capability, or judoka.state.
 # ===========================================================================
 @dataclass
 class Judoka:
-    """A complete judoka: Identity + Capability + State composed into one object.
-
-    The match engine reads from all three layers every tick:
-    - Identity tells it *who* is fighting (archetype, dominant side, personality)
-    - Capability tells it *what they can do at their best*
-    - State tells it *what's true right now* (fatigue, posture, composure)
-    """
-    identity: Identity      # Layer 1 — static/slow: name, archetype, age, dominant side
-    capability: Capability  # Layer 2 — dojo-trained: body scores, throw vocabulary
-    state: State            # Layer 3 — match-volatile: fatigue, composure, position
+    """A complete judoka: Identity + Capability + State composed into one object."""
+    identity: Identity
+    capability: Capability
+    state: State
 
     def effective_body_part(self, part: str) -> float:
         """Compute the effective strength of one body part right now.
 
-        Combines all three layers into a single runtime value:
-            base_capability × age_modifier × (1 - fatigue) × injury_multiplier
+        Formula: base_capability × age_modifier × (1 - fatigue)
+                 × injury_multiplier × stun_multiplier
 
-        This is the value the Phase 2 combat system will use for throw success rolls.
-        A 9-rated right_hand with 0.4 fatigue on a 26-year-old:
-            9 × 1.0 × (1 - 0.4) × 1.0 = 5.4
+        A 9-rated right_hand: fresh = 9.0, with 0.4 fatigue + minor pain ≈ 4.3.
         """
-        # Pull the raw capability score for this body part by name
-        base = getattr(self.capability, part)
+        # Base capability — getattr works for all 24 named fields
+        base = getattr(self.capability, part, 5)  # default 5 for any unlisted part
 
-        # Apply the age modifier (currently always 1.0 — stub for Phase 2)
+        # Age modifier (stub — always 1.0 until Phase 3 calibration)
         age_mod = age_modifier(part, self.identity.age)
 
-        # Read current fatigue for this part from State
-        fatigue = self.state.body[part].fatigue
+        # Fatigue from State
+        part_state = self.state.body.get(part)
+        if part_state is None:
+            return base * age_mod  # part not tracked — return unmodified
 
-        # If injured, the part contributes only 30% of its potential
-        injured_multiplier = 0.3 if self.state.body[part].injured else 1.0
+        fatigue = part_state.fatigue
 
-        # Combine everything into one effective float
-        return base * age_mod * (1.0 - fatigue) * injured_multiplier
+        # Injury severity multiplier
+        injury_mult = part_state.injury_state.multiplier()
+
+        # Stun multiplier: match-level stun (on State.stun_ticks)
+        # reduces all parts by up to 30% while active
+        stun_mult = 1.0
+        if self.state.stun_ticks > 0:
+            stun_mult = max(0.7, 1.0 - self.state.stun_ticks * 0.05)
+
+        return base * age_mod * (1.0 - fatigue) * injury_mult * stun_mult
