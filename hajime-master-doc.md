@@ -1,4 +1,7 @@
 # HAJIME — Master Design & Development Document
+
+> *Renamed from Tachiwaza on April 16, 2026. The title* Hajime *refers to the referee's call that starts every match — the game is everything that happens before Hajime is set, and everything that happens after.*
+
 ### A Living Brainstorm / Build Roadmap / Reference
 
 *This document is a working artifact. Update it after every session.*
