@@ -385,9 +385,11 @@ class CounterAction(Enum):
 # may occur between any two Matte calls.
 # ---------------------------------------------------------------------------
 class SubLoopState(Enum):
-    ENGAGEMENT      = auto()  # Fighters closing distance, creating initial edges
-    TUG_OF_WAR      = auto()  # Main contest phase — edges contesting, delta computing
-    KUZUSHI_WINDOW  = auto()  # grip_delta threshold crossed — throw window is open
-    STIFLED_RESET   = auto()  # Stalemate resolved by breaking apart and resetting
+    """Coarse phase of live match time. Physics-substrate Part 3 replaced the
+    old ENGAGEMENT/TUG_OF_WAR/KUZUSHI_WINDOW/STIFLED_RESET machine with a
+    single STANDING phase whose flow is driven by the per-tick force model.
+    NE_WAZA is still a genuine phase because the ground resolver takes over.
+    """
+    STANDING        = auto()  # Live standing exchange — Part 3 physics driven
     THROW_COMMITTED = auto()  # One-tick state: throw entry in progress
     NE_WAZA         = auto()  # Ground work — pins, chokes, armbars

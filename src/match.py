@@ -1,37 +1,45 @@
 # match.py
-# Phase 2 Session 2: Match as the conductor.
+# Physics-substrate Part 3: the tick update is the match.
 #
-# The Match class now orchestrates all subsystems each tick:
-#   1. Body fatigue decay + stun_ticks
-#   2. Grip graph tick update (edge aging, force-breaks)
-#   3. Sub-loop state machine (ENGAGEMENT → TUG_OF_WAR → KUZUSHI_WINDOW → ...)
-#   4. Position transitions (via PositionMachine)
-#   5. Throw resolution (grip-graph gated, through Referee scoring)
-#   6. Ne-waza (NewazaResolver + OsaekomiClock)
-#   7. Referee Matte decisions
-#   8. Passivity tracking
+# The old ENGAGEMENT/TUG_OF_WAR/KUZUSHI_WINDOW/STIFLED_RESET state machine
+# is gone. Flow now emerges from the 12-step force model (spec 3.4):
+#   1. Grip state updates        — REACH / DEEPEN / STRIP / RELEASE actions
+#   2. Force accumulation        — sum driving-mode forces through grips
+#   3. Force application         — Newton 3 counter-forces on tori
+#   4. Net torque / translation  — per-fighter net_force + net_torque
+#   5. CoM velocity update
+#   6. CoM position update
+#   7. Trunk angle update
+#   8. BoS update                — STEP / SWEEP_LEG
+#   9. Kuzushi check             — polygon test from Part 1.5
+#  10. Throw signature match     — actual in [0, 1]
+#  11. Compound action resolve   — COMMIT_THROW
+#  12. Fatigue / composure / clocks
 #
-# What's NOT here:
-#   - Coach instructions (Ring 2)
-#   - Cultural layer grip selection (Ring 2)
-#   - Full prose templating (Phase 4)
-#   - Combo chains wired into the sub-loop (Phase 3)
-#   - Golden score / tiebreaker (Phase 3)
+# Each judoka's actions are chosen by action_selection.select_actions (3.3).
+# Perception of signature match goes through perception.perceive (3.5).
 
 import random
+import math
 from dataclasses import dataclass, field
 from typing import Optional
 
 from enums import (
     BodyArchetype, DominantSide, MatteReason, Position, StanceMatchup,
-    SubLoopState, LandingProfile,
+    SubLoopState, LandingProfile, GripMode,
 )
 from judoka import Judoka
 from throws import ThrowID, ThrowDef, THROW_REGISTRY, THROW_DEFS
-from grip_graph import GripGraph, Event
+from grip_graph import GripGraph, GripEdge, Event
 from position_machine import PositionMachine
 from referee import Referee, MatchState, ThrowLanding, ScoreResult
 from ne_waza import OsaekomiClock, NewazaResolver
+from actions import (
+    Action, ActionKind,
+    GRIP_KINDS, FORCE_KINDS, BODY_KINDS, DRIVING_FORCE_KINDS,
+)
+from action_selection import select_actions
+from perception import actual_signature_match, perceive
 
 
 # ---------------------------------------------------------------------------
@@ -40,18 +48,23 @@ from ne_waza import OsaekomiClock, NewazaResolver
 # many matches.
 # ---------------------------------------------------------------------------
 
-# Sub-loop timing
-KUZUSHI_THRESHOLD:        float = 0.45  # grip_delta above which a window opens
-KUZUSHI_MIN_CONSECUTIVE:  int   = 2     # ticks of grip_delta above threshold to open window
-STALEMATE_THRESHOLD:      float = 0.12  # grip_delta band considered stalemate
-STALEMATE_DURATION:       int   = 18    # ticks of stalemate before STIFLED_RESET
-RESET_RECOVERY_TICKS_MIN: int   = 2
-RESET_RECOVERY_TICKS_MAX: int   = 4
-ENGAGEMENT_TICKS_NEEDED:  int   = 2     # legacy floor; real duration is max(reach_ticks_for(A),B)
+# Engagement (Part 2.7): baseline floor; actual duration is max of
+# reach_ticks_for(a) and reach_ticks_for(b), enforced from the graph.
+ENGAGEMENT_TICKS_FLOOR: int = 2
 
 # Part 2.6 passivity clocks (1 tick = 1 second in v0.1).
 KUMI_KATA_SHIDO_TICKS:        int = 30   # grip-to-attack threshold
 UNCONVENTIONAL_SHIDO_TICKS:   int = 5    # BELT/PISTOL/CROSS immediate-attack threshold
+
+# Part 3 force-model calibration stubs. Phase 3 telemetry will tune these.
+JUDOKA_MASS_KG:           float = 80.0   # v0.1 uniform; Part 6 can pull from identity.
+FRICTION_DAMPING:         float = 0.55   # fraction of velocity surviving a tick (planted feet)
+DISPLACEMENT_GAIN:        float = 0.00006 # meters-per-Newton-tick on CoM (with DAMPING)
+TRUNK_ANGLE_GAIN:         float = 0.00008 # radians per N·m of net torque (stubbed moment arm)
+TRUNK_RESTORATION:        float = 0.15   # passive + active return-to-vertical each tick
+FORCE_NOISE_PCT:          float = 0.10   # ±10% uniform on applied force magnitudes (3.8)
+TRUNK_NOISE_PCT:          float = 0.05   # ±5% uniform on trunk angle updates (3.8)
+STALEMATE_NO_PROGRESS_TICKS: int = 45    # ticks with no kuzushi signal before matte-eligible
 
 # Throw resolution
 NOISE_STD:           float = 2.0
@@ -73,10 +86,6 @@ THROW_FATIGUE: dict[str, float] = {
 # Background fatigue per tick
 CARDIO_DRAIN_PER_TICK: float = 0.002
 HAND_FATIGUE_PER_TICK: float = 0.0003
-
-# How often a fighter in a KUZUSHI_WINDOW commits to throw
-WINDOW_COMMIT_BASE:   float = 0.65  # probability base per window tick
-FORCE_COMMIT_PROB:    float = 0.025  # desperate attempt if no window (~1 per 40 ticks)
 
 # Composure drops on scoring events
 COMPOSURE_DROP_WAZA_ARI: float = 0.5
@@ -216,18 +225,22 @@ class Match:
         self.osaekomi     = OsaekomiClock()
         self.ne_waza_resolver = NewazaResolver()
 
-        # Sub-loop state machine
-        self.sub_loop_state = SubLoopState.ENGAGEMENT
+        # Phase of live match time. Part 3 physics owns STANDING. NE_WAZA
+        # branches out to NewazaResolver.
+        self.sub_loop_state = SubLoopState.STANDING
 
-        # Sub-loop tracking counters
-        self.engagement_ticks    = 0    # ticks spent in ENGAGEMENT
-        self.tug_of_war_ticks    = 0    # ticks spent in TUG_OF_WAR
-        self.stalemate_ticks     = 0    # ticks grip_delta has been in stalemate band
-        self._kuzushi_consecutive = 0   # consecutive ticks above kuzushi threshold
-        self.kuzushi_window_ticks  = 0  # ticks spent in KUZUSHI_WINDOW
-        self.kuzushi_window_max    = 0  # total ticks available in this window
-        self.reset_ticks           = 0  # recovery ticks after stifled reset
-        self._reset_duration       = 3
+        # Engagement timer — counts ticks while both hands are REACHING and
+        # no edges exist; attempt_engagement fires once both fighters have
+        # completed their belt-based reach.
+        self.engagement_ticks = 0
+
+        # Stalemate tracking (feeds referee): ticks with no kuzushi signal
+        # and no committed attack.
+        self.stalemate_ticks = 0
+
+        # Kuzushi transition tracking (edge-trigger KUZUSHI_INDUCED events).
+        self._a_was_kuzushi_last_tick = False
+        self._b_was_kuzushi_last_tick = False
 
         # Ne-waza tracking
         self.ne_waza_top_id: Optional[str] = None   # which fighter is on top
@@ -284,32 +297,118 @@ class Match:
     def _tick(self, tick: int) -> None:
         events: list[Event] = []
 
-        # 1. Body fatigue: background drain + stun_ticks decay
+        # Background: fatigue drain + stun decay (Step 12 partial; we do it
+        # first so action selection sees the up-to-date state).
         self._accumulate_base_fatigue(self.fighter_a)
         self._accumulate_base_fatigue(self.fighter_b)
         self._decay_stun(self.fighter_a)
         self._decay_stun(self.fighter_b)
 
-        # 2. Grip graph tick update (age edges, force-break cooked hands)
-        if self.sub_loop_state not in (SubLoopState.STIFLED_RESET, SubLoopState.ENGAGEMENT):
-            graph_events = self.grip_graph.tick_update(tick, self.fighter_a, self.fighter_b)
-            events.extend(graph_events)
-
-        # 3. Sub-loop state machine advance
-        sub_events = self._advance_sub_loop(tick)
-        events.extend(sub_events)
-        if self.match_over:
-            self._print_events(events)
+        # Ne-waza branches to the ground resolver; no standup physics this tick.
+        if self.sub_loop_state == SubLoopState.NE_WAZA:
+            self._tick_newaza(tick, events)
+            self._post_tick(tick, events)
             return
 
-        # 4. Position machine: implicit transitions
+        # ------------------------------------------------------------------
+        # STANDING — Part 3 12-step update
+        # ------------------------------------------------------------------
+
+        # Action selection (Part 3.3). Each judoka picks up to two actions
+        # based on the priority ladder; COMMIT_THROW supersedes the cap.
+        actions_a = select_actions(
+            self.fighter_a, self.fighter_b, self.grip_graph,
+            self.kumi_kata_clock[self.fighter_a.identity.name],
+        )
+        actions_b = select_actions(
+            self.fighter_b, self.fighter_a, self.grip_graph,
+            self.kumi_kata_clock[self.fighter_b.identity.name],
+        )
+
+        # Step 1 — grip state updates (REACH/DEEPEN/STRIP/RELEASE/...).
+        self._apply_grip_actions(self.fighter_a, actions_a, tick, events)
+        self._apply_grip_actions(self.fighter_b, actions_b, tick, events)
+
+        # If still pre-engagement (no edges) and both fighters issued REACH
+        # this tick, accumulate engagement_ticks. Seat POCKET grips once the
+        # slower fighter's belt-based reach completes.
+        self._resolve_engagement(actions_a, actions_b, tick, events)
+
+        # Steps 2-4 — force accumulation + Newton-3 application. Produces
+        # per-fighter net force (2D) from all driving actions issued this tick.
+        net_force_a = self._compute_net_force_on(
+            victim=self.fighter_a, attacker=self.fighter_b, attacker_actions=actions_b,
+        )
+        net_force_b = self._compute_net_force_on(
+            victim=self.fighter_b, attacker=self.fighter_a, attacker_actions=actions_a,
+        )
+
+        # Steps 5-7 — CoM velocity/position + trunk angle updates.
+        self._apply_physics_update(self.fighter_a, net_force_a)
+        self._apply_physics_update(self.fighter_b, net_force_b)
+
+        # Step 8 — BoS update (STEP/SWEEP_LEG are v0.1 stubs).
+        self._apply_body_actions(self.fighter_a, actions_a)
+        self._apply_body_actions(self.fighter_b, actions_b)
+
+        # Step 9 — kuzushi check (post-update state).
+        a_kuzushi = self._is_kuzushi(self.fighter_a)
+        b_kuzushi = self._is_kuzushi(self.fighter_b)
+        if a_kuzushi and not self._a_was_kuzushi_last_tick:
+            events.append(Event(
+                tick=tick, event_type="KUZUSHI_INDUCED",
+                description=f"[physics] {self.fighter_a.identity.name} off-balance.",
+            ))
+        if b_kuzushi and not self._b_was_kuzushi_last_tick:
+            events.append(Event(
+                tick=tick, event_type="KUZUSHI_INDUCED",
+                description=f"[physics] {self.fighter_b.identity.name} off-balance.",
+            ))
+        self._a_was_kuzushi_last_tick = a_kuzushi
+        self._b_was_kuzushi_last_tick = b_kuzushi
+
+        # Steps 10 & 11 — compound COMMIT_THROW resolution. Actor iterates
+        # both fighters; resolution uses the actual signature for the throw.
+        for actor, opp, acts in (
+            (self.fighter_a, self.fighter_b, actions_a),
+            (self.fighter_b, self.fighter_a, actions_b),
+        ):
+            for act in acts:
+                if act.kind != ActionKind.COMMIT_THROW or act.throw_id is None:
+                    continue
+                commit_events = self._resolve_commit_throw(
+                    actor, opp, act.throw_id, tick,
+                )
+                events.extend(commit_events)
+                if self.match_over:
+                    self._post_tick(tick, events)
+                    return
+                if self.sub_loop_state == SubLoopState.NE_WAZA:
+                    # Commit went to ground; stop standing processing.
+                    self._post_tick(tick, events)
+                    return
+
+        # Step 12 — grip-edge fatigue/clock maintenance (Part 2.4-2.6).
+        graph_events = self.grip_graph.tick_update(
+            tick, self.fighter_a, self.fighter_b
+        )
+        events.extend(graph_events)
+
+        # Composure drift from kuzushi states.
+        self._update_composure_from_kuzushi(a_kuzushi, b_kuzushi)
+
+        # Stalemate counter: increments on ticks with no kuzushi on either
+        # fighter and no commit — referee Matte hinges on this.
+        self._update_stalemate_counter(actions_a, actions_b, a_kuzushi, b_kuzushi)
+
+        # Part 2.6 + legacy passivity clocks.
+        self._update_grip_passivity(tick, events)
+        self._update_passivity(tick, events)
+
+        # Position machine (implicit transitions only in the new model).
         new_pos = PositionMachine.determine_transition(
-            self.position,
-            self.sub_loop_state,
-            self.grip_graph,
-            self.fighter_a,
-            self.fighter_b,
-            events,
+            self.position, self.sub_loop_state, self.grip_graph,
+            self.fighter_a, self.fighter_b, events,
         )
         if new_pos and new_pos != self.position:
             trans_events = self.grip_graph.transform_for_position(
@@ -318,7 +417,13 @@ class Match:
             events.extend(trans_events)
             self.position = new_pos
 
-        # 5. Osaekomi clock (if pin is active)
+        self._post_tick(tick, events)
+
+    # -----------------------------------------------------------------------
+    # POST-TICK — osaekomi + matte + emit.
+    # -----------------------------------------------------------------------
+    def _post_tick(self, tick: int, events: list[Event]) -> None:
+        # Osaekomi clock (runs in NE_WAZA only).
         if self.osaekomi.active:
             score_str = self.osaekomi.tick()
             if score_str:
@@ -326,333 +431,358 @@ class Match:
                     score_str, self.osaekomi.holder_id, tick
                 )
                 events.extend(pin_events)
-                if self.match_over:
-                    self._print_events(events)
-                    return
 
-        # 6. Referee: should Matte be called?
-        matte_reason = self.referee.should_call_matte(
-            self._build_match_state(tick), tick
-        )
-        if matte_reason:
-            matte_event = self.referee.announce_matte(matte_reason, tick)
-            events.append(matte_event)
-            self._handle_matte(tick)
+        # Referee: Matte?
+        if not self.match_over:
+            matte_reason = self.referee.should_call_matte(
+                self._build_match_state(tick), tick
+            )
+            if matte_reason:
+                matte_event = self.referee.announce_matte(matte_reason, tick)
+                events.append(matte_event)
+                self._handle_matte(tick)
 
-        # 7. Passivity
-        self._update_passivity(tick, events)
-        self._update_grip_passivity(tick, events)
-
-        # 8. Print events
         self._print_events(events)
 
     # -----------------------------------------------------------------------
-    # SUB-LOOP STATE MACHINE
+    # NE-WAZA BRANCH
     # -----------------------------------------------------------------------
-    def _advance_sub_loop(self, tick: int) -> list[Event]:
-        events: list[Event] = []
+    def _tick_newaza(self, tick: int, events: list[Event]) -> None:
+        ne_events = self.ne_waza_resolver.tick_resolve(
+            position=self.position,
+            graph=self.grip_graph,
+            fighters=(self._ne_waza_top(), self._ne_waza_bottom()),
+            osaekomi=self.osaekomi,
+            current_tick=tick,
+        )
+        events.extend(ne_events)
 
-        state = self.sub_loop_state
-
-        # -----------------------------------------------------------------
-        if state == SubLoopState.ENGAGEMENT:
-            # Part 2.7: while closing distance, both hands are REACHING.
-            self._set_reaching(self.fighter_a)
-            self._set_reaching(self.fighter_b)
-
-            self.engagement_ticks += 1
-            # Reach duration is the slower fighter's belt-based reach time
-            # (the dyad can't seat grips until both hands have arrived).
-            reach_ticks = max(
-                self.grip_graph.reach_ticks_for(self.fighter_a),
-                self.grip_graph.reach_ticks_for(self.fighter_b),
-                ENGAGEMENT_TICKS_NEEDED,
-            )
-            if self.engagement_ticks >= reach_ticks:
-                new_edges = self.grip_graph.attempt_engagement(
-                    self.fighter_a, self.fighter_b, tick
+        for ev in ne_events:
+            if ev.event_type == "SUBMISSION_VICTORY":
+                winner_name = ev.data.get("winner", "")
+                self.winner = (self.fighter_a
+                               if self.fighter_a.identity.name == winner_name
+                               else self.fighter_b)
+                self.match_over = True
+                return
+            if ev.event_type == "ESCAPE_SUCCESS":
+                self.ne_waza_resolver.active_technique = None
+                self.osaekomi.break_pin()
+                reset_events = self.grip_graph.transform_for_position(
+                    self.position, Position.STANDING_DISTANT, tick
                 )
-                if new_edges:
-                    for edge in new_edges:
-                        events.append(Event(
-                            tick=tick,
-                            event_type="GRIP_ESTABLISH",
-                            description=(
-                                f"[grip] {edge.grasper_id} "
-                                f"({edge.grasper_part.value}) → "
-                                f"{edge.target_id} "
-                                f"({edge.target_location.value}, "
-                                f"{edge.grip_type_v2.name} @ "
-                                f"{edge.depth_level.name})"
-                            ),
-                        ))
-                    self.sub_loop_state  = SubLoopState.TUG_OF_WAR
-                    self.position        = Position.GRIPPING
-                    self.tug_of_war_ticks = 0
-                    self.stalemate_ticks  = 0
-                    self._kuzushi_consecutive = 0
-
-        # -----------------------------------------------------------------
-        elif state == SubLoopState.TUG_OF_WAR:
-            self.tug_of_war_ticks += 1
-
-            # Part 2.7: each tick of tug-of-war, each grasper tries to deepen
-            # their grips one step (POCKET → STANDARD → DEEP). Real Part 3
-            # will gate this behind an explicit DEEPEN action; for v0.1 we
-            # advance opportunistically.
-            fighters_by_id = {
-                self.fighter_a.identity.name: self.fighter_a,
-                self.fighter_b.identity.name: self.fighter_b,
-            }
-            for edge in list(self.grip_graph.edges):
-                grasper = fighters_by_id.get(edge.grasper_id)
-                if grasper is not None:
-                    self.grip_graph.deepen_grip(edge, grasper)
-
-            grip_delta = self.grip_graph.compute_grip_delta(
-                self.fighter_a, self.fighter_b
-            )
-
-            if abs(grip_delta) < STALEMATE_THRESHOLD:
-                # Stalemate band
-                self._kuzushi_consecutive = 0
-                self.stalemate_ticks += 1
-                if self.stalemate_ticks >= STALEMATE_DURATION:
-                    # STIFLED_RESET
-                    broken = self.grip_graph.break_all_edges()
-                    events.append(Event(
-                        tick=tick,
-                        event_type="STIFLED_RESET",
-                        description=(
-                            f"[grip] Stifled reset — {len(broken)} edge(s) broken. "
-                            f"Both fighters step back."
-                        ),
-                    ))
-                    self.sub_loop_state  = SubLoopState.STIFLED_RESET
-                    self.position        = Position.STANDING_DISTANT
-                    self.stalemate_ticks = 0
-                    self.reset_ticks     = 0
-                    self._reset_duration = random.randint(
-                        RESET_RECOVERY_TICKS_MIN, RESET_RECOVERY_TICKS_MAX
-                    )
-
-            elif grip_delta > KUZUSHI_THRESHOLD or grip_delta < -KUZUSHI_THRESHOLD:
-                # Above threshold — accumulate consecutive ticks
-                self.stalemate_ticks = 0
-                self._kuzushi_consecutive += 1
-                if self._kuzushi_consecutive >= KUZUSHI_MIN_CONSECUTIVE:
-                    # Window opens
-                    window_size = random.randint(1, 3)
-                    self.kuzushi_window_ticks = 0
-                    self.kuzushi_window_max   = window_size
-                    self.sub_loop_state = SubLoopState.KUZUSHI_WINDOW
-                    self.position       = Position.ENGAGED
-                    leader = (
-                        self.fighter_a if grip_delta > 0 else self.fighter_b
-                    )
-                    events.append(Event(
-                        tick=tick,
-                        event_type="KUZUSHI_WINDOW_OPENED",
-                        description=(
-                            f"[grip] Kuzushi window — "
-                            f"{leader.identity.name} dominant "
-                            f"(delta {grip_delta:+.2f}). "
-                            f"Window: {window_size} tick(s)."
-                        ),
-                    ))
-            else:
-                self.stalemate_ticks = 0
-                self._kuzushi_consecutive = 0
-
-            # Occasionally attempt a forced throw (desperation)
-            if (self.sub_loop_state == SubLoopState.TUG_OF_WAR
-                    and random.random() < FORCE_COMMIT_PROB):
-                attacker, defender = self._pick_attacker()
-                force_events = self._try_forced_throw(attacker, defender, tick)
-                events.extend(force_events)
-
-        # -----------------------------------------------------------------
-        elif state == SubLoopState.KUZUSHI_WINDOW:
-            self.kuzushi_window_ticks += 1
-
-            # Which fighter has the grip advantage?
-            grip_delta = self.grip_graph.compute_grip_delta(
-                self.fighter_a, self.fighter_b
-            )
-            attacker = self.fighter_a if grip_delta > 0 else self.fighter_b
-            defender = self.fighter_b if grip_delta > 0 else self.fighter_a
-            window_q = min(1.0, abs(grip_delta) / 4.0)
-
-            # Roll for commitment each tick of the window
-            commit_prob = min(
-                0.92,
-                WINDOW_COMMIT_BASE + window_q * 0.3
-            )
-            if random.random() < commit_prob:
-                throw_events = self._try_throw_from_window(
-                    attacker, defender, tick, window_q
-                )
-                events.extend(throw_events)
-                if self.match_over:
-                    return events
-                # After any throw attempt the window is consumed
-                self.sub_loop_state      = SubLoopState.TUG_OF_WAR
-                self._kuzushi_consecutive = 0
-            elif self.kuzushi_window_ticks >= self.kuzushi_window_max:
-                # Window expired — opportunity wasted
-                events.append(Event(
-                    tick=tick,
-                    event_type="KUZUSHI_WINDOW_CLOSED",
-                    description=(
-                        f"[grip] Kuzushi window closed — "
-                        f"{attacker.identity.name} didn't commit."
-                    ),
-                ))
-                self.sub_loop_state      = SubLoopState.TUG_OF_WAR
-                self._kuzushi_consecutive = 0
-
-        # -----------------------------------------------------------------
-        elif state == SubLoopState.STIFLED_RESET:
-            self.reset_ticks += 1
-            if self.reset_ticks >= self._reset_duration:
+                events.extend(reset_events)
+                self.position         = Position.STANDING_DISTANT
+                self.sub_loop_state   = SubLoopState.STANDING
                 self.engagement_ticks = 0
-                self.sub_loop_state   = SubLoopState.ENGAGEMENT
-                events.append(Event(
-                    tick=tick,
-                    event_type="ENGAGEMENT_BEGUN",
-                    description=(
-                        f"[engage] {self.fighter_a.identity.name} and "
-                        f"{self.fighter_b.identity.name} re-engage."
-                    ),
-                ))
-
-        # -----------------------------------------------------------------
-        elif state == SubLoopState.NE_WAZA:
-            ne_events = self.ne_waza_resolver.tick_resolve(
-                position=self.position,
-                graph=self.grip_graph,
-                fighters=(self._ne_waza_top(), self._ne_waza_bottom()),
-                osaekomi=self.osaekomi,
-                current_tick=tick,
-            )
-            events.extend(ne_events)
-
-            # Check for match-ending ne-waza events
-            for ev in ne_events:
-                if ev.event_type == "SUBMISSION_VICTORY":
-                    winner_name = ev.data.get("winner", "")
-                    self.winner   = (self.fighter_a
-                                     if self.fighter_a.identity.name == winner_name
-                                     else self.fighter_b)
-                    self.match_over = True
-                    return events
-
-                if ev.event_type == "ESCAPE_SUCCESS":
-                    # Transition back to standing
-                    self.ne_waza_resolver.active_technique = None
-                    self.osaekomi.break_pin()
-                    reset_events = self.grip_graph.transform_for_position(
-                        self.position, Position.STANDING_DISTANT, tick
-                    )
-                    events.extend(reset_events)
-                    self.position       = Position.STANDING_DISTANT
-                    self.sub_loop_state = SubLoopState.ENGAGEMENT
-                    self.engagement_ticks = 0
-                    self.ne_waza_top_id   = None
-                    break
-
-        return events
+                self.ne_waza_top_id   = None
+                break
 
     # -----------------------------------------------------------------------
-    # THROW RESOLUTION — from kuzushi window
+    # STEP 1 — GRIP STATE UPDATES
     # -----------------------------------------------------------------------
-    def _try_throw_from_window(
-        self,
-        attacker: Judoka,
-        defender: Judoka,
-        tick: int,
-        window_quality: float,
-    ) -> list[Event]:
-        events: list[Event] = []
+    def _apply_grip_actions(
+        self, judoka: Judoka, actions: list[Action], tick: int,
+        events: list[Event],
+    ) -> None:
+        """REACH / DEEPEN / STRIP / RELEASE / HOLD_CONNECTIVE resolve here.
 
-        # Pick a throw satisfying the current graph
-        throw_id = self._pick_throw_for_graph(attacker)
-        if throw_id is None:
-            # No throw in vocabulary satisfies the graph — window closes wasted
+        REPOSITION_GRIP / DEFEND_GRIP / STRIP_TWO_ON_ONE are defined in the
+        action space but v0.1 treats them as no-ops; Parts 4-5 wire them.
+        """
+        from body_state import ContactState as _CS
+        from force_envelope import FORCE_ENVELOPES, grip_strength as _grip_strength
+
+        for act in actions:
+            if act.kind not in GRIP_KINDS and act.kind != ActionKind.HOLD_CONNECTIVE:
+                continue
+
+            if act.kind == ActionKind.REACH and act.hand is not None:
+                ps = judoka.state.body.get(act.hand)
+                if ps is not None and ps.contact_state == _CS.FREE:
+                    ps.contact_state = _CS.REACHING
+
+            elif act.kind == ActionKind.DEEPEN and act.edge is not None:
+                if act.edge in self.grip_graph.edges:
+                    self.grip_graph.deepen_grip(act.edge, judoka)
+
+            elif act.kind == ActionKind.STRIP and act.edge is not None:
+                if act.edge not in self.grip_graph.edges:
+                    continue
+                # Stripping force is a driving-class action issued by the
+                # stripping hand; magnitude scales with grasper strength.
+                strip_force = (
+                    FORCE_ENVELOPES[act.edge.grip_type_v2].strip_resistance
+                    * 1.1 * _grip_strength(judoka)
+                )
+                result = self.grip_graph.apply_strip_pressure(
+                    act.edge, strip_force, grasper=self._owner(act.edge),
+                )
+                if result is not None:
+                    result.tick = tick
+                    events.append(result)
+
+            elif act.kind == ActionKind.RELEASE and act.edge is not None:
+                if act.edge in self.grip_graph.edges:
+                    self.grip_graph.remove_edge(act.edge)
+                    key = act.edge.grasper_part.value
+                    if not key.startswith("__"):
+                        ps = judoka.state.body.get(key)
+                        if ps is not None:
+                            ps.contact_state = _CS.FREE
+
+            elif act.kind == ActionKind.HOLD_CONNECTIVE and act.hand is not None:
+                # Find any owned edge on this hand and ensure CONNECTIVE mode.
+                for edge in self.grip_graph.edges_owned_by(judoka.identity.name):
+                    if edge.grasper_part.value == act.hand:
+                        edge.mode = GripMode.CONNECTIVE
+
+    def _owner(self, edge: GripEdge) -> Judoka:
+        return (self.fighter_a
+                if edge.grasper_id == self.fighter_a.identity.name
+                else self.fighter_b)
+
+    # -----------------------------------------------------------------------
+    # ENGAGEMENT RESOLUTION — both fighters reaching, no edges → seat POCKETs
+    # -----------------------------------------------------------------------
+    def _resolve_engagement(
+        self, actions_a: list[Action], actions_b: list[Action],
+        tick: int, events: list[Event],
+    ) -> None:
+        if self.grip_graph.edge_count() > 0:
+            self.engagement_ticks = 0
+            return
+
+        a_reaching = any(act.kind == ActionKind.REACH for act in actions_a)
+        b_reaching = any(act.kind == ActionKind.REACH for act in actions_b)
+        if not (a_reaching and b_reaching):
+            self.engagement_ticks = 0
+            return
+
+        self.engagement_ticks += 1
+        required = max(
+            self.grip_graph.reach_ticks_for(self.fighter_a),
+            self.grip_graph.reach_ticks_for(self.fighter_b),
+            ENGAGEMENT_TICKS_FLOOR,
+        )
+        if self.engagement_ticks < required:
+            return
+
+        new_edges = self.grip_graph.attempt_engagement(
+            self.fighter_a, self.fighter_b, tick
+        )
+        self.engagement_ticks = 0
+        for edge in new_edges:
             events.append(Event(
-                tick=tick,
-                event_type="KUZUSHI_WINDOW_WASTED",
+                tick=tick, event_type="GRIP_ESTABLISH",
                 description=(
-                    f"[grip] Window open but no throw fits "
-                    f"{attacker.identity.name}'s current grip config."
+                    f"[grip] {edge.grasper_id} ({edge.grasper_part.value}) → "
+                    f"{edge.target_id} ({edge.target_location.value}, "
+                    f"{edge.grip_type_v2.name} @ {edge.depth_level.name})"
                 ),
             ))
-            return events
+        if new_edges:
+            self.position = Position.GRIPPING
 
+    # -----------------------------------------------------------------------
+    # STEPS 2-4 — FORCE ACCUMULATION
+    # Sum driving-mode forces issued by `attacker` through `attacker`'s grips.
+    # Returns a 2D net force vector (Newtons) acting on `victim`'s CoM, in
+    # world frame. Newton's 3rd law (Step 3) is applied as a reaction force
+    # on the attacker's CoM inside _apply_physics_update via the victim=self
+    # recursive pass — actually simpler to return the vector and let the
+    # caller apply the reaction.
+    # -----------------------------------------------------------------------
+    def _compute_net_force_on(
+        self,
+        victim: Judoka,
+        attacker: Judoka,
+        attacker_actions: list[Action],
+    ) -> tuple[float, float]:
+        from force_envelope import (
+            FORCE_ENVELOPES, grip_strength as _grip_strength,
+        )
+        fx = fy = 0.0
+
+        for act in attacker_actions:
+            if act.kind not in DRIVING_FORCE_KINDS or act.hand is None:
+                continue
+            if act.direction is None:
+                continue
+
+            # Find the grip this hand is driving through. No grip → no force.
+            edge = None
+            for e in self.grip_graph.edges_owned_by(attacker.identity.name):
+                if e.grasper_part.value == act.hand and e.target_id == victim.identity.name:
+                    edge = e
+                    break
+            if edge is None:
+                continue
+
+            # Flip the edge to DRIVING for this tick (affects Part 2.5 fatigue).
+            edge.mode = GripMode.DRIVING
+
+            env = FORCE_ENVELOPES[edge.grip_type_v2]
+            if act.kind == ActionKind.PUSH:
+                env_max = env.max_push_force
+            elif act.kind == ActionKind.LIFT:
+                env_max = env.max_lift_force
+            else:  # PULL, COUPLE, FEINT default to pull envelope
+                env_max = env.max_pull_force
+
+            # Calibration pipeline (Part 2.4):
+            #   delivered = min(requested, env_max) × depth × strength × fatigue × composure × noise
+            depth_mod     = edge.depth_level.modifier()
+            strength_mod  = _grip_strength(attacker)
+            hand_fatigue  = max(0.0, 1.0 - attacker.state.body[act.hand].fatigue)
+            ceiling       = max(1.0, float(attacker.capability.composure_ceiling))
+            composure_mod = max(0.0, min(1.0, attacker.state.composure_current / ceiling))
+            noise         = 1.0 + random.uniform(-FORCE_NOISE_PCT, FORCE_NOISE_PCT)
+
+            requested = min(act.magnitude, env_max)
+            delivered = (requested * depth_mod * strength_mod * hand_fatigue
+                         * composure_mod * noise)
+
+            dx, dy = act.direction
+            fx += dx * delivered
+            fy += dy * delivered
+
+        return (fx, fy)
+
+    # -----------------------------------------------------------------------
+    # STEPS 5-7 — CoM + TRUNK UPDATE
+    # -----------------------------------------------------------------------
+    def _apply_physics_update(self, judoka: Judoka, net_force: tuple[float, float]) -> None:
+        fx, fy = net_force
+        bs = judoka.state.body_state
+
+        # CoM velocity update with friction damping.
+        vx, vy = bs.com_velocity
+        vx = vx * FRICTION_DAMPING + (fx / JUDOKA_MASS_KG) * DISPLACEMENT_GAIN * 1000.0
+        vy = vy * FRICTION_DAMPING + (fy / JUDOKA_MASS_KG) * DISPLACEMENT_GAIN * 1000.0
+        bs.com_velocity = (vx, vy)
+
+        # CoM position update.
+        px, py = bs.com_position
+        bs.com_position = (px + vx, py + vy)
+
+        # Trunk angle update — stubbed moment arm, maps force-into-sagittal.
+        # Force toward the fighter (negative dot with their facing) leans
+        # them backward; away-from-fighter force leans them forward. For
+        # v0.1 we take fx sign vs facing_x as a crude proxy.
+        face_x, face_y = bs.facing
+        noise = 1.0 + random.uniform(-TRUNK_NOISE_PCT, TRUNK_NOISE_PCT)
+        # Dot of force with facing gives the "forward lean" torque component.
+        forward_push = (fx * face_x + fy * face_y)
+        bs.trunk_sagittal += forward_push * TRUNK_ANGLE_GAIN * noise
+        # Passive + active restoration toward vertical. State.posture is an
+        # @property derived from these angles (Part 1.3), so no manual sync.
+        bs.trunk_sagittal *= (1.0 - TRUNK_RESTORATION)
+        bs.trunk_frontal  *= (1.0 - TRUNK_RESTORATION)
+
+    # -----------------------------------------------------------------------
+    # STEP 8 — BoS UPDATE (STEP / SWEEP_LEG)
+    # -----------------------------------------------------------------------
+    def _apply_body_actions(self, judoka: Judoka, actions: list[Action]) -> None:
+        for act in actions:
+            if act.kind != ActionKind.STEP or act.foot is None or act.direction is None:
+                continue
+            bs = judoka.state.body_state
+            foot = (bs.foot_state_right if act.foot == "right_foot"
+                    else bs.foot_state_left)
+            dx, dy = act.direction
+            mag = max(0.0, act.magnitude)
+            fx, fy = foot.position
+            foot.position = (fx + dx * mag, fy + dy * mag)
+
+    # -----------------------------------------------------------------------
+    # STEP 9 — KUZUSHI CHECK
+    # -----------------------------------------------------------------------
+    def _is_kuzushi(self, judoka: Judoka) -> bool:
+        from body_state import is_kuzushi
+        leg_strength = min(
+            judoka.effective_body_part("right_leg"),
+            judoka.effective_body_part("left_leg"),
+        ) / 10.0
+        leg_fatigue = 0.5 * (
+            judoka.state.body["right_leg"].fatigue
+            + judoka.state.body["left_leg"].fatigue
+        )
+        ceiling = max(1.0, float(judoka.capability.composure_ceiling))
+        composure = max(0.0, min(1.0, judoka.state.composure_current / ceiling))
+        return is_kuzushi(
+            judoka.state.body_state,
+            leg_strength=leg_strength,
+            fatigue=leg_fatigue,
+            composure=composure,
+        )
+
+    # -----------------------------------------------------------------------
+    # STEPS 10-11 — COMMIT_THROW RESOLUTION
+    # -----------------------------------------------------------------------
+    def _resolve_commit_throw(
+        self, attacker: Judoka, defender: Judoka, throw_id: ThrowID, tick: int,
+    ) -> list[Event]:
+        events: list[Event] = []
+        actual = actual_signature_match(throw_id, attacker, defender, self.grip_graph)
         throw_name = THROW_REGISTRY[throw_id].name
+
         events.append(Event(
-            tick=tick,
-            event_type="THROW_ENTRY",
+            tick=tick, event_type="THROW_ENTRY",
             description=(
-                f"[throw] {attacker.identity.name} commits — "
-                f"{throw_name}."
+                f"[throw] {attacker.identity.name} commits — {throw_name} "
+                f"(actual match {actual:.2f})."
             ),
         ))
 
         matchup = self._compute_stance_matchup()
-        outcome, net = resolve_throw(
-            attacker, defender, throw_id, matchup, window_quality
-        )
-
-        result_events = self._apply_throw_result(
-            attacker, defender, throw_id, outcome, net, window_quality, tick
-        )
-        events.extend(result_events)
-
-        # Update last-attack tick + Part 2.6 attack-reset
-        self._last_attack_tick[attacker.identity.name] = tick
-        self.grip_graph.register_attack(attacker.identity.name)
-        self.kumi_kata_clock[attacker.identity.name] = 0
-
-        return events
-
-    # -----------------------------------------------------------------------
-    # FORCED THROW ATTEMPT (no window, desperation)
-    # -----------------------------------------------------------------------
-    def _try_forced_throw(
-        self, attacker: Judoka, defender: Judoka, tick: int
-    ) -> list[Event]:
-        events: list[Event] = []
-
-        # Forced throws don't check prerequisites — they are the "sloppy" attempt
-        throw_id = self._pick_throw(attacker)
-        throw_name = THROW_REGISTRY[throw_id].name
-
-        matchup  = self._compute_stance_matchup()
+        window_q = max(0.0, actual - 0.5) * 2.0   # 0.5→0.0, 1.0→1.0
+        is_forced = actual < 0.5
         outcome, net = resolve_throw(
             attacker, defender, throw_id, matchup,
-            window_quality=0.0, is_forced=True
+            window_quality=window_q, is_forced=is_forced,
         )
 
-        events.append(Event(
-            tick=tick,
-            event_type="THROW_FORCED",
-            description=(
-                f"[throw] {attacker.identity.name} forces {throw_name} "
-                f"(no window) — {outcome}."
-            ),
+        events.extend(self._apply_throw_result(
+            attacker, defender, throw_id, outcome, net, window_q, tick,
+            is_forced=is_forced,
         ))
-
-        result_events = self._apply_throw_result(
-            attacker, defender, throw_id, outcome, net, 0.0, tick,
-            is_forced=True
-        )
-        events.extend(result_events)
-
         self._last_attack_tick[attacker.identity.name] = tick
         self.grip_graph.register_attack(attacker.identity.name)
         self.kumi_kata_clock[attacker.identity.name] = 0
         return events
+
+    # -----------------------------------------------------------------------
+    # COMPOSURE / STALEMATE HELPERS
+    # -----------------------------------------------------------------------
+    def _update_composure_from_kuzushi(
+        self, a_kuzushi: bool, b_kuzushi: bool
+    ) -> None:
+        # Being in kuzushi drops composure; inducing it on the opponent
+        # raises yours. Small per-tick deltas — the spec calls for tick
+        # outcomes to drive composure (Part 3.4 Step 12).
+        drift = 0.05
+        if a_kuzushi:
+            self.fighter_a.state.composure_current = max(
+                0.0, self.fighter_a.state.composure_current - drift
+            )
+        if b_kuzushi:
+            self.fighter_b.state.composure_current = max(
+                0.0, self.fighter_b.state.composure_current - drift
+            )
+
+    def _update_stalemate_counter(
+        self, actions_a: list[Action], actions_b: list[Action],
+        a_kuzushi: bool, b_kuzushi: bool,
+    ) -> None:
+        committed = any(
+            act.kind == ActionKind.COMMIT_THROW
+            for act in (actions_a + actions_b)
+        )
+        if committed or a_kuzushi or b_kuzushi:
+            self.stalemate_ticks = 0
+        else:
+            self.stalemate_ticks += 1
 
     # -----------------------------------------------------------------------
     # APPLY THROW RESULT
@@ -894,57 +1024,24 @@ class Match:
         # Reset ne-waza state
         self.ne_waza_resolver.active_technique = None
         self.ne_waza_top_id = None
-        # Reset sub-loop
+        # Reset sub-loop to standing + physics state.
         self._stuffed_throw_tick = 0
-        self.sub_loop_state      = SubLoopState.ENGAGEMENT
+        self.sub_loop_state      = SubLoopState.STANDING
         self.engagement_ticks    = 0
-        self.tug_of_war_ticks    = 0
         self.stalemate_ticks     = 0
-        self._kuzushi_consecutive = 0
+        self._a_was_kuzushi_last_tick = False
+        self._b_was_kuzushi_last_tick = False
         self.position = Position.STANDING_DISTANT
-        # Reset postures — trunk angles zero → derive_posture() returns UPRIGHT.
-        for f in (self.fighter_a, self.fighter_b):
+        # Reset postures + CoM velocity/position for a clean re-engage.
+        for i, f in enumerate((self.fighter_a, self.fighter_b)):
             f.state.body_state.trunk_sagittal = 0.0
-            f.state.body_state.trunk_frontal = 0.0
+            f.state.body_state.trunk_frontal  = 0.0
+            f.state.body_state.com_velocity   = (0.0, 0.0)
+            f.state.body_state.com_position   = (-0.5, 0.0) if i == 0 else (0.5, 0.0)
 
     # -----------------------------------------------------------------------
     # HELPERS
     # -----------------------------------------------------------------------
-    def _pick_throw_for_graph(self, judoka: Judoka) -> Optional[ThrowID]:
-        """Pick a throw whose prerequisites are satisfied by the current grip graph."""
-        # Signature throws first
-        for throw_id in judoka.capability.signature_throws:
-            td = THROW_DEFS.get(throw_id)
-            if td and self.grip_graph.satisfies(
-                td.requires, judoka.identity.name, judoka.identity.dominant_side
-            ):
-                if judoka.capability.throw_profiles.get(throw_id):
-                    return throw_id
-
-        # Full vocabulary
-        candidates = [
-            t for t in judoka.capability.throw_vocabulary
-            if (td := THROW_DEFS.get(t)) is not None
-            and self.grip_graph.satisfies(
-                td.requires, judoka.identity.name, judoka.identity.dominant_side
-            )
-            and judoka.capability.throw_profiles.get(t) is not None
-        ]
-        return random.choice(candidates) if candidates else None
-
-    def _pick_throw(self, judoka: Judoka) -> ThrowID:
-        """Pick any throw from vocabulary (ignoring prerequisites)."""
-        sig = judoka.capability.signature_throws
-        if sig and random.random() < 0.65:
-            return random.choice(sig)
-        return random.choice(judoka.capability.throw_vocabulary)
-
-    def _pick_attacker(self) -> tuple[Judoka, Judoka]:
-        """Randomly select which fighter attacks this tick."""
-        if random.random() < 0.5:
-            return self.fighter_a, self.fighter_b
-        return self.fighter_b, self.fighter_a
-
     def _compute_stance_matchup(self) -> StanceMatchup:
         a = self.fighter_a.state.current_stance
         b = self.fighter_b.state.current_stance
@@ -1013,19 +1110,6 @@ class Match:
     def _decay_stun(self, judoka: Judoka) -> None:
         if judoka.state.stun_ticks > 0:
             judoka.state.stun_ticks -= 1
-
-    def _set_reaching(self, judoka: Judoka) -> None:
-        """Part 2.7: while closing distance, a fighter's free hands are
-        REACHING. Hands already GRIPPING_UKE are left alone (a surviving
-        grip from a stuffed throw shouldn't be demoted).
-        """
-        from body_state import ContactState as _CS
-        for key in ("right_hand", "left_hand"):
-            ps = judoka.state.body.get(key)
-            if ps is None:
-                continue
-            if ps.contact_state == _CS.FREE:
-                ps.contact_state = _CS.REACHING
 
     def _update_grip_passivity(self, tick: int, events: list[Event]) -> None:
         """Part 2.6 passivity clocks.

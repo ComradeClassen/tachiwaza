@@ -157,25 +157,14 @@ class PositionMachine:
         Called once per tick from match.py. Returns the new position if a
         transition should happen, or None to stay in the current position.
 
-        This is a heuristic — the sub-loop state machine in match.py is the
-        real driver; this function handles implicit transitions the sub-loop
-        doesn't explicitly trigger.
+        Part 3 physics model owns the real flow; this function only handles
+        coarse standing ↔ grip ↔ ne-waza transitions derivable from the graph.
         """
-        # If edges were just established, transition from DISTANT → GRIPPING
+        # If edges exist in standing, the fighters are gripping
         if (current_pos == Position.STANDING_DISTANT
-                and sub_loop_state == SubLoopState.TUG_OF_WAR
+                and sub_loop_state == SubLoopState.STANDING
                 and graph.edge_count() > 0):
             return Position.GRIPPING
-
-        # If sub-loop is in KUZUSHI_WINDOW, fighters are ENGAGED
-        if (current_pos == Position.GRIPPING
-                and sub_loop_state == SubLoopState.KUZUSHI_WINDOW):
-            return Position.ENGAGED
-
-        # If stifled reset, fighters step back to STANDING_DISTANT
-        if (sub_loop_state == SubLoopState.STIFLED_RESET
-                and current_pos not in (Position.STANDING_DISTANT, Position.SCRAMBLE)):
-            return Position.STANDING_DISTANT
 
         # If ne-waza sub-loop active but position hasn't reflected it yet
         if (sub_loop_state == SubLoopState.NE_WAZA

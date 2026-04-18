@@ -170,7 +170,7 @@ class Referee:
                 return MatteReason.STUFFED_THROW_TIMEOUT
 
         # Standing stalemate: sub-loop has been stuck too long
-        if (state.sub_loop_state == SubLoopState.TUG_OF_WAR
+        if (state.sub_loop_state == SubLoopState.STANDING
                 and state.stalemate_ticks >= self._STALEMATE_MATTE_TICKS):
             return MatteReason.STALEMATE
 
