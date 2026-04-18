@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from enums import BodyArchetype, BeltRank, DominantSide
 from throws import ThrowID, ComboID, JudokaThrowProfile
 from judoka import Identity, Capability, State, Judoka
+from body_state import place_judoka
 from match import Match
 from referee import build_suzuki, build_petrov
 
@@ -126,7 +127,7 @@ def build_tanaka() -> Judoka:
         ],
     )
 
-    return Judoka(identity=identity, capability=capability, state=State.fresh(capability))
+    return Judoka(identity=identity, capability=capability, state=State.fresh(capability, identity))
 
 
 # ===========================================================================
@@ -218,7 +219,7 @@ def build_sato() -> Judoka:
         signature_combos=[ComboID.O_UCHI_TO_UCHI_MATA],
     )
 
-    return Judoka(identity=identity, capability=capability, state=State.fresh(capability))
+    return Judoka(identity=identity, capability=capability, state=State.fresh(capability, identity))
 
 
 # ===========================================================================
@@ -251,6 +252,11 @@ if __name__ == "__main__":
         tanaka = build_tanaka()
         sato   = build_sato()
         ref    = ref_builder()
+
+        # Physics-substrate Part 1.8: both judoka face each other at 1.0 m
+        # separation (CoM to CoM), centered on the mat origin.
+        place_judoka(tanaka, com_position=(-0.5, 0.0), facing=(1.0, 0.0))
+        place_judoka(sato,   com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
 
         match = Match(fighter_a=tanaka, fighter_b=sato, referee=ref)
         match.run()

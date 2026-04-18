@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from enums import (
-    BodyArchetype, DominantSide, MatteReason, Position, Posture, StanceMatchup,
+    BodyArchetype, DominantSide, MatteReason, Position, StanceMatchup,
     SubLoopState, LandingProfile,
 )
 from judoka import Judoka
@@ -860,9 +860,10 @@ class Match:
         self.stalemate_ticks     = 0
         self._kuzushi_consecutive = 0
         self.position = Position.STANDING_DISTANT
-        # Reset postures
-        self.fighter_a.state.posture = Posture.UPRIGHT
-        self.fighter_b.state.posture = Posture.UPRIGHT
+        # Reset postures — trunk angles zero → derive_posture() returns UPRIGHT.
+        for f in (self.fighter_a, self.fighter_b):
+            f.state.body_state.trunk_sagittal = 0.0
+            f.state.body_state.trunk_frontal = 0.0
 
     # -----------------------------------------------------------------------
     # HELPERS

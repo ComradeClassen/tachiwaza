@@ -23,6 +23,9 @@ from enums import (
     Position, Posture, Stance, EmotionalState, InjuryState,
 )
 from throws import ThrowID, ComboID, JudokaThrowProfile
+from body_state import (
+    BodyState, ContactState, fresh_body_state, derive_posture,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +167,10 @@ class BodyPartState:
     fatigue: float = 0.0                         # 0.0 = fresh; 1.0 = cooked
     injury_state: InjuryState = InjuryState.HEALTHY  # severity of current injury
     stun_ticks: int = 0                          # ticks of temporary impairment remaining
+    # Physics-substrate Part 1.6 (+ Part 2.7 REACHING): what this part is
+    # currently touching. Set from action resolution; feet default to
+    # SUPPORTING_GROUND at match start (see State.fresh).
+    contact_state: ContactState = ContactState.FREE
 
     @property
     def injured(self) -> bool:
@@ -190,13 +197,17 @@ class State:
 
     # --- MATCH POSITION ---
     position: Position   # where the judoka is in the match space
-    posture: Posture     # how upright (BROKEN = vulnerable to throw entry)
     current_stance: Stance
 
     # --- GRIP STATE ---
     # Phase 1 was a dict. Phase 2: grip state lives on the Match's GripGraph.
     # This field kept as an empty dict for backward compat; not read in Phase 2.
     grip_configuration: dict
+
+    # --- PHYSICS SUBSTRATE (Part 1) ---
+    # Continuous body state — CoM, trunk angles, feet, facing. Posture
+    # (above, @property) is derived from this.
+    body_state: BodyState = field(default_factory=fresh_body_state)
 
     # --- STUN ---
     stun_ticks: int = 0   # match-level stun (composure hit, disorientation)
@@ -217,17 +228,47 @@ class State:
     cumulative_fatigue_debt: dict = field(default_factory=dict)
     emotional_state_from_last_match: Optional[EmotionalState] = None
 
+    @property
+    def posture(self) -> Posture:
+        """Part 1.3: posture is derived from continuous trunk angles.
+
+        Kept as a property so existing throw prerequisite code in throws.py
+        can still read `state.posture` until Parts 4–5 (throw signatures)
+        replace those checks with four-dimension signature tests.
+        """
+        bs = self.body_state
+        return derive_posture(bs.trunk_sagittal, bs.trunk_frontal)
+
     @classmethod
-    def fresh(cls, capability: Capability) -> "State":
-        """Initialize a clean match-start State from a Capability."""
+    def fresh(cls, capability: Capability, identity: Optional["Identity"] = None) -> "State":
+        """Initialize a clean match-start State from a Capability.
+
+        If `identity` is supplied, com_height is seeded from the judoka's
+        hip_height_cm so taller judoka actually stand taller in shizentai.
+        """
+        com_height = 1.0
+        if identity is not None:
+            com_height = identity.hip_height_cm / 100.0
+
+        body_state = fresh_body_state(
+            com_position=(0.0, 0.0),
+            facing=(1.0, 0.0),
+            com_height=com_height,
+        )
+
+        # Part 1.8: all body parts FREE except feet which are SUPPORTING_GROUND.
+        body_parts: dict[str, BodyPartState] = {part: BodyPartState() for part in BODY_PARTS}
+        for foot_key in ("left_foot", "right_foot"):
+            body_parts[foot_key].contact_state = ContactState.SUPPORTING_GROUND
+
         return cls(
-            body={part: BodyPartState() for part in BODY_PARTS},
+            body=body_parts,
             cardio_current=1.0,
             composure_current=float(capability.composure_ceiling),
             last_event_emotional_weight=0.0,
             position=Position.STANDING_DISTANT,
-            posture=Posture.UPRIGHT,
             current_stance=Stance.ORTHODOX,
+            body_state=body_state,
             grip_configuration={},
             stun_ticks=0,
             score={"waza_ari": 0, "ippon": False},
@@ -251,6 +292,15 @@ class Judoka:
     identity: Identity
     capability: Capability
     state: State
+
+    def leg_strength(self) -> float:
+        """Derived leg strength in [0, 1] for the Part 1.5 envelope.
+
+        Mirrors the Part 2.4 grip_strength construction: average effective
+        output of the load-bearing leg parts, normalized to a 0–10 scale.
+        """
+        parts = ("right_leg", "left_leg", "right_thigh", "left_thigh", "right_foot", "left_foot")
+        return sum(self.effective_body_part(p) for p in parts) / (len(parts) * 10.0)
 
     def effective_body_part(self, part: str) -> float:
         """Compute the effective strength of one body part right now.
