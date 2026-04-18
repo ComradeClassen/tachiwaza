@@ -40,6 +40,9 @@ from actions import (
 )
 from action_selection import select_actions
 from perception import actual_signature_match, perceive
+from skill_compression import (
+    SubEvent, SUB_EVENT_LABELS, compression_n_for, sub_event_schedule,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +99,28 @@ GRIP_DOMINANT_THROWS: frozenset[ThrowID] = frozenset({
     ThrowID.SEOI_NAGE,
     ThrowID.TAI_OTOSHI,
 })
+
+
+# ---------------------------------------------------------------------------
+# THROW IN PROGRESS (Part 6.1 — multi-tick attempt state)
+# One instance per attacker mid-attempt. Cleared when KAKE_COMMIT resolves or
+# the attempt is aborted (stun, grip collapse, counter).
+# ---------------------------------------------------------------------------
+@dataclass
+class _ThrowInProgress:
+    attacker_name: str
+    defender_name: str
+    throw_id:      ThrowID
+    start_tick:    int
+    compression_n: int
+    schedule:      dict[int, list[SubEvent]]
+    commit_actual: float                          # signature match at commit time
+
+    def offset(self, current_tick: int) -> int:
+        return current_tick - self.start_tick
+
+    def is_last_tick(self, current_tick: int) -> bool:
+        return self.offset(current_tick) >= self.compression_n - 1
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +293,12 @@ class Match:
         # Stuffed throw tracking (for referee Matte timing)
         self._stuffed_throw_tick: int = 0
 
+        # Part 6.1 — in-progress throw attempts, keyed by attacker name. A
+        # throw committed with N>1 unfolds across N ticks, with sub-events
+        # (REACH_KUZUSHI → KUZUSHI_ACHIEVED → TSUKURI → KAKE_COMMIT) emitted
+        # per the compression schedule. Resolution happens on KAKE_COMMIT.
+        self._throws_in_progress: dict[str, "_ThrowInProgress"] = {}
+
         # For MatchState snapshots
         self._a_score: dict = {"waza_ari": 0, "ippon": False}
         self._b_score: dict = {"waza_ari": 0, "ippon": False}
@@ -314,6 +345,18 @@ class Match:
         # STANDING — Part 3 12-step update
         # ------------------------------------------------------------------
 
+        # Part 6.1 — advance any in-progress multi-tick throws BEFORE action
+        # selection. Sub-events emit at their scheduled offsets; KAKE_COMMIT
+        # resolves the throw via the same landing path as single-tick commits.
+        advance_events = self._advance_throws_in_progress(tick)
+        events.extend(advance_events)
+        if self.match_over:
+            self._post_tick(tick, events)
+            return
+        if self.sub_loop_state == SubLoopState.NE_WAZA:
+            self._post_tick(tick, events)
+            return
+
         # Action selection (Part 3.3). Each judoka picks up to two actions
         # based on the priority ladder; COMMIT_THROW supersedes the cap.
         actions_a = select_actions(
@@ -323,6 +366,14 @@ class Match:
         actions_b = select_actions(
             self.fighter_b, self.fighter_a, self.grip_graph,
             self.kumi_kata_clock[self.fighter_b.identity.name],
+        )
+        # A fighter mid-attempt must not re-commit — strip any COMMIT_THROW
+        # the ladder re-proposes this tick.
+        actions_a = self._strip_commits_if_in_progress(
+            self.fighter_a.identity.name, actions_a,
+        )
+        actions_b = self._strip_commits_if_in_progress(
+            self.fighter_b.identity.name, actions_b,
         )
 
         # Step 1 — grip state updates (REACH/DEEPEN/STRIP/RELEASE/...).
@@ -719,23 +770,144 @@ class Match:
         )
 
     # -----------------------------------------------------------------------
-    # STEPS 10-11 — COMMIT_THROW RESOLUTION
+    # STEPS 10-11 — COMMIT_THROW RESOLUTION (Part 6.1 skill-compression aware)
     # -----------------------------------------------------------------------
     def _resolve_commit_throw(
         self, attacker: Judoka, defender: Judoka, throw_id: ThrowID, tick: int,
     ) -> list[Event]:
-        events: list[Event] = []
+        """Entry point for a COMMIT_THROW action.
+
+        Branches on compression N (spec 6.1):
+          - N == 1  → resolve immediately; emits THROW_ENTRY + all sub-events
+            in a single tick, then resolve_throw + _apply_throw_result.
+          - N  > 1  → start a multi-tick attempt. Emit tick-0 sub-events and
+            the THROW_ENTRY event. Resolution is deferred to the KAKE_COMMIT
+            tick, driven by _advance_throws_in_progress.
+        """
+        # Reject a second commit from the same attacker while one is in-flight.
+        if attacker.identity.name in self._throws_in_progress:
+            return []
+
         actual = actual_signature_match(throw_id, attacker, defender, self.grip_graph)
+        n = compression_n_for(attacker, throw_id)
+        schedule = sub_event_schedule(n)
         throw_name = THROW_REGISTRY[throw_id].name
 
-        events.append(Event(
+        # Passivity / attack-registration fires at commit start regardless of N.
+        self._last_attack_tick[attacker.identity.name] = tick
+        self.grip_graph.register_attack(attacker.identity.name)
+        self.kumi_kata_clock[attacker.identity.name] = 0
+
+        events: list[Event] = [Event(
             tick=tick, event_type="THROW_ENTRY",
             description=(
                 f"[throw] {attacker.identity.name} commits — {throw_name} "
-                f"(actual match {actual:.2f})."
+                f"(actual match {actual:.2f}, N={n})."
             ),
+            data={"throw_id": throw_id.name, "compression_n": n},
+        )]
+
+        # Emit tick-0 sub-events.
+        events.extend(self._emit_sub_events(
+            attacker, throw_name, schedule.get(0, []), tick,
         ))
 
+        if n <= 1:
+            # Single-tick resolution — the historical path.
+            events.extend(self._resolve_kake(
+                attacker, defender, throw_id, actual, tick,
+            ))
+            return events
+
+        # Multi-tick: stash state and return. _advance_throws_in_progress
+        # handles subsequent ticks.
+        self._throws_in_progress[attacker.identity.name] = _ThrowInProgress(
+            attacker_name=attacker.identity.name,
+            defender_name=defender.identity.name,
+            throw_id=throw_id,
+            start_tick=tick,
+            compression_n=n,
+            schedule=schedule,
+            commit_actual=actual,
+        )
+        return events
+
+    # -----------------------------------------------------------------------
+    # PER-TICK ADVANCEMENT OF IN-PROGRESS THROWS (Part 6.1)
+    # -----------------------------------------------------------------------
+    def _advance_throws_in_progress(self, tick: int) -> list[Event]:
+        """Advance every in-progress throw by one tick, emit sub-events,
+        and resolve any that reached KAKE_COMMIT.
+
+        Returns a combined event list. Iterates over a snapshot so that
+        resolution / abort during iteration doesn't mutate mid-loop.
+        """
+        events: list[Event] = []
+        for attacker_name, tip in list(self._throws_in_progress.items()):
+            offset = tip.offset(tick)
+            if offset < 1:
+                # First tick was handled by _resolve_commit_throw itself.
+                continue
+
+            attacker = self._fighter_by_name(attacker_name)
+            defender = self._fighter_by_name(tip.defender_name)
+            if attacker is None or defender is None:
+                del self._throws_in_progress[attacker_name]
+                continue
+
+            # Interrupt check: a stun, ippon loss of grips, or ne-waza
+            # transition aborts the attempt mid-stride.
+            abort_reason = self._should_abort_attempt(tip, attacker)
+            if abort_reason is not None:
+                events.extend(self._abort_throw_in_progress(
+                    tip, attacker, defender, tick, abort_reason,
+                ))
+                continue
+
+            sub_events = tip.schedule.get(offset, [])
+            throw_name = THROW_REGISTRY[tip.throw_id].name
+            events.extend(self._emit_sub_events(
+                attacker, throw_name, sub_events, tick,
+            ))
+
+            if SubEvent.KAKE_COMMIT in sub_events:
+                # Recompute signature at KAKE time — the match state has
+                # changed over the attempt. resolve_throw uses the window
+                # quality and is_forced flag derived from this fresh value.
+                kake_actual = actual_signature_match(
+                    tip.throw_id, attacker, defender, self.grip_graph,
+                )
+                events.extend(self._resolve_kake(
+                    attacker, defender, tip.throw_id, kake_actual, tick,
+                ))
+                del self._throws_in_progress[attacker_name]
+
+        return events
+
+    def _emit_sub_events(
+        self, attacker: Judoka, throw_name: str,
+        sub_events: list[SubEvent], tick: int,
+    ) -> list[Event]:
+        events: list[Event] = []
+        for sub in sub_events:
+            label = SUB_EVENT_LABELS.get(sub, sub.name.lower())
+            events.append(Event(
+                tick=tick, event_type=f"SUB_{sub.name}",
+                description=(
+                    f"[throw] {attacker.identity.name} — {throw_name}: {label}."
+                ),
+                data={"sub_event": sub.name, "throw_name": throw_name},
+            ))
+        return events
+
+    def _resolve_kake(
+        self, attacker: Judoka, defender: Judoka, throw_id: ThrowID,
+        actual: float, tick: int,
+    ) -> list[Event]:
+        """Execute the KAKE_COMMIT resolution: resolve_throw + apply result.
+        Factored out of _resolve_commit_throw so both N==1 and multi-tick
+        paths share the same landing logic.
+        """
         matchup = self._compute_stance_matchup()
         window_q = max(0.0, actual - 0.5) * 2.0   # 0.5→0.0, 1.0→1.0
         is_forced = actual < 0.5
@@ -743,15 +915,66 @@ class Match:
             attacker, defender, throw_id, matchup,
             window_quality=window_q, is_forced=is_forced,
         )
-
-        events.extend(self._apply_throw_result(
+        return list(self._apply_throw_result(
             attacker, defender, throw_id, outcome, net, window_q, tick,
             is_forced=is_forced,
         ))
-        self._last_attack_tick[attacker.identity.name] = tick
-        self.grip_graph.register_attack(attacker.identity.name)
-        self.kumi_kata_clock[attacker.identity.name] = 0
+
+    def _should_abort_attempt(
+        self, tip: "_ThrowInProgress", attacker: Judoka,
+    ) -> Optional[str]:
+        """Return a reason string if the in-progress attempt must abort,
+        else None. Called each tick before emitting sub-events.
+        """
+        if attacker.state.stun_ticks > 0:
+            return "stunned"
+        # If attacker has lost all grips mid-attempt, they can't drive the
+        # throw to completion.
+        if not self.grip_graph.edges_owned_by(attacker.identity.name):
+            return "grips collapsed"
+        # Ne-waza transition mid-attempt — the standing attempt is moot.
+        if self.sub_loop_state == SubLoopState.NE_WAZA:
+            return "ground phase"
+        return None
+
+    def _abort_throw_in_progress(
+        self, tip: "_ThrowInProgress", attacker: Judoka, defender: Judoka,
+        tick: int, reason: str,
+    ) -> list[Event]:
+        """Route an aborted multi-tick attempt through the failed-commit
+        pipeline so FailureOutcome selection still applies.
+        """
+        throw_name = THROW_REGISTRY[tip.throw_id].name
+        events: list[Event] = [Event(
+            tick=tick, event_type="THROW_ABORTED",
+            description=(
+                f"[throw] {attacker.identity.name} — {throw_name}: "
+                f"aborted at tick {tip.offset(tick)} of {tip.compression_n} "
+                f"({reason})."
+            ),
+            data={"reason": reason, "offset": tip.offset(tick),
+                  "throw_id": tip.throw_id.name},
+        )]
+        events.extend(self._resolve_failed_commit(
+            attacker, defender, tip.throw_id, throw_name,
+            net=-1.0, tick=tick,
+        ))
+        del self._throws_in_progress[attacker.identity.name]
         return events
+
+    def _fighter_by_name(self, name: str) -> Optional[Judoka]:
+        if self.fighter_a.identity.name == name:
+            return self.fighter_a
+        if self.fighter_b.identity.name == name:
+            return self.fighter_b
+        return None
+
+    def _strip_commits_if_in_progress(
+        self, fighter_name: str, actions: list[Action],
+    ) -> list[Action]:
+        if fighter_name not in self._throws_in_progress:
+            return actions
+        return [a for a in actions if a.kind != ActionKind.COMMIT_THROW]
 
     # -----------------------------------------------------------------------
     # COMPOSURE / STALEMATE HELPERS

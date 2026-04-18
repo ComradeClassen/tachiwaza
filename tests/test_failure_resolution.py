@@ -155,14 +155,16 @@ def test_failed_dimension_identified_as_kuzushi_when_uke_is_stationary() -> None
 def test_match_failed_branch_emits_typed_failure_event_for_worked_throws() -> None:
     """When resolve_throw returns FAILED for a worked-template throw, the
     emitted event carries the FailureOutcome name in its data dict.
+    Elite tori (N=1) resolves in a single tick so we can observe the full
+    event chain from one commit call.
     """
+    from enums import BeltRank
     from match import Match
     from referee import build_suzuki
     random.seed(0)
     t, s = _pair()
+    t.identity.belt_rank = BeltRank.BLACK_5   # Force N=1 for predictable single-tick resolve.
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
-    # Monkeypatch resolve_throw to force FAILED — we want the failure branch
-    # exercised regardless of scoring variance.
     import match as match_module
     real_resolve = match_module.resolve_throw
     match_module.resolve_throw = lambda *a, **kw: ("FAILED", -5.0)
@@ -176,6 +178,31 @@ def test_match_failed_branch_emits_typed_failure_event_for_worked_throws() -> No
     assert "outcome" in ev.data
     assert ev.data["outcome"] in {o.name for o in FailureOutcome}
     assert ev.data["recovery_ticks"] >= 0
+
+
+def test_multi_tick_failure_resolves_at_kake_commit_tick() -> None:
+    """A non-elite's multi-tick attempt that resolves to FAILED emits the
+    typed FailureOutcome event on the KAKE tick (not the commit tick).
+    """
+    from match import Match
+    from referee import build_suzuki
+    random.seed(0)
+    t, s = _pair()
+    # Tanaka BLACK_1 + UCHI_MATA (non-signature) → N=2.
+    m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+    import match as match_module
+    real_resolve = match_module.resolve_throw
+    match_module.resolve_throw = lambda *a, **kw: ("FAILED", -5.0)
+    try:
+        start_events = m._resolve_commit_throw(t, s, ThrowID.UCHI_MATA, tick=9)
+        assert not any(ev.event_type == "FAILED" for ev in start_events)
+        # KAKE tick advances the attempt and resolves it.
+        kake_events = m._advance_throws_in_progress(tick=10)
+    finally:
+        match_module.resolve_throw = real_resolve
+    failed = [ev for ev in kake_events if ev.event_type == "FAILED"]
+    assert failed
+    assert "outcome" in failed[0].data
 
 
 def test_match_failed_branch_for_legacy_throw_is_unchanged() -> None:
