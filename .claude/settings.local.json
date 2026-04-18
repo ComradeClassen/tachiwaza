@@ -17,7 +17,12 @@
       "Bash(git commit -m ' *)",
       "Bash(python -c \"import sys; sys.path.insert\\(0, 'src'\\); import match; print\\('match imports ok'\\)\")",
       "Bash(python tests/test_force_model.py)",
-      "Bash(python tests/test_throw_templates.py)"
+      "Bash(python tests/test_throw_templates.py)",
+      "WebFetch(domain:linear.app)",
+      "Bash(python -c \"from worked_throws import WORKED_THROWS, worked_template_for; from failure_resolution import select_failure_outcome, apply_failure_resolution; from perception import actual_signature_match; print\\('imports OK', len\\(WORKED_THROWS\\)\\)\")",
+      "Bash(python tests/test_worked_throws.py)",
+      "Bash(python tests/test_failure_resolution.py)",
+      "Bash(python tests/__TRACKED_VAR__)"
     ]
   }
 }
