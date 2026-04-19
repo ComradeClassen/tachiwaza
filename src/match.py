@@ -305,6 +305,19 @@ class Match:
         # per the compression schedule. Resolution happens on KAKE_COMMIT.
         self._throws_in_progress: dict[str, "_ThrowInProgress"] = {}
 
+        # Part 6.3 — named compromised-state tracker keyed by fighter name.
+        # Set when a failed throw mutates tori's BodyState; cleared when
+        # stun_ticks decays to zero (end of the recovery window). Uke's
+        # counter-fire probability reads this for per-state vulnerability
+        # bonuses.
+        self._compromised_states: dict[str, object] = {}
+
+        # Part 6.3 — kumi-kata clock snapshot taken at commit start, before
+        # the attack resets the clock. Consumed by _resolve_failed_commit to
+        # evaluate is_desperation_state against the clock value that existed
+        # when the throw was actually decided on.
+        self._commit_kumi_kata_snapshot: dict[str, int] = {}
+
         # For MatchState snapshots
         self._a_score: dict = {"waza_ari": 0, "ippon": False}
         self._b_score: dict = {"waza_ari": 0, "ippon": False}
@@ -815,6 +828,11 @@ class Match:
         # Passivity / attack-registration fires at commit start regardless of N.
         self._last_attack_tick[attacker.identity.name] = tick
         self.grip_graph.register_attack(attacker.identity.name)
+        # Snapshot the kumi-kata clock before reset so Part 6.3 desperation
+        # can evaluate against the pre-attack clock value.
+        self._commit_kumi_kata_snapshot[attacker.identity.name] = (
+            self.kumi_kata_clock.get(attacker.identity.name, 0)
+        )
         self.kumi_kata_clock[attacker.identity.name] = 0
 
         events: list[Event] = [Event(
@@ -1054,6 +1072,13 @@ class Match:
 
         vuln = attacker_vulnerability_for(effective_throw_id)
         p = counter_fire_probability(defender, perceived, vuln)
+        # Part 6.3 — per-state counter-vulnerability bonus. When tori is
+        # currently in a named compromised state, uke's fire probability
+        # gets an additive bump for the specific counters that exploit it.
+        from compromised_state import counter_bonus_for
+        p += counter_bonus_for(
+            self._compromised_states.get(attacker.identity.name), counter_id,
+        )
         if rng.random() >= p:
             return None
 
@@ -1276,10 +1301,33 @@ class Match:
         from failure_resolution import (
             select_failure_outcome, apply_failure_resolution,
         )
+        from compromised_state import (
+            is_desperation_state, apply_desperation_overlay,
+            DESPERATION_COMPOSURE_DROP,
+        )
         resolution = select_failure_outcome(
             template, attacker, defender, self.grip_graph,
         )
-        apply_failure_resolution(resolution, attacker)
+
+        # Part 6.3 — desperation overlay: tori was panicked AND near
+        # kumi-kata shido at commit time. Extend recovery by +2 ticks and
+        # stack an extra composure drop on top of the base failure cost.
+        # We consult the snapshot taken at commit-start, not the current
+        # clock (which was reset to 0 when the attack registered).
+        snapshot_clock = self._commit_kumi_kata_snapshot.pop(a_name, 0)
+        desperation = is_desperation_state(attacker, snapshot_clock)
+        if desperation:
+            resolution = apply_desperation_overlay(resolution)
+            apply_failure_resolution(
+                resolution, attacker,
+                composure_drop=0.10 + DESPERATION_COMPOSURE_DROP,
+            )
+        else:
+            apply_failure_resolution(resolution, attacker)
+
+        # Track the compromised-state tag so uke's counter attempts during
+        # the recovery window get the per-state vulnerability bonus.
+        self._compromised_states[a_name] = resolution.outcome
 
         events.append(Event(
             tick=tick, event_type="FAILED",
@@ -1288,13 +1336,15 @@ class Match:
                 f"({resolution.outcome.name}; "
                 f"{resolution.failed_dimension} score "
                 f"{resolution.dimension_score:.2f}; "
-                f"recovery {resolution.recovery_ticks} tick(s))"
+                f"recovery {resolution.recovery_ticks} tick(s)"
+                f"{'; desperation' if desperation else ''})"
             ),
             data={
                 "outcome":          resolution.outcome.name,
                 "recovery_ticks":   resolution.recovery_ticks,
                 "failed_dimension": resolution.failed_dimension,
                 "dimension_score":  resolution.dimension_score,
+                "desperation":      desperation,
             },
         ))
         return events
@@ -1493,6 +1543,10 @@ class Match:
     def _decay_stun(self, judoka: Judoka) -> None:
         if judoka.state.stun_ticks > 0:
             judoka.state.stun_ticks -= 1
+        # Part 6.3: clear the compromised-state tag once the recovery window
+        # closes. Uke's per-state counter-bonus expires at the same moment.
+        if judoka.state.stun_ticks == 0:
+            self._compromised_states.pop(judoka.identity.name, None)
 
     def _update_grip_passivity(self, tick: int, events: list[Event]) -> None:
         """Part 2.6 passivity clocks.

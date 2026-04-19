@@ -152,18 +152,18 @@ def apply_failure_resolution(
 ) -> None:
     """Apply the mechanical consequences of a failed commit to tori.
 
-    For v0.1 the effects are:
+    Effects:
       - stun_ticks += resolution.recovery_ticks (defensive-only during recovery)
       - composure_current drops by `composure_drop`
-
-    Full BodyState reconfiguration per Part 6.3 (spine flexion, foot states,
-    etc.) is a later ticket — the recovery duration captures the tactical
-    cost in the meantime.
+      - BodyState reconfiguration per the Part 6.3 compromised-state config
+        matching resolution.outcome (trunk flex, foot state, CoM height)
     """
+    from compromised_state import apply_compromised_body_state
     attacker.state.stun_ticks += resolution.recovery_ticks
     attacker.state.composure_current = max(
         0.0, attacker.state.composure_current - composure_drop
     )
+    apply_compromised_body_state(attacker, resolution.outcome)
 
 
 # ---------------------------------------------------------------------------
