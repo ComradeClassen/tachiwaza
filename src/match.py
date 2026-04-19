@@ -838,10 +838,13 @@ class Match:
         events: list[Event] = [Event(
             tick=tick, event_type="THROW_ENTRY",
             description=(
-                f"[throw] {attacker.identity.name} commits — {throw_name} "
-                f"(actual match {actual:.2f}, N={n})."
+                f"[throw] {attacker.identity.name} commits — {throw_name}."
             ),
-            data={"throw_id": throw_id.name, "compression_n": n},
+            data={
+                "throw_id": throw_id.name,
+                "compression_n": n,
+                "actual_match": actual,
+            },
         )]
 
         # Emit tick-0 sub-events.
@@ -1197,8 +1200,7 @@ class Match:
                     tick=tick,
                     event_type="THROW_LANDING",
                     description=(
-                        f"[score] {a_name} → {throw_name} → IPPON "
-                        f"(net {net:+.2f}, quality {score_result.technique_quality:.2f})"
+                        f"[score] {a_name} → {throw_name} → IPPON."
                     ),
                 ))
 
@@ -1212,7 +1214,7 @@ class Match:
                     event_type="THROW_LANDING",
                     description=(
                         f"[score] {a_name} → {throw_name} → waza-ari "
-                        f"({wa_count}/2, net {net:+.2f})"
+                        f"({wa_count}/2)."
                     ),
                 ))
                 # Composure hit on defender
@@ -1242,7 +1244,7 @@ class Match:
                     event_type="THROW_LANDING",
                     description=(
                         f"[throw] {a_name} → {throw_name} → no score "
-                        f"(net {net:+.2f}, ref downgraded)"
+                        f"(ref downgraded)."
                     ),
                 ))
 
@@ -1293,7 +1295,7 @@ class Match:
                 tick=tick, event_type="FAILED",
                 description=(
                     f"[throw] {a_name} → {throw_name} → failed "
-                    f"(no commitment, net {net:+.2f})"
+                    f"(no commitment)."
                 ),
             ))
             return events
@@ -1334,10 +1336,8 @@ class Match:
             description=(
                 f"[throw] {a_name} → {throw_name} → failed "
                 f"({resolution.outcome.name}; "
-                f"{resolution.failed_dimension} score "
-                f"{resolution.dimension_score:.2f}; "
                 f"recovery {resolution.recovery_ticks} tick(s)"
-                f"{'; desperation' if desperation else ''})"
+                f"{'; desperation' if desperation else ''})."
             ),
             data={
                 "outcome":          resolution.outcome.name,

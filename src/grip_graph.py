@@ -605,7 +605,7 @@ class GripGraph:
                 events.append(Event(
                     tick=current_tick,
                     event_type="GRIPS_RESET",
-                    description=f"[grip] Position reset — {len(broken)} edges broken.",
+                    description="[grip] Position reset.",
                 ))
 
         # On transition to ne-waza: clear contested flag (new phase)
