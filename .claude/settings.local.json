@@ -25,7 +25,9 @@
       "Bash(python tests/__TRACKED_VAR__)",
       "Bash(python tests/test_skill_compression.py)",
       "Bash(python -c \"from match import Match; from counter_windows import CounterWindow, actual_counter_window; print\\('imports OK'\\)\")",
-      "Bash(python tests/test_counter_windows.py)"
+      "Bash(python tests/test_counter_windows.py)",
+      "Bash(python -c \"from match import Match; from compromised_state import COMPROMISED_STATE_CONFIGS, apply_compromised_body_state, counter_bonus_for, is_desperation_state, apply_desperation_overlay; print\\('imports OK', len\\(COMPROMISED_STATE_CONFIGS\\)\\)\")",
+      "Bash(python tests/test_compromised_state.py)"
     ]
   }
 }
