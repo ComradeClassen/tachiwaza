@@ -107,6 +107,38 @@ GRIP_DOMINANT_THROWS: frozenset[ThrowID] = frozenset({
 
 
 # ---------------------------------------------------------------------------
+# FAILURE-OUTCOME DISPLAY STRINGS
+# Keep these keyed by the throw_templates.FailureOutcome enum but expressed
+# as plain coach-stream prose. _format_failure_events consumes these; event
+# data still carries the raw enum name for debug / downstream consumers.
+# ---------------------------------------------------------------------------
+def _failure_display_tables() -> tuple[dict, dict]:
+    from throw_templates import FailureOutcome
+    compromise = {
+        FailureOutcome.TORI_COMPROMISED_FORWARD_LEAN:   "forward lean, out of posture",
+        FailureOutcome.TORI_COMPROMISED_SINGLE_SUPPORT: "off-balance on one leg",
+        FailureOutcome.TORI_STUCK_WITH_UKE_ON_BACK:     "stuck with uke loaded on back",
+        FailureOutcome.TORI_BENT_FORWARD_LOADED:        "bent forward, loaded",
+        FailureOutcome.TORI_ON_KNEE_UKE_STANDING:       "on one knee, uke standing",
+        FailureOutcome.TORI_ON_BOTH_KNEES_UKE_STANDING: "on both knees, uke standing",
+        FailureOutcome.TORI_SWEEP_BOUNCES_OFF:          "sweep bounces off",
+        FailureOutcome.PARTIAL_THROW:                   "partial throw, no score",
+        FailureOutcome.STANCE_RESET:                    "stance reset",
+        FailureOutcome.UKE_VOLUNTARY_NEWAZA:            "uke pulls guard to ne-waza",
+    }
+    counters = {
+        FailureOutcome.UCHI_MATA_SUKASHI:   "reads the uchi-mata and steps through — sukashi",
+        FailureOutcome.OSOTO_GAESHI:        "catches the osoto and redirects — osoto-gaeshi",
+        FailureOutcome.URA_NAGE:            "scoops under and counters — ura-nage",
+        FailureOutcome.KAESHI_WAZA_GENERIC: "turns the attempt — kaeshi-waza",
+    }
+    return compromise, counters
+
+
+_FAILURE_TAGS, _COUNTER_NARRATIONS = _failure_display_tables()
+
+
+# ---------------------------------------------------------------------------
 # THROW IN PROGRESS (Part 6.1 — multi-tick attempt state)
 # One instance per attacker mid-attempt. Cleared when KAKE_COMMIT resolves or
 # the attempt is aborted (stun, grip collapse, counter).
@@ -1338,23 +1370,64 @@ class Match:
         # the recovery window get the per-state vulnerability bonus.
         self._compromised_states[a_name] = resolution.outcome
 
-        events.append(Event(
+        events.extend(self._format_failure_events(
+            attacker, defender, throw_name, resolution, desperation, tick,
+        ))
+        return events
+
+    # -----------------------------------------------------------------------
+    # FAILURE-EVENT FORMATTING
+    # Splits clean-counter outcomes into a [throw] stuffed line plus a
+    # [counter] line naming uke as the counter thrower, so a reader never
+    # sees a raw FailureOutcome enum name in the coach stream. Compromise
+    # outcomes collapse into a single [throw] failed line using a human-
+    # readable tag. Debug tooling reads the enum from event data.
+    # -----------------------------------------------------------------------
+    def _format_failure_events(
+        self, attacker: Judoka, defender: Judoka, throw_name: str,
+        resolution, desperation: bool, tick: int,
+    ) -> list[Event]:
+        from throw_templates import FailureOutcome
+        a_name = attacker.identity.name
+        d_name = defender.identity.name
+        outcome = resolution.outcome
+        recovery = resolution.recovery_ticks
+        data = {
+            "outcome":          outcome.name,
+            "recovery_ticks":   recovery,
+            "failed_dimension": resolution.failed_dimension,
+            "dimension_score":  resolution.dimension_score,
+            "desperation":      desperation,
+        }
+        desp_tag = "; desperation" if desperation else ""
+
+        counter_desc = _COUNTER_NARRATIONS.get(outcome)
+        if counter_desc is not None:
+            return [
+                Event(
+                    tick=tick, event_type="THROW_STUFFED",
+                    description=f"[throw] {a_name} → {throw_name} stuffed.",
+                    data={"throw_name": throw_name, "attacker": a_name},
+                ),
+                Event(
+                    tick=tick, event_type="FAILED",
+                    description=(
+                        f"[counter] {d_name} {counter_desc} "
+                        f"({a_name} recovers {recovery} tick(s){desp_tag})."
+                    ),
+                    data={**data, "counter_thrower": d_name},
+                ),
+            ]
+
+        tag = _FAILURE_TAGS.get(outcome, outcome.name.lower())
+        return [Event(
             tick=tick, event_type="FAILED",
             description=(
                 f"[throw] {a_name} → {throw_name} → failed "
-                f"({resolution.outcome.name}; "
-                f"recovery {resolution.recovery_ticks} tick(s)"
-                f"{'; desperation' if desperation else ''})."
+                f"({tag}; recovery {recovery} tick(s){desp_tag})."
             ),
-            data={
-                "outcome":          resolution.outcome.name,
-                "recovery_ticks":   resolution.recovery_ticks,
-                "failed_dimension": resolution.failed_dimension,
-                "dimension_score":  resolution.dimension_score,
-                "desperation":      desperation,
-            },
-        ))
-        return events
+            data=data,
+        )]
 
     # -----------------------------------------------------------------------
     # NE-WAZA TRANSITION (after stuffed throw)
