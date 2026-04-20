@@ -60,6 +60,13 @@ def select_actions(
     own_edges = graph.edges_owned_by(judoka.identity.name)
     opp_edges = graph.edges_owned_by(opponent.identity.name)
 
+    # Engagement precedes commit: a throw requires at least pocket contact.
+    # Without this, low-fight_iq perception noise on a Couple throw's always-
+    # on body/posture dimensions lifts the perceived signature over the commit
+    # threshold before any grip exists, and the novice throws from thin air.
+    if not own_edges:
+        return _reach_actions(judoka)
+
     # Rung 2: commit if a throw is perceived available.
     commit = _try_commit(judoka, opponent, graph, r)
     if commit is not None:
@@ -67,10 +74,6 @@ def select_actions(
 
     # Rung 5: kumi-kata clock nearing shido → escalate.
     escalated = (kumi_kata_clock >= DESPERATION_KUMI_CLOCK)
-
-    # No grips yet → reach.
-    if not own_edges:
-        return _reach_actions(judoka)
 
     # If every grip is still shallow (POCKET/SLIPPING), spend both actions
     # seating them — deepen primary, strip the opponent's strongest grip.
