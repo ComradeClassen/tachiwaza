@@ -39,7 +39,8 @@
       "Bash(python -m pytest tests/ --capture=no -v)",
       "Bash(python -m pytest tests/ --capture=no -q)",
       "Read(//tmp/**)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(python src/main.py --runs 1 --seed 1)"
     ]
   }
 }
