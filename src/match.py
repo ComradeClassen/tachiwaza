@@ -277,11 +277,13 @@ class Match:
         referee: Referee,
         max_ticks: int = 240,
         debug=None,
+        seed: Optional[int] = None,
     ) -> None:
         self.fighter_a = fighter_a
         self.fighter_b = fighter_b
         self.referee   = referee
         self.max_ticks = max_ticks
+        self.seed      = seed
         self._debug = debug
         if self._debug is not None:
             self._debug.bind_match(self)
@@ -1775,6 +1777,8 @@ class Match:
         print(f"  Referee: {r.name} ({r.nationality}) — "
               f"patience {r.newaza_patience:.1f} / "
               f"strictness {r.ippon_strictness:.1f}")
+        if self.seed is not None:
+            print(f"  Seed: {self.seed}  (replay: --seed {self.seed})")
         print("=" * 65)
         print()
 

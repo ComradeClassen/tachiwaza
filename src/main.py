@@ -271,7 +271,11 @@ def _print_match_header(a: Judoka, b: Judoka, ref) -> None:
     print(f"Referee: {ref.name}")
 
 
-def _run_one_match(build_a, build_b, ref_builder, debug=None) -> None:
+def _run_one_match(build_a, build_b, ref_builder, debug=None, seed=None) -> None:
+    import random
+    if seed is not None:
+        random.seed(seed)
+
     a   = build_a()
     b   = build_b()
     ref = ref_builder()
@@ -282,11 +286,11 @@ def _run_one_match(build_a, build_b, ref_builder, debug=None) -> None:
     place_judoka(b, com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
 
     _print_match_header(a, b, ref)
-    match = Match(fighter_a=a, fighter_b=b, referee=ref, debug=debug)
+    match = Match(fighter_a=a, fighter_b=b, referee=ref, debug=debug, seed=seed)
     match.run()
 
 
-def _interactive_loop(ref_builder, debug_factory=None) -> None:
+def _interactive_loop(ref_builder, debug_factory=None, seed_for_next=None) -> None:
     while True:
         print()
         print("Choose a matchup:")
@@ -304,7 +308,8 @@ def _interactive_loop(ref_builder, debug_factory=None) -> None:
             continue
         _, build_a, build_b = MATCHUPS[choice]
         debug = debug_factory() if debug_factory else None
-        _run_one_match(build_a, build_b, ref_builder, debug=debug)
+        seed = seed_for_next() if seed_for_next else None
+        _run_one_match(build_a, build_b, ref_builder, debug=debug, seed=seed)
 
 
 # ===========================================================================
@@ -337,9 +342,20 @@ if __name__ == "__main__":
                              + f". Default: {','.join(sorted(DEFAULT_PAUSE_ON))}.")
     args = parser.parse_args()
 
-    if args.seed is not None:
-        import random
-        random.seed(args.seed)
+    import random
+    # Per-match seeds. If --seed is given, match i uses args.seed+i (so every
+    # printed seed reproduces its match exactly with --seed=<that> --runs=1).
+    # If --seed is omitted, we draw a fresh seed per match from the OS RNG.
+    _sys_rng = random.SystemRandom()
+    _match_counter = [0]
+
+    def seed_for_next():
+        if args.seed is not None:
+            s = args.seed + _match_counter[0]
+        else:
+            s = _sys_rng.randrange(2**31)
+        _match_counter[0] += 1
+        return s
 
     ref_builder = build_suzuki if args.referee == "suzuki" else build_petrov
 
@@ -368,7 +384,10 @@ if __name__ == "__main__":
             return None
 
     if args.runs is None:
-        _interactive_loop(ref_builder, debug_factory=debug_factory)
+        _interactive_loop(
+            ref_builder, debug_factory=debug_factory,
+            seed_for_next=seed_for_next,
+        )
     else:
         _, build_a, build_b = MATCHUPS[args.matchup]
         for i in range(args.runs):
@@ -376,4 +395,7 @@ if __name__ == "__main__":
                 print(f"\n{'#' * 65}")
                 print(f"# MATCH {i + 1} of {args.runs}")
                 print(f"{'#' * 65}")
-            _run_one_match(build_a, build_b, ref_builder, debug=debug_factory())
+            _run_one_match(
+                build_a, build_b, ref_builder,
+                debug=debug_factory(), seed=seed_for_next(),
+            )
