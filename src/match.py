@@ -48,6 +48,8 @@ from counter_windows import (
     has_counter_resources, select_counter_throw, counter_fire_probability,
     attacker_vulnerability_for,
 )
+from defensive_desperation import DefensivePressureTracker
+from compromised_state import is_desperation_state
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +362,21 @@ class Match:
         self._a_score: dict = {"waza_ari": 0, "ippon": False}
         self._b_score: dict = {"waza_ari": 0, "ippon": False}
 
+        # HAJ-35 — defensive desperation trackers + last-known state flags
+        # (edge-triggered logging).
+        self._defensive_pressure: dict[str, DefensivePressureTracker] = {
+            fighter_a.identity.name: DefensivePressureTracker(),
+            fighter_b.identity.name: DefensivePressureTracker(),
+        }
+        self._offensive_desperation_active: dict[str, bool] = {
+            fighter_a.identity.name: False,
+            fighter_b.identity.name: False,
+        }
+        self._defensive_desperation_active: dict[str, bool] = {
+            fighter_a.identity.name: False,
+            fighter_b.identity.name: False,
+        }
+
     # -----------------------------------------------------------------------
     # RUN
     # -----------------------------------------------------------------------
@@ -432,15 +449,26 @@ class Match:
             self._post_tick(tick, events)
             return
 
+        # HAJ-35 — defensive-pressure: record composure each tick so the
+        # rolling-window drop signal has data to work from, then recompute
+        # each fighter's active state and emit transition events.
+        self._update_defensive_desperation(tick, events)
+
         # Action selection (Part 3.3). Each judoka picks up to two actions
         # based on the priority ladder; COMMIT_THROW supersedes the cap.
         actions_a = select_actions(
             self.fighter_a, self.fighter_b, self.grip_graph,
             self.kumi_kata_clock[self.fighter_a.identity.name],
+            defensive_desperation=self._defensive_desperation_active[
+                self.fighter_a.identity.name
+            ],
         )
         actions_b = select_actions(
             self.fighter_b, self.fighter_a, self.grip_graph,
             self.kumi_kata_clock[self.fighter_b.identity.name],
+            defensive_desperation=self._defensive_desperation_active[
+                self.fighter_b.identity.name
+            ],
         )
         # A fighter mid-attempt must not re-commit — strip any COMMIT_THROW
         # the ladder re-proposes this tick.
@@ -492,11 +520,13 @@ class Match:
                 tick=tick, event_type="KUZUSHI_INDUCED",
                 description=f"[physics] {self.fighter_a.identity.name} off-balance.",
             ))
+            self._defensive_pressure[self.fighter_a.identity.name].record_kuzushi(tick)
         if b_kuzushi and not self._b_was_kuzushi_last_tick:
             events.append(Event(
                 tick=tick, event_type="KUZUSHI_INDUCED",
                 description=f"[physics] {self.fighter_b.identity.name} off-balance.",
             ))
+            self._defensive_pressure[self.fighter_b.identity.name].record_kuzushi(tick)
         self._a_was_kuzushi_last_tick = a_kuzushi
         self._b_was_kuzushi_last_tick = b_kuzushi
 
@@ -511,6 +541,10 @@ class Match:
                     continue
                 commit_events = self._resolve_commit_throw(
                     actor, opp, act.throw_id, tick,
+                    offensive_desperation=act.offensive_desperation,
+                    defensive_desperation=act.defensive_desperation,
+                    gate_bypass_reason=act.gate_bypass_reason,
+                    gate_bypass_kind=act.gate_bypass_kind,
                 )
                 events.extend(commit_events)
                 if self.match_over:
@@ -886,6 +920,11 @@ class Match:
     # -----------------------------------------------------------------------
     def _resolve_commit_throw(
         self, attacker: Judoka, defender: Judoka, throw_id: ThrowID, tick: int,
+        *,
+        offensive_desperation: bool = False,
+        defensive_desperation: bool = False,
+        gate_bypass_reason: Optional[str] = None,
+        gate_bypass_kind: Optional[str] = None,
     ) -> list[Event]:
         """Entry point for a COMMIT_THROW action.
 
@@ -899,6 +938,11 @@ class Match:
         # Reject a second commit from the same attacker while one is in-flight.
         if attacker.identity.name in self._throws_in_progress:
             return []
+
+        # HAJ-35 — the defender has now officially taken an incoming throw;
+        # feed their rolling-window counter. We do this before the resolve
+        # path so a sequence of attacks accumulates even if they're all N=1.
+        self._defensive_pressure[defender.identity.name].record_opponent_commit(tick)
 
         actual = actual_signature_match(throw_id, attacker, defender, self.grip_graph)
         n = compression_n_for(attacker, throw_id)
@@ -919,15 +963,33 @@ class Match:
         # tick as the outcome); the THROW_ENTRY stays visible so a successful
         # elite throw still has a [throw] commit line preceding its [score].
         collapse_n1 = n <= 1
+
+        # HAJ-35 — surface the commit-time desperation + grip-gate-bypass
+        # status directly on the [throw] line. Before this, desperation was
+        # only visible on *failures*; a successful desperation throw looked
+        # like any other commit. Now every commit declares its state.
+        tags: list[str] = []
+        if offensive_desperation:
+            tags.append("offensive desperation")
+        if defensive_desperation:
+            tags.append("defensive desperation")
+        if gate_bypass_reason is not None:
+            tags.append(f"gate bypassed: {gate_bypass_reason}")
+        tag_suffix = f"  ({'; '.join(tags)})" if tags else ""
         events: list[Event] = [Event(
             tick=tick, event_type="THROW_ENTRY",
             description=(
                 f"[throw] {attacker.identity.name} commits — {throw_name}."
+                f"{tag_suffix}"
             ),
             data={
                 "throw_id": throw_id.name,
                 "compression_n": n,
                 "actual_match": actual,
+                "offensive_desperation": offensive_desperation,
+                "defensive_desperation": defensive_desperation,
+                "gate_bypass_reason":    gate_bypass_reason,
+                "gate_bypass_kind":      gate_bypass_kind,
             },
         )]
 
@@ -1147,7 +1209,16 @@ class Match:
         if actual == CounterWindow.NONE:
             return None
 
-        perceived = perceived_counter_window(actual, defender, rng=rng)
+        # HAJ-35 — defensive desperation: tired eyes reading patterns let
+        # the defender see real attacks more reliably, and the "break the
+        # pattern" instinct bumps the counter-fire probability.
+        def_desp = self._defensive_desperation_active.get(
+            defender.identity.name, False,
+        )
+        perceived = perceived_counter_window(
+            actual, defender, rng=rng,
+            defensive_desperation=def_desp,
+        )
         if perceived == CounterWindow.NONE:
             return None
         if not has_counter_resources(defender):
@@ -1161,7 +1232,10 @@ class Match:
             return None
 
         vuln = attacker_vulnerability_for(effective_throw_id)
-        p = counter_fire_probability(defender, perceived, vuln)
+        p = counter_fire_probability(
+            defender, perceived, vuln,
+            defensive_desperation=def_desp,
+        )
         # Part 6.3 — per-state counter-vulnerability bonus. When tori is
         # currently in a named compromised state, uke's fire probability
         # gets an additive bump for the specific counters that exploit it.
@@ -1208,6 +1282,65 @@ class Match:
     # -----------------------------------------------------------------------
     # COMPOSURE / STALEMATE HELPERS
     # -----------------------------------------------------------------------
+    def _update_defensive_desperation(
+        self, tick: int, events: list[Event],
+    ) -> None:
+        """HAJ-35 — recompute each fighter's defensive-desperation flag and
+        emit edge-triggered [state] events on entry/exit. Also surfaces
+        edge-triggered offensive-desperation transitions using the same
+        predicate consulted by compromised_state.
+        """
+        for f in (self.fighter_a, self.fighter_b):
+            name = f.identity.name
+            tracker = self._defensive_pressure[name]
+            # Feed composure this tick (tracker prunes old entries itself).
+            tracker.record_composure(tick, f.state.composure_current)
+            was_def_active = self._defensive_desperation_active[name]
+            is_def_active = tracker.update(tick)
+            if is_def_active and not was_def_active:
+                br = tracker.breakdown(tick)
+                events.append(Event(
+                    tick=tick, event_type="DEFENSIVE_DESPERATION_ENTER",
+                    description=(
+                        f"[state] {name} enters defensive desperation "
+                        f"(pressure={br['score']:.1f}; "
+                        f"{br['opp_commits']} commits, "
+                        f"{br['kuzushi']} kuzushi, "
+                        f"composure -{br['composure_drop']:.2f} "
+                        f"in {br['window_ticks']} ticks)."
+                    ),
+                    data=br,
+                ))
+            elif (not is_def_active) and was_def_active:
+                events.append(Event(
+                    tick=tick, event_type="DEFENSIVE_DESPERATION_EXIT",
+                    description=f"[state] {name} exits defensive desperation.",
+                ))
+            self._defensive_desperation_active[name] = is_def_active
+
+            # Offensive desperation transitions — same predicate the commit
+            # path uses, surfaced as an edge-triggered [state] line so the
+            # reader sees it without waiting for a failed throw.
+            off_active = is_desperation_state(
+                f, self.kumi_kata_clock.get(name, 0)
+            )
+            if off_active and not self._offensive_desperation_active[name]:
+                events.append(Event(
+                    tick=tick, event_type="OFFENSIVE_DESPERATION_ENTER",
+                    description=(
+                        f"[state] {name} enters offensive desperation "
+                        f"(composure {f.state.composure_current:.2f}/"
+                        f"{f.capability.composure_ceiling}, "
+                        f"kumi-kata clock {self.kumi_kata_clock.get(name, 0)})."
+                    ),
+                ))
+            elif (not off_active) and self._offensive_desperation_active[name]:
+                events.append(Event(
+                    tick=tick, event_type="OFFENSIVE_DESPERATION_EXIT",
+                    description=f"[state] {name} exits offensive desperation.",
+                ))
+            self._offensive_desperation_active[name] = off_active
+
     def _update_composure_from_kuzushi(
         self, a_kuzushi: bool, b_kuzushi: bool
     ) -> None:

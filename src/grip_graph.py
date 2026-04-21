@@ -64,6 +64,28 @@ class GripEdge:
     mode: GripMode = GripMode.CONNECTIVE  # per-tick mode (Part 2.5); Part 3 flips it
     unconventional_clock: int = 0         # Part 2.6 per-grip counter for BELT/PISTOL/CROSS
     contested: bool = False               # opponent actively fighting this grip
+    # HAJ-36 — highest depth this edge has ever reached. The grip-presence
+    # commit gate checks against this, not the live `depth_level`: a grip
+    # that was once STANDARD has earned commit eligibility even if the
+    # opponent is currently stripping it back. Initialized to whatever
+    # depth the edge is constructed at and never decreases.
+    max_depth_reached: Optional[GripDepth] = None
+
+    def __post_init__(self):
+        # HAJ-36 — seed max_depth_reached at construction time.
+        if self.max_depth_reached is None:
+            self.max_depth_reached = self.depth_level
+
+    def _note_depth(self) -> None:
+        """Update max_depth_reached if the current level is higher than
+        anything previously recorded. Ordering: DEEP > STANDARD > POCKET
+        > SLIPPING (see GripDepth.modifier()).
+        """
+        if self.max_depth_reached is None:
+            self.max_depth_reached = self.depth_level
+            return
+        if self.depth_level.modifier() > self.max_depth_reached.modifier():
+            self.max_depth_reached = self.depth_level
 
     @property
     def depth(self) -> float:
@@ -336,6 +358,7 @@ class GripGraph:
         if new_depth == edge.depth_level:
             return False
         edge.depth_level = new_depth
+        edge._note_depth()
         return True
 
     # -----------------------------------------------------------------------

@@ -20,6 +20,8 @@ from enums import (
     GripTypeV2, GripDepth, GripTarget, GripMode, DominantSide,
 )
 from throws import THROW_DEFS, ThrowID
+from grip_presence_gate import evaluate_gate, GateResult, REASON_OK
+from compromised_state import is_desperation_state
 
 if TYPE_CHECKING:
     from judoka import Judoka
@@ -45,11 +47,17 @@ def select_actions(
     graph: "GripGraph",
     kumi_kata_clock: int,
     rng: random.Random | None = None,
+    defensive_desperation: bool = False,
 ) -> list[Action]:
     """Return the judoka's chosen actions for this tick.
 
     Implements the Part 3.3 priority ladder. Returns 1-2 Actions, or a
     single-element list containing COMMIT_THROW.
+
+    HAJ-35/36: `defensive_desperation` is computed Match-side (requires
+    cross-tick history the ladder can't see) and bypasses the grip-
+    presence gate when True. Offensive desperation is derived locally
+    from composure + kumi_kata_clock.
     """
     r = rng if rng is not None else random
 
@@ -64,13 +72,24 @@ def select_actions(
     # Without this, low-fight_iq perception noise on a Couple throw's always-
     # on body/posture dimensions lifts the perceived signature over the commit
     # threshold before any grip exists, and the novice throws from thin air.
-    if not own_edges:
+    if not own_edges and not defensive_desperation:
         return _reach_actions(judoka)
 
-    # Rung 2: commit if a throw is perceived available.
-    commit = _try_commit(judoka, opponent, graph, r)
+    # Rung 2: commit if a throw is perceived available AND the grip-presence
+    # gate passes (or desperation bypasses it).
+    offensive_desperation = is_desperation_state(judoka, kumi_kata_clock)
+    commit = _try_commit(
+        judoka, opponent, graph, r,
+        offensive_desperation=offensive_desperation,
+        defensive_desperation=defensive_desperation,
+    )
     if commit is not None:
         return [commit]
+
+    # No edges + no commit path open (e.g. defensive desperation that
+    # couldn't find a throw) — fall back to reach.
+    if not own_edges:
+        return _reach_actions(judoka)
 
     # Rung 5: kumi-kata clock nearing shido → escalate.
     escalated = (kumi_kata_clock >= DESPERATION_KUMI_CLOCK)
@@ -144,9 +163,16 @@ def _try_commit(
     opponent: "Judoka",
     graph: "GripGraph",
     rng: random.Random,
+    *,
+    offensive_desperation: bool = False,
+    defensive_desperation: bool = False,
 ) -> Optional[Action]:
     """If there's a throw whose *perceived* signature clears the commit
-    threshold, return a COMMIT_THROW Action for it. Otherwise None.
+    threshold AND the formal grip-presence gate allows it (or is bypassed
+    by desperation), return a COMMIT_THROW Action for it. Otherwise None.
+
+    The returned Action carries the desperation / gate-bypass metadata so
+    Match can surface it in the log.
     """
     from perception import actual_signature_match, perceive
 
@@ -156,8 +182,9 @@ def _try_commit(
         if t not in candidates:
             candidates.append(t)
 
-    best_id: Optional[ThrowID] = None
-    best_perceived: float = 0.0
+    # Rank candidates by perceived signature; we'll walk in descending order
+    # and pick the first that clears both the threshold AND the grip gate.
+    ranked: list[tuple[float, ThrowID]] = []
     for tid in candidates:
         td = THROW_DEFS.get(tid)
         if td is None:
@@ -169,12 +196,27 @@ def _try_commit(
         # Small bonus for signature throws — tokui-waza bias.
         if tid in judoka.capability.signature_throws:
             perceived += 0.05
-        if perceived > best_perceived:
-            best_perceived = perceived
-            best_id = tid
+        ranked.append((perceived, tid))
+    ranked.sort(key=lambda pair: pair[0], reverse=True)
 
-    if best_id is not None and best_perceived >= COMMIT_THRESHOLD:
-        return commit_throw(best_id)
+    for perceived, tid in ranked:
+        if perceived < COMMIT_THRESHOLD:
+            break   # ranked descending; nothing below will clear either
+        td = THROW_DEFS[tid]
+        gate = evaluate_gate(
+            judoka, td, graph,
+            offensive_desperation=offensive_desperation,
+            defensive_desperation=defensive_desperation,
+        )
+        if not gate.allowed:
+            continue   # try the next throw
+        return commit_throw(
+            tid,
+            offensive_desperation=offensive_desperation,
+            defensive_desperation=defensive_desperation,
+            gate_bypass_reason=gate.reason if gate.bypassed else None,
+            gate_bypass_kind=gate.bypass_kind,
+        )
     return None
 
 

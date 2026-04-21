@@ -102,6 +102,13 @@ class Action:
     target_location: Optional[GripTarget] = None         # for REACH / REPOSITION_GRIP
     edge: Optional["GripEdge"] = None                    # for DEEPEN / STRIP / DEFEND_GRIP / RELEASE
     is_feint: bool = False                               # FEINT marker (3.6)
+    # HAJ-35/36 — desperation + gate-bypass metadata for COMMIT_THROW. Lets
+    # Match surface "(desperation)" / "(gate bypassed: X)" on the commit
+    # line without reconsulting the ladder.
+    offensive_desperation: bool = False
+    defensive_desperation: bool = False
+    gate_bypass_reason: Optional[str] = None             # non-None only when the gate was bypassed
+    gate_bypass_kind: Optional[str] = None               # "offensive" | "defensive" | None
 
 
 # ---------------------------------------------------------------------------
@@ -141,5 +148,18 @@ def step(foot: str, direction: Tuple[float, float], magnitude: float) -> Action:
     return Action(kind=ActionKind.STEP, foot=foot,
                   direction=direction, magnitude=magnitude)
 
-def commit_throw(throw_id: ThrowID) -> Action:
-    return Action(kind=ActionKind.COMMIT_THROW, throw_id=throw_id)
+def commit_throw(
+    throw_id: ThrowID,
+    *,
+    offensive_desperation: bool = False,
+    defensive_desperation: bool = False,
+    gate_bypass_reason: Optional[str] = None,
+    gate_bypass_kind: Optional[str] = None,
+) -> Action:
+    return Action(
+        kind=ActionKind.COMMIT_THROW, throw_id=throw_id,
+        offensive_desperation=offensive_desperation,
+        defensive_desperation=defensive_desperation,
+        gate_bypass_reason=gate_bypass_reason,
+        gate_bypass_kind=gate_bypass_kind,
+    )

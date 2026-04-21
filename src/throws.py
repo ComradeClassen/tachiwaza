@@ -120,6 +120,11 @@ class ThrowDef:
     landing_profile: LandingProfile
     base_effectiveness_dominant: float      # Raw throw power from dominant side (0–10)
     base_effectiveness_off_side: float      # Raw throw power from off-side (0–10)
+    # HAJ-36 — grip-presence commit gate. True (default) means the throw
+    # demands engaged edges on BOTH hands to legally fire. Sacrifice throws
+    # and opportunistic setups (sumi-gaeshi, ko-uchi, o-uchi, de-ashi-harai)
+    # can fire off one-handed engagement and set this to False.
+    requires_both_hands: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +359,7 @@ THROW_DEFS: dict[ThrowID, ThrowDef] = {
         landing_profile=LandingProfile.LATERAL,
         base_effectiveness_dominant=7.0,
         base_effectiveness_off_side=6.0,
+        requires_both_hands=False,   # Inside hook works off any one grip
     ),
 
     ThrowID.KO_UCHI_GARI: ThrowDef(
@@ -372,6 +378,7 @@ THROW_DEFS: dict[ThrowID, ThrowDef] = {
         landing_profile=LandingProfile.LATERAL,
         base_effectiveness_dominant=5.0,
         base_effectiveness_off_side=5.0,
+        requires_both_hands=False,   # Low-commitment setup; fires from one grip
     ),
 
     ThrowID.HARAI_GOSHI: ThrowDef(
@@ -440,6 +447,7 @@ THROW_DEFS: dict[ThrowID, ThrowDef] = {
         landing_profile=LandingProfile.SACRIFICE,
         base_effectiveness_dominant=5.0,
         base_effectiveness_off_side=7.0,  # Higher off-side: mirrored stance specialty
+        requires_both_hands=False,        # Sacrifice throw — one grip is enough
     ),
 
     ThrowID.DE_ASHI_HARAI: ThrowDef(
@@ -458,6 +466,7 @@ THROW_DEFS: dict[ThrowID, ThrowDef] = {
         landing_profile=LandingProfile.LATERAL,
         base_effectiveness_dominant=6.0,   # low raw effectiveness; the payoff is the timing
         base_effectiveness_off_side=5.0,
+        requires_both_hands=False,        # Timing-window sweep; sleeve grip sufficient
     ),
 
     ThrowID.O_GOSHI: ThrowDef(

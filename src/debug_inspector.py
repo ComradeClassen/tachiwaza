@@ -26,16 +26,18 @@ if TYPE_CHECKING:
 # --debug run pauses on the narratively meaningful beats and nothing else.
 # ---------------------------------------------------------------------------
 PAUSE_TRIGGERS: dict[str, tuple[str, ...]] = {
-    "throw":   ("THROW_ENTRY", "COUNTER_COMMIT", "THROW_ABORTED", "THROW_STUFFED"),
-    "score":   ("IPPON_AWARDED", "THROW_LANDING", "SCORE_AWARDED"),
-    "kuzushi": ("KUZUSHI_INDUCED",),
-    "matte":   ("MATTE",),
-    "ne_waza": ("NEWAZA_TRANSITION", "SUBMISSION_VICTORY", "ESCAPE_SUCCESS"),
-    "shido":   ("SHIDO_AWARDED",),
+    "throw":       ("THROW_ENTRY", "COUNTER_COMMIT", "THROW_ABORTED", "THROW_STUFFED"),
+    "score":       ("IPPON_AWARDED", "THROW_LANDING", "SCORE_AWARDED"),
+    "kuzushi":     ("KUZUSHI_INDUCED",),
+    "matte":       ("MATTE",),
+    "ne_waza":     ("NEWAZA_TRANSITION", "SUBMISSION_VICTORY", "ESCAPE_SUCCESS"),
+    "shido":       ("SHIDO_AWARDED",),
+    "desperation": ("OFFENSIVE_DESPERATION_ENTER", "OFFENSIVE_DESPERATION_EXIT",
+                    "DEFENSIVE_DESPERATION_ENTER", "DEFENSIVE_DESPERATION_EXIT"),
 }
 
 DEFAULT_PAUSE_ON: frozenset[str] = frozenset({
-    "throw", "score", "kuzushi", "matte", "ne_waza",
+    "throw", "score", "kuzushi", "matte", "ne_waza", "desperation",
 })
 
 
@@ -109,10 +111,11 @@ class DebugSession:
     # REGISTRATION
     # -----------------------------------------------------------------------
     def _register_fighter(self, fighter: "Judoka", handle: str) -> None:
+        match = self._match
         self._handles[handle] = HandleEntry(
             handle=handle, kind="fighter",
             label=fighter.identity.name,
-            describe=lambda f=fighter: _describe_fighter(f),
+            describe=lambda f=fighter: _describe_fighter(f, match),
         )
         self._by_pyid[id(fighter)] = handle
 
@@ -414,7 +417,7 @@ def _guess_attacker_from_description(ev, match) -> Optional[str]:
 # DESCRIBERS — one per handle kind. Kept terse; calibration wants
 # information density, not prose.
 # ---------------------------------------------------------------------------
-def _describe_fighter(fighter) -> str:
+def _describe_fighter(fighter, match=None) -> str:
     ident = fighter.identity
     cap = fighter.capability
     state = fighter.state
@@ -432,6 +435,31 @@ def _describe_fighter(fighter) -> str:
         f"ne_waza: {cap.ne_waza_skill}   "
         f"cardio_cap/eff: {cap.cardio_capacity}/{cap.cardio_efficiency}",
     ]
+    # HAJ-35 — desperation state. Read live from match; show the signals
+    # producing defensive pressure so calibration has something to aim at.
+    if match is not None:
+        name = ident.name
+        off_active = match._offensive_desperation_active.get(name, False)
+        def_active = match._defensive_desperation_active.get(name, False)
+        tracker = match._defensive_pressure.get(name)
+        ceiling = max(1.0, float(cap.composure_ceiling))
+        comp_frac = state.composure_current / ceiling
+        kumi = match.kumi_kata_clock.get(name, 0)
+        lines.append(
+            f"  desperation: offensive={off_active}  defensive={def_active}"
+        )
+        lines.append(
+            f"    (offensive gate: composure_frac={comp_frac:.2f} "
+            f"kumi_clock={kumi})"
+        )
+        if tracker is not None:
+            br = tracker.breakdown(match.ticks_run)
+            lines.append(
+                f"    (defensive gate: score={br['score']:.1f} "
+                f"opp_commits={br['opp_commits']} "
+                f"kuzushi={br['kuzushi']} "
+                f"comp_drop={br['composure_drop']})"
+            )
     # Most-fatigued / most-injured parts to keep the dump short.
     parts = []
     for pname in ("right_hand", "left_hand", "right_leg", "left_leg",

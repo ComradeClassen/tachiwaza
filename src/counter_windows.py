@@ -145,6 +145,8 @@ def perceived_counter_window(
     actual: CounterWindow,
     defender: "Judoka",
     rng: Optional[random.Random] = None,
+    *,
+    defensive_desperation: bool = False,
 ) -> CounterWindow:
     """Return the defender's perception of the current region.
 
@@ -157,11 +159,19 @@ def perceived_counter_window(
     perceived region to an adjacent one. NONE flips to SEN_NO_SEN (reads
     a nonexistent attack); SEN_SEN_NO_SEN/SEN_NO_SEN/GO_NO_SEN misread as
     their neighbors.
+
+    HAJ-35 — defensive desperation reduces the flip probability on real
+    (non-NONE) windows: a defender pinned in attack after attack starts
+    reading the pattern. NONE misreads are unaffected — a desperate
+    defender doesn't hallucinate attacks that aren't there.
     """
     r = rng if rng is not None else random
     iq = max(0.0, min(10.0, float(defender.capability.fight_iq)))
     novice_w = (10.0 - iq) / 10.0
     flip_p = max(0.02, COUNTER_PERCEPTION_FLIP_PROB * novice_w)
+    if defensive_desperation and actual != CounterWindow.NONE:
+        from defensive_desperation import CW_PERCEPTION_BONUS
+        flip_p = max(0.0, flip_p - CW_PERCEPTION_BONUS)
     if r.random() >= flip_p:
         return actual
     return _adjacent_region(actual, r)
@@ -242,6 +252,8 @@ def counter_fire_probability(
     defender: "Judoka",
     window: CounterWindow,
     attacker_vulnerability: float,
+    *,
+    defensive_desperation: bool = False,
 ) -> float:
     """Per-tick probability the defender actually commits the counter.
 
@@ -249,6 +261,11 @@ def counter_fire_probability(
     vulnerability (sukashi for Couple, counter for Lever). A fatigued
     defender's probability collapses per has_counter_resources — that's
     checked before this is called, so here we assume resources are OK.
+
+    HAJ-35 — when the defender is in defensive desperation they're more
+    willing to fire a risky counter: the base probability is multiplied
+    by CW_FIRE_PROB_MULT (>1). This amplifies the normal composure/iq
+    gates without bypassing them entirely.
     """
     if window == CounterWindow.NONE:
         return 0.0
@@ -259,7 +276,11 @@ def counter_fire_probability(
     # Sen-sen-no-sen is rarer than mid-commit counters — the attack isn't
     # fully committed yet, so the opportunity is narrower.
     window_mod = 0.5 if window == CounterWindow.SEN_SEN_NO_SEN else 1.0
-    return COUNTER_BASE_PROBABILITY * iq * comp * vuln * window_mod
+    base = COUNTER_BASE_PROBABILITY * iq * comp * vuln * window_mod
+    if defensive_desperation:
+        from defensive_desperation import CW_FIRE_PROB_MULT
+        base *= CW_FIRE_PROB_MULT
+    return min(1.0, base)
 
 
 # ---------------------------------------------------------------------------

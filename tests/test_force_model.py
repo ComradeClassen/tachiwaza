@@ -152,29 +152,50 @@ def test_actual_signature_match_has_two_factors() -> None:
 # ---------------------------------------------------------------------------
 def test_sustained_pull_moves_com_or_trunk() -> None:
     """Drive a match forward for 30 ticks; verify the physics loop is doing
-    work on at least one fighter — CoM translated or trunk leaned.
+    work on at least one fighter — CoM translated, trunk leaned, fatigue
+    building, or kuzushi/score event fired.
+
+    HAJ-36: the grip-presence commit gate can keep a match's first 30
+    ticks free of throw commits, so we widen the "work was done" check
+    to also accept body-state changes and fatigue accumulation.
     """
     from match import Match
     from referee import build_suzuki
     random.seed(1)
     t, s = _pair()
+    # Snapshot the starting CoM and hand fatigue so we can compare below.
+    start_com_a = t.state.body_state.com_position
+    start_com_b = s.state.body_state.com_position
+    start_fat_a = t.state.body["right_hand"].fatigue
+    start_fat_b = s.state.body["right_hand"].fatigue
+
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki(), max_ticks=30)
     m._print_events = lambda evs: None
     m._print_header = lambda: None
     m._resolve_match = lambda: None
     m.run()
-    # Either CoM translation or trunk lean must register for at least one
-    # fighter. Matte resets CoM positions, so check if any fighter ever
-    # became kuzushi (tracked via _was_kuzushi_last_tick) OR scored.
+
     any_kuzushi = m._a_was_kuzushi_last_tick or m._b_was_kuzushi_last_tick
     any_score = (t.state.score["waza_ari"] + s.state.score["waza_ari"]
                  + int(t.state.score["ippon"]) + int(s.state.score["ippon"])) > 0
-    assert any_kuzushi or any_score or m.match_over
+    com_moved = (
+        t.state.body_state.com_position != start_com_a
+        or s.state.body_state.com_position != start_com_b
+    )
+    fatigued = (
+        t.state.body["right_hand"].fatigue > start_fat_a
+        or s.state.body["right_hand"].fatigue > start_fat_b
+    )
+    assert any_kuzushi or any_score or m.match_over or com_moved or fatigued
 
 
 def test_match_reaches_decision_within_240_ticks() -> None:
     """The new physics loop must still produce a decision (win/draw) rather
     than hanging in a stalemate.
+
+    HAJ-36: under the grip-presence commit gate, many POCKET-only matches
+    terminate as natural draws — which counts as a decision. We keep
+    _resolve_match live so the draw branch can stamp win_method.
     """
     from match import Match
     from referee import build_suzuki
@@ -183,7 +204,9 @@ def test_match_reaches_decision_within_240_ticks() -> None:
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki(), max_ticks=240)
     m._print_events = lambda evs: None
     m._print_header = lambda: None
-    m._resolve_match = lambda: None
+    # _resolve_match is intentionally left live so draws stamp win_method.
+    # Monkey-patch only the print sites it touches.
+    m._print_final_state = lambda _f: None
     m.run()
     assert m.ticks_run <= 240
     # Match either ended (winner set) or ran the full distance with a draw.
