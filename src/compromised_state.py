@@ -41,6 +41,15 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 DESPERATION_COMPOSURE_FRAC: float = 0.30   # composure/ceiling below which desperation fires
 DESPERATION_CLOCK_TICKS:    int   = 22     # kumi_kata_clock at/above which desperation fires
+# HAJ-35 — secondary trigger: the kumi-kata clock itself, when it's about to
+# fire a passivity shido, is pressure enough to push a fighter into
+# desperation regardless of composure. A fighter in real judo, one tick away
+# from a penalty for not attacking, will commit to *anything*. This unblocks
+# bootstrapping: early-match matches where nobody has scored yet (so nobody's
+# composure has dropped) still produce commits before shidos stack up.
+# Tuned one tick below KUMI_KATA_SHIDO_TICKS (30) so the fighter has a
+# chance to throw before the shido actually fires.
+DESPERATION_IMMINENT_SHIDO_TICKS: int = 29
 DESPERATION_RECOVERY_BONUS: int   = 2      # extra recovery ticks per Part 6.3
 DESPERATION_COMPOSURE_DROP: float = 0.15   # additional composure hit beyond base
 
@@ -244,16 +253,28 @@ def counter_bonus_for(
 def is_desperation_state(
     attacker: "Judoka", kumi_kata_clock: int,
 ) -> bool:
-    """True when the attacker was both panicked (composure < gate) and near
-    kumi-kata shido at commit time. Spec 6.3: the desperation overlay
-    stacks on top of the primary failure state with extra penalties.
+    """True when the attacker is in offensive desperation.
+
+    Two independent triggers (OR semantics):
+
+    1. Panic + pressure (Part 6.3 spec). Composure has collapsed below
+       DESPERATION_COMPOSURE_FRAC of ceiling AND the kumi-kata clock is
+       near shido (>= DESPERATION_CLOCK_TICKS). This is the primary
+       trigger the failure path consults for the desperation overlay.
+
+    2. Imminent-shido (HAJ-35). The kumi-kata clock alone has reached
+       DESPERATION_IMMINENT_SHIDO_TICKS, one tick before the passivity
+       shido actually fires. At that point the fighter will throw
+       anything to reset the clock — composure is irrelevant.
     """
     ceiling = max(1.0, float(attacker.capability.composure_ceiling))
     composure_frac = attacker.state.composure_current / ceiling
-    return (
+    panic_trigger = (
         composure_frac < DESPERATION_COMPOSURE_FRAC
         and kumi_kata_clock >= DESPERATION_CLOCK_TICKS
     )
+    imminent_shido_trigger = kumi_kata_clock >= DESPERATION_IMMINENT_SHIDO_TICKS
+    return panic_trigger or imminent_shido_trigger
 
 
 def apply_desperation_overlay(

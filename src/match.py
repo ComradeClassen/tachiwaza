@@ -1361,11 +1361,27 @@ class Match:
         self, actions_a: list[Action], actions_b: list[Action],
         a_kuzushi: bool, b_kuzushi: bool,
     ) -> None:
+        """Increment the stalemate counter unless *progress* was made this
+        tick. Progress is any of: a commit, a kuzushi event, OR an active
+        grip action (DEEPEN / STRIP) from either fighter.
+
+        HAJ-36 surfaced a pre-existing bug: before the grip-presence gate,
+        low-quality commits fired constantly from POCKET grips and reset
+        this counter for free. With the gate, matches that are genuinely
+        doing grip-fighting work looked identical to a dead hold — because
+        the counter only counted commits. Grip contests now count.
+        """
         committed = any(
             act.kind == ActionKind.COMMIT_THROW
             for act in (actions_a + actions_b)
         )
-        if committed or a_kuzushi or b_kuzushi:
+        active_grip_fight = any(
+            act.kind in (ActionKind.DEEPEN, ActionKind.STRIP,
+                         ActionKind.STRIP_TWO_ON_ONE, ActionKind.DEFEND_GRIP,
+                         ActionKind.REPOSITION_GRIP)
+            for act in (actions_a + actions_b)
+        )
+        if committed or a_kuzushi or b_kuzushi or active_grip_fight:
             self.stalemate_ticks = 0
         else:
             self.stalemate_ticks += 1
