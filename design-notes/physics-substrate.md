@@ -86,27 +86,37 @@ The base of support (BoS) is the polygon of ground contact formed by the judoka'
 
 - `base_polygon` — derived, not stored. A function that returns the BoS polygon from the two foot positions and their contact states. During double-support (both feet planted), this is a quadrilateral stretching between the outlines of the two feet. During single-support, it collapses to roughly the footprint of the one planted foot. During no-contact (both feet airborne — mid-throw), it's empty and balance is impossible. This is the single biggest vulnerability window in a match.
 
-### 1.5 Recoverable region
+### 1.5 Kuzushi as weight commitment
 
-The recoverable region is the envelope around the BoS that the judoka can step back into if displaced. Not stored — computed. This is the piece that makes kuzushi a vector-and-region test rather than a scalar-threshold test.
+Kuzushi is the moment uke's weight commits fully to one leg and that leg can no longer step. This is the canonical framing. It is what a judoka feels, what a coach teaches, and what a referee perceives when watching a throw open up. The pulls, pushes, and reactive forces that fill the kuzushi-tsukuri-kake sequence do not cause kuzushi directly — they *redistribute uke's weight* onto one leg. Once that leg is loaded past its capacity to step out from under the load, the throw window has opened. The pull is the cause of the weight commitment; the weight commitment is the kuzushi.
 
-- `recoverable_envelope(com_velocity, leg_strength, fatigue, composure)` — returns the distance beyond the BoS, in each direction around the judoka, that they can still step to and recover balance.
+The geometric formulation that follows is the mathematical equivalent of this event. The engine computes it; the prose layer and any coach-voice output should describe the mechanism.
 
-The envelope is *asymmetric in the direction of com_velocity*: a judoka already moving forward cannot easily recover to the rear, because their own committed momentum is in the way. A judoka moving at 1.5 m/s forward has a forward recoverable distance of maybe 0.3 m (they can still catch themselves in that direction with a big step) but a backward recoverable distance near 0. This is why Couple-class throws like O-soto-gari work on forward-stepping uke: uke's recoverable envelope has already collapsed on the backward side before the throw begins.
+**The recoverable envelope.**
+
+The recoverable envelope is the region around the BoS that a judoka can step back into if displaced. It is *not stored — computed*. As one leg's `weight_fraction` rises toward 1.0, that leg becomes the sole contributor to the envelope, and the envelope collapses asymmetrically: it can no longer extend past the stepping range of the loaded leg, because the loaded leg cannot lift to step.
+
+```
+recoverable_envelope(weight_fraction_left, weight_fraction_right,
+                    com_velocity, leg_strength, fatigue, composure)
+```
 
 Inputs that shape the envelope:
-- `com_velocity` — narrows the envelope in the opposite direction of motion.
-- `leg_strength` — a per-judoka attribute; larger envelope overall for stronger legs.
+- `weight_fraction` on each foot — the primary input. A leg at 1.0 cannot contribute to envelope expansion in any direction. A leg at 0.5 contributes its full stepping range.
+- `com_velocity` — narrows the envelope opposite the direction of motion (committed momentum cannot easily reverse).
+- `leg_strength` — per-judoka attribute; larger envelope overall for stronger legs.
 - `fatigue` — shrinks the envelope as the match progresses.
-- `composure` — shrinks the envelope under pressure. A flustered judoka recovers less well than a calm one even with identical physical state.
+- `composure` — shrinks the envelope under pressure.
 
-**The kuzushi success predicate is:**
+**The kuzushi predicate.**
 
 ```
 is_kuzushi(judoka) := com_projection(t) outside recoverable_envelope(t)
 ```
 
-A vector, a region, a geometric test. No threshold on a scalar. When this returns true, kuzushi has succeeded; the judoka is now falling (whether or not they've hit the mat yet).
+This is mathematically equivalent to: *one leg's weight_fraction has approached 1.0, and that leg cannot step to extend the envelope past where the CoM is now traveling*. The two predicates witness the same event. Where this spec or future tickets describe the mechanism, weight commitment is the canonical language. Where the engine computes the test, the geometric predicate is the computational form.
+
+**Why this matters for the rest of the substrate.** Forces applied through grips (Part 2) do not directly produce kuzushi. They produce CoM displacement and trunk lean, which together cause uke's weight to redistribute toward one leg. When that redistribution reaches the locked-leg condition, kuzushi has occurred. Future tickets that introduce defensive lockouts (uke cannot pivot or step from a fully-loaded leg — see HAJ-54) are therefore not new mechanics; they are the spec stating in code what was always true in mechanism.
 
 ### 1.6 Per body part state
 
