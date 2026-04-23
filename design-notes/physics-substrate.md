@@ -477,6 +477,45 @@ Each dimension returns a score in [0.0, 1.0]. Weights sum to 1.0 and vary by cla
 
 Exact weight values are Phase 3 calibration work. The spec commits only to the relative ordering and the classification-dependent weighting pattern.
 
+### 4.2.1 Execution quality within signature
+
+Signature match above the commit threshold is not uniform. The same throw fired at marginal-match and elite-match produces materially different outcomes — different force transfer, different landing severity, different counter vulnerability, different scores awarded. This sub-section makes execution quality a first-class concept in the signature model.
+
+**The execution quality score.**
+
+For any throw whose `actual_match` exceeds `commit_threshold` and therefore fires, the engine derives an `execution_quality` score in [0.0, 1.0]:
+
+```
+execution_quality = clamp(
+    (actual_match - commit_threshold) / (1.0 - commit_threshold),
+    0.0, 1.0
+)
+```
+
+A throw that fires at exactly the commit threshold has `execution_quality = 0.0`. A throw that fires at full signature match (1.0) has `execution_quality = 1.0`. Most live throws will fall somewhere in between, with the distribution skewing higher as belt rank rises.
+
+**What execution quality flows through.**
+
+Execution quality is consumed by four downstream systems. The specific multiplier curves and threshold values within each system are calibration work, not committed by this spec — but the *coupling* is committed.
+
+1. **Force transfer.** The kake sequence delivers force to uke's CoM and trunk in proportion to execution quality. A heel-to-calf O-soto-gari at `execution_quality = 0.2` transfers far less rotational momentum than the same throw at `execution_quality = 0.8` — uke ends up displaced but not airborne, or airborne but not landing flat.
+
+2. **Landing severity.** Score award decisions consume execution quality alongside the existing landing-position checks. A clean Ippon requires high execution quality combined with a back-flat landing. A waza-ari-eligible landing with low execution quality may award yuko-equivalent or no score at all, depending on Ring 1 scoring rules.
+
+3. **Counter vulnerability.** A throw that fires at low execution quality leaves tori in a more compromised post-throw position — the kake didn't complete the rotation, the connective grips remained engaged, tori is closer to uke and slower to recover. Counter-window perception (Part 3.5) is computed against tori's post-throw vulnerability, which scales inversely with execution quality.
+
+4. **Prose register.** The narration layer reads execution quality directly. A throw at 1.0 narrates as a clean technical action. A throw at 0.3 narrates as an "almost-threw" — uke staggers but recovers, or lands but rolls out, or absorbs the force without scoring. This is the texture that distinguishes white-belt sloppy success from elite-level clean execution in the log.
+
+**Why this is in the spec, not deferred.**
+
+A simulation that only models clean throws and clean failures cannot represent the central pedagogical fact of judo: that a sloppy throw can still work. White, yellow, and green belts succeed with technically incorrect execution all the time — the throw lands, the score is awarded, the simulation must be able to narrate it. Without execution quality as a first-class concept, the simulation collapses into a binary that the source material does not have.
+
+This also resolves a class of failure-mode tickets that would otherwise need bespoke compromised states. Hip-engagement on a non-hip throw (HAJ-59), heel-to-calf O-soto-gari (HAJ-55), Tai-otoshi with hips loaded in front — these are not signature failures. They are signature-valid throws executed at low quality. Hard gates and new compromised states would over-correct by removing them from the throw space entirely. Within-signature quality is the truer model: the throws fire, but they fire badly.
+
+**Implementation note.**
+
+The mechanism is committed by this sub-section. The specific calibration — what curve maps execution quality to force transfer, what threshold separates ippon from waza-ari, how counter vulnerability scales — is the work of subsequent tickets. The first such tickets are HAJ-55 and HAJ-59 in revised form: they no longer add hard gates or new compromised states. They become specifications of how their respective execution patterns reduce execution quality and what the resulting outcomes look like.
+
 ### 4.3 The Couple throw template
 
 ```
