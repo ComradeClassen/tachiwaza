@@ -271,7 +271,9 @@ def _print_match_header(a: Judoka, b: Judoka, ref) -> None:
     print(f"Referee: {ref.name}")
 
 
-def _run_one_match(build_a, build_b, ref_builder, debug=None, seed=None) -> None:
+def _run_one_match(
+    build_a, build_b, ref_builder, debug=None, seed=None, stream="both",
+) -> None:
     import random
     if seed is not None:
         random.seed(seed)
@@ -286,11 +288,16 @@ def _run_one_match(build_a, build_b, ref_builder, debug=None, seed=None) -> None
     place_judoka(b, com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
 
     _print_match_header(a, b, ref)
-    match = Match(fighter_a=a, fighter_b=b, referee=ref, debug=debug, seed=seed)
+    match = Match(
+        fighter_a=a, fighter_b=b, referee=ref,
+        debug=debug, seed=seed, stream=stream,
+    )
     match.run()
 
 
-def _interactive_loop(ref_builder, debug_factory=None, seed_for_next=None) -> None:
+def _interactive_loop(
+    ref_builder, debug_factory=None, seed_for_next=None, stream="both",
+) -> None:
     while True:
         print()
         print("Choose a matchup:")
@@ -309,7 +316,10 @@ def _interactive_loop(ref_builder, debug_factory=None, seed_for_next=None) -> No
         _, build_a, build_b = MATCHUPS[choice]
         debug = debug_factory() if debug_factory else None
         seed = seed_for_next() if seed_for_next else None
-        _run_one_match(build_a, build_b, ref_builder, debug=debug, seed=seed)
+        _run_one_match(
+            build_a, build_b, ref_builder,
+            debug=debug, seed=seed, stream=stream,
+        )
 
 
 # ===========================================================================
@@ -340,6 +350,13 @@ if __name__ == "__main__":
                              "`none`. Implies --debug. Available: "
                              + ", ".join(sorted(PAUSE_TRIGGERS))
                              + f". Default: {','.join(sorted(DEFAULT_PAUSE_ON))}.")
+    parser.add_argument("--stream", choices=["debug", "prose", "both"],
+                        default="both",
+                        help="Which log stream to emit (HAJ-65). `debug` is "
+                             "tick-prefixed with physics, grip edges and "
+                             "handles; `prose` is reader-facing narrative "
+                             "without tick prefix or eq= numerics; `both` "
+                             "(default) is the full engineer view.")
     args = parser.parse_args()
 
     import random
@@ -386,7 +403,7 @@ if __name__ == "__main__":
     if args.runs is None:
         _interactive_loop(
             ref_builder, debug_factory=debug_factory,
-            seed_for_next=seed_for_next,
+            seed_for_next=seed_for_next, stream=args.stream,
         )
     else:
         _, build_a, build_b = MATCHUPS[args.matchup]
@@ -398,4 +415,5 @@ if __name__ == "__main__":
             _run_one_match(
                 build_a, build_b, ref_builder,
                 debug=debug_factory(), seed=seed_for_next(),
+                stream=args.stream,
             )

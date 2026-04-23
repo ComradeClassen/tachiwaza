@@ -21,6 +21,7 @@
 
 import random
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -142,6 +143,54 @@ def _failure_display_tables() -> tuple[dict, dict]:
 
 
 _FAILURE_TAGS, _COUNTER_NARRATIONS = _failure_display_tables()
+
+
+# ---------------------------------------------------------------------------
+# LOG STREAM SEPARATION (HAJ-65)
+# Two named streams share the same underlying tick events:
+#   - "debug":  engineer-facing — tick numbers, physics variables, grip edge
+#               transitions, execution_quality, failed_dimension, handles
+#               (F#/G#/T#) from the debug inspector.
+#   - "prose":  reader-facing — throw lines, referee calls, compromised-state
+#               narration, score announcements. No tick prefix, no handles,
+#               and debug-only numerics like `(eq=…)` are stripped from
+#               descriptions.
+# `_print_events` consults the active stream to decide what to emit.
+# ---------------------------------------------------------------------------
+
+VALID_STREAMS: frozenset[str] = frozenset({"debug", "prose", "both"})
+
+# Event types that belong only to the debug stream — grip edge churn, raw
+# physics beats, and skill-compression sub-events. The prose stream drops
+# these entirely; debug and both keep them.
+_DEBUG_ONLY_EVENT_TYPES: frozenset[str] = frozenset({
+    "GRIP_ESTABLISH",
+    "GRIP_STRIPPED",
+    "GRIP_DEGRADE",
+    "GRIP_BREAK",
+    "GRIPS_RESET",
+    "KUZUSHI_INDUCED",
+    "THROW_ABORTED",
+})
+
+# Also debug-only: any event whose event_type begins with SUB_ (the skill-
+# compression sub-events REACH_KUZUSHI / KUZUSHI_ACHIEVED / TSUKURI /
+# KAKE_COMMIT). These describe mechanics, not narrative beats.
+def _is_debug_only_event(event_type: str) -> bool:
+    return event_type in _DEBUG_ONLY_EVENT_TYPES or event_type.startswith("SUB_")
+
+
+# Strip numeric (eq=0.72) parentheticals — execution_quality is a debug
+# value per HAJ-65. Handles both the bare form and the "(ref downgraded,
+# eq=0.72)" composite from THROW_LANDING no-score lines.
+_EQ_PAREN_RE = re.compile(r"\s*\([^()]*eq=\d+(?:\.\d+)?[^()]*\)")
+
+
+def _render_prose(desc: str) -> str:
+    """Rewrite a debug-ish description for the prose stream: remove the
+    (eq=...) parentheticals that mix numeric debug into otherwise readable
+    sentences. Tick prefix and debug handles are handled by the caller."""
+    return _EQ_PAREN_RE.sub("", desc)
 
 
 # ---------------------------------------------------------------------------
@@ -302,13 +351,19 @@ class Match:
         max_ticks: int = 240,
         debug=None,
         seed: Optional[int] = None,
+        stream: str = "both",
     ) -> None:
+        if stream not in VALID_STREAMS:
+            raise ValueError(
+                f"stream must be one of {sorted(VALID_STREAMS)}, got {stream!r}"
+            )
         self.fighter_a = fighter_a
         self.fighter_b = fighter_b
         self.referee   = referee
         self.max_ticks = max_ticks
         self.seed      = seed
         self._debug = debug
+        self._stream = stream
         if self._debug is not None:
             self._debug.bind_match(self)
 
@@ -1957,6 +2012,16 @@ class Match:
         for ev in events:
             if ev.data.get("silent"):
                 continue
+            if self._stream == "prose":
+                if _is_debug_only_event(ev.event_type):
+                    continue
+                # Prose stream: no tick prefix, no debug handles, eq= stripped.
+                print(_render_prose(ev.description))
+                continue
+            # "debug" and "both" share the tick-prefixed form. Every event
+            # carries match-state info (event_type + tick) that an engineer
+            # wants, so the debug view is a superset; narrative filtering
+            # only happens on the prose side.
             suffix = ""
             if self._debug is not None:
                 suffix = self._debug.annotate_event(ev)
