@@ -726,6 +726,11 @@ body_part_requirement:
   contact_point_on_uke: "left_inner_thigh"   # canonical Daigo; variants: near leg
   contact_height_range: (upper_thigh, hip_crease)
 
+  hip_engagement_penalty:                    # HAJ-59 — top-leg variant quality
+    clean_trunk_sagittal: +15°               # tori near-vertical — clean execution
+    engaged_trunk_sagittal: +35°             # tori bent forward — hip-loaded variant
+    engaged_floor: 0.5                       # body-dim × 0.5 when fully hip-loaded
+
 uke_posture_requirement:
   trunk_sagittal_range: (-5°, +20°)   # upright or slightly forward — NOT jigotai
   trunk_frontal_range: (-15°, +25°)
@@ -740,6 +745,8 @@ failure_outcome:
   secondary (if uke high IQ, high cardio): UCHI_MATA_SUKASHI — uke pivots knees together
   tertiary (if uke fatigued): STANCE_RESET
 ```
+
+**Hip-engagement quality (HAJ-59).** Sensei rejects the top-leg Uchi-mata variant where tori loads the hip as if driving a hip throw. The throw still fires — a novice sometimes still gets uke through — but the lift becomes a bump. The body-parts dimension is multiplied by an `engaged_floor` multiplier when tori's trunk sagittal at kake exceeds the clean threshold. Signature match drops, `execution_quality` drops, force transfer at kake is weak, landing severity reads as partial, and the post-throw counter window is wider. No separate compromised state is created; the phenomenon is quality variation within one signature.
 
 ---
 
@@ -790,6 +797,11 @@ body_part_requirement:
     max_torso_closure_m:         1.10   # arm's-length — closure quality = 0.0
     ideal_reaping_contact_m:     0.50   # contact point at thigh
     max_reaping_contact_m:       1.20   # contact point at heel/calf (quality = 0.0)
+
+  hip_engagement_penalty:       # HAJ-59 — hip loading dilutes the transverse couple
+    clean_trunk_sagittal: +15°
+    engaged_trunk_sagittal: +35°
+    engaged_floor: 0.5                  # ~0.3 eq reduction at full engagement
 
 uke_posture_requirement:
   trunk_sagittal_range: (-10°, +5°)   # upright or slightly back-leaning — NOT forward
@@ -972,7 +984,7 @@ The following throws inherit the template structure but are not written in v0.1.
 
 - **O-goshi (major hip throw)** — Lever, both feet supporting, sacrum/hip fulcrum, belt-grip (tsurite) + sleeve (hikite). Template complete; research data thin (no instrumented studies).
 
-- **Tai-otoshi (body drop)** — Lever, shin fulcrum, pure rotational throw with no lift. Couple-like force action but Lever geometry. Highest shoulder-impact velocity in the literature (Soldin 2022).
+- **Tai-otoshi (body drop)** — Lever, shin fulcrum, pure rotational throw with no lift. Couple-like force action but Lever geometry. Highest shoulder-impact velocity in the literature (Soldin 2022). HAJ-59: the shin-block geometry is incompatible with hip loading — `hip_engagement_penalty.engaged_floor ≈ 0.05`, which collapses the body-parts dimension when tori's trunk sagittal exceeds ~40°. The throw still fires; it lands as a stumble with tori entangled with uke afterward, narrated at the LOW quality band as "Tanaka loaded the hip — Tai-otoshi doesn't want the hip — the throw landed crooked."
 
 - **Ko-uchi-gari (minor inner reap)** — Couple, most timing-sensitive ashi-waza, possibly gets the timing_window variant like de-ashi-harai. Research extremely thin.
 

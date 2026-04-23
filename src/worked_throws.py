@@ -26,9 +26,31 @@ from throw_templates import (
     CoupleThrow, LeverThrow, ThrowTemplate,
     KuzushiRequirement, GripRequirement, ForceRequirement, ForceKind,
     CoupleBodyPartRequirement, LeverBodyPartRequirement,
-    UkePostureRequirement, TimingWindow, ContactQualityProfile,
+    UkePostureRequirement, TimingWindow,
+    ContactQualityProfile, HipEngagementProfile,
     CoupleAxis, SupportRequirement, UkeBaseState,
     FailureOutcome, FailureSpec,
+)
+
+
+# HAJ-59 — starter hip-engagement profiles. The `engaged_floor` values are
+# the calibration-target collapse points:
+#   - Tai-otoshi (shin fulcrum): near-total collapse — the shin-block
+#     geometry is incompatible with hip loading.
+#   - O-soto-gari (Couple, transverse couple): ~50% body-dim penalty,
+#     producing the ~0.3 eq reduction in HAJ-59 point 2.
+#   - Uchi-mata (Couple, sagittal couple): same ~50% floor — the lift
+#     becomes a bump.
+# Angles in radians. Phase 3 tunes these against match feel.
+_HIP_ENGAGEMENT_HARD = HipEngagementProfile(
+    clean_trunk_sagittal_rad=math.radians(20),
+    engaged_trunk_sagittal_rad=math.radians(40),
+    engaged_floor=0.05,           # Tai-otoshi — collapse
+)
+_HIP_ENGAGEMENT_SOFT = HipEngagementProfile(
+    clean_trunk_sagittal_rad=math.radians(15),
+    engaged_trunk_sagittal_rad=math.radians(35),
+    engaged_floor=0.50,           # O-soto-gari, Uchi-mata — ~0.3 eq reduction
 )
 
 
@@ -63,6 +85,9 @@ UCHI_MATA: CoupleThrow = CoupleThrow(
         tori_attacking_limb="right_leg",
         contact_point_on_uke=BodyPart.LEFT_THIGH,
         contact_height_range=(0.55, 0.90),       # upper thigh to hip crease
+        # HAJ-59 — top-leg Uchi-mata variant: hip engagement turns the
+        # lift into a bump. Throw still fires at reduced quality.
+        hip_engagement=_HIP_ENGAGEMENT_SOFT,
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-5), math.radians(20)),
@@ -120,6 +145,9 @@ O_SOTO_GARI: CoupleThrow = CoupleThrow(
             ideal_reaping_contact_m=0.50,
             max_reaping_contact_m=1.20,
         ),
+        # HAJ-59 — backward-rotation Couple; hip loading dilutes the
+        # transverse torque (reap becomes a shove from the waist).
+        hip_engagement=_HIP_ENGAGEMENT_SOFT,
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-10), math.radians(5)),
@@ -353,6 +381,9 @@ TAI_OTOSHI: LeverThrow = LeverThrow(
         fulcrum_contact_on_uke=BodyPart.RIGHT_KNEE,
         fulcrum_offset_below_uke_com_m=0.05,     # shin-low fulcrum, not hip-low
         tori_supporting_feet=SupportRequirement.DOUBLE_SUPPORT,
+        # HAJ-59 — hips must stay back; shin-block geometry is incompatible
+        # with hip loading. Hard collapse toward eq=0 when engaged.
+        hip_engagement=_HIP_ENGAGEMENT_HARD,
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-5), math.radians(25)),

@@ -126,7 +126,7 @@ THROW_QUALITY_NARRATION: dict[ThrowID, dict[QualityBand, str]] = {
     ThrowID.UCHI_MATA: {
         QualityBand.HIGH: "full hip rotation, uke airborne and flat",
         QualityBand.MED:  "reaping leg catches, uke rolls through the landing",
-        QualityBand.LOW:  "hips never arrived — uke steps out of the sweep",
+        QualityBand.LOW:  "hip-loaded top-leg variant — lift became a bump, uke steps out",
     },
     ThrowID.O_SOTO_GARI: {
         QualityBand.HIGH: "thigh-to-thigh contact at chest closure, uke dropped flat",
@@ -146,7 +146,7 @@ THROW_QUALITY_NARRATION: dict[ThrowID, dict[QualityBand, str]] = {
     ThrowID.TAI_OTOSHI: {
         QualityBand.HIGH: "uke trips cleanly over the blocked leg",
         QualityBand.MED:  "hips crowd in, block half-formed — uke rolls over",
-        QualityBand.LOW:  "hips loaded in front, no rotation — uke walks out",
+        QualityBand.LOW:  "loaded the hip — Tai-otoshi doesn't want the hip — the throw landed crooked",
     },
     ThrowID.HARAI_GOSHI: {
         QualityBand.HIGH: "hip contact, sweeping leg brushes thigh, clean arc",

@@ -330,7 +330,14 @@ def _match_couple_body_parts(
         checks.append(closure_q)
         checks.append(reaping_q)
 
-    return sum(checks) / len(checks) if checks else 0.0
+    score = sum(checks) / len(checks) if checks else 0.0
+
+    # HAJ-59 — hip engagement on non-hip Couple throws dilutes the body-
+    # parts dimension multiplicatively. The throw still fires (score > 0);
+    # signature drops, eq drops downstream.
+    if req.hip_engagement is not None:
+        score *= _hip_engagement_multiplier(req.hip_engagement, attacker)
+    return score
 
 
 def _contact_quality_scores(
@@ -368,6 +375,32 @@ def _linear_falloff(value: float, ideal: float, maximum: float) -> float:
     return 1.0 - (value - ideal) / span
 
 
+def _hip_engagement_multiplier(profile, attacker: "Judoka") -> float:
+    """Part 5 / HAJ-59 — multiplier applied to body-parts score when a
+    non-hip throw is being executed with hip engagement.
+
+    Proxy: tori's `trunk_sagittal` at kake. Clean execution keeps trunk
+    near-vertical (hips back); hip engagement means tori has bent forward
+    from the waist to drive hip contact into uke. Returns 1.0 below the
+    clean threshold, linearly falls to `engaged_floor` at the full-
+    engagement angle. Never returns below `engaged_floor` — the throw
+    always fires; only quality is penalized.
+    """
+    trunk = attacker.state.body_state.trunk_sagittal
+    clean = profile.clean_trunk_sagittal_rad
+    engaged = profile.engaged_trunk_sagittal_rad
+    floor = profile.engaged_floor
+    if trunk <= clean:
+        return 1.0
+    if trunk >= engaged:
+        return floor
+    span = engaged - clean
+    if span <= 1e-9:
+        return floor
+    t = (trunk - clean) / span
+    return 1.0 - (1.0 - floor) * t
+
+
 def _match_lever_body_parts(
     req: LeverBodyPartRequirement, attacker: "Judoka", defender: "Judoka",
 ) -> float:
@@ -400,7 +433,12 @@ def _match_lever_body_parts(
         # credit the geometry check if at least one foot/knee is bearing load.
         support_score = 1.0 if (left_planted or right_planted) else 0.5
 
-    return 0.5 * (support_score + fulcrum_score)
+    score = 0.5 * (support_score + fulcrum_score)
+    # HAJ-59 — hip engagement on non-hip Lever throws (Tai-otoshi etc.)
+    # collapses the body-parts dimension multiplicatively.
+    if req.hip_engagement is not None:
+        score *= _hip_engagement_multiplier(req.hip_engagement, attacker)
+    return score
 
 
 # ---------------------------------------------------------------------------

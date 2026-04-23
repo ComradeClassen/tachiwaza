@@ -170,6 +170,30 @@ class TimingWindow:
 
 
 @dataclass(frozen=True)
+class HipEngagementProfile:
+    """Part 5 / HAJ-59 — quality penalty for hip engagement on throws whose
+    fulcrum is NOT the hip (Tai-otoshi, O-soto-gari, Uchi-mata, etc.).
+
+    Sensei rejects hip loading on these throws across the instructional
+    corpus. Under Part 4.2.1 this is a quality reduction rather than a
+    state failure: the throw fires, but at low execution_quality.
+
+    The detector uses tori's `trunk_sagittal` at kake as a proxy for hip
+    engagement. At or below `clean_trunk_sagittal_rad` the throw is clean
+    (multiplier = 1.0); at or above `engaged_trunk_sagittal_rad` the
+    multiplier collapses to `engaged_floor`; linear interpolation between.
+
+    `engaged_floor` close to 0.0 (e.g., Tai-otoshi) collapses the body-
+    parts dimension when hip-engaged — signature drops sharply, eq drops
+    toward zero. A higher floor (e.g., 0.5 for O-soto) produces the ~0.3
+    eq reduction described in HAJ-59 point 2.
+    """
+    clean_trunk_sagittal_rad:    float
+    engaged_trunk_sagittal_rad:  float
+    engaged_floor:               float
+
+
+@dataclass(frozen=True)
 class ContactQualityProfile:
     """Part 5.2 / HAJ-55 — continuous contact-quality dimensions feeding
     execution_quality (Part 4.2.1), not the commit gate.
@@ -207,8 +231,9 @@ class CoupleBodyPartRequirement:
     tori_attacking_limb:  str
     contact_point_on_uke: BodyPart
     contact_height_range: tuple[float, float]
-    timing_window:   Optional[TimingWindow]          = None
-    contact_quality: Optional[ContactQualityProfile] = None
+    timing_window:   Optional[TimingWindow]           = None
+    contact_quality: Optional[ContactQualityProfile]  = None
+    hip_engagement:  Optional[HipEngagementProfile]   = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +251,10 @@ class LeverBodyPartRequirement:
     fulcrum_contact_on_uke:            BodyPart
     fulcrum_offset_below_uke_com_m:    float
     tori_supporting_feet:              SupportRequirement
+    # HAJ-59 — hip-engagement quality penalty, populated for non-hip Lever
+    # throws (e.g., Tai-otoshi, shin fulcrum). Hip-fulcrum throws leave
+    # this None; they want hip engagement.
+    hip_engagement: Optional[HipEngagementProfile] = None
 
 
 @dataclass(frozen=True)
