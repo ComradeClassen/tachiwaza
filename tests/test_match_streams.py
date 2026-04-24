@@ -65,6 +65,84 @@ def test_default_stream_emits_tick_prefixed_lines() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Side-by-side (stream="both"): engineer-with-ticks on the left, prose with
+# a countdown match clock on the right, one row per event.
+# ---------------------------------------------------------------------------
+def test_both_stream_renders_side_by_side_with_separator() -> None:
+    """At least one event is prose-worthy (Hajime!), so at least one row
+    has both columns — detect by the vertical-bar separator."""
+    out = _run_match(stream="both")
+    assert "│" in out, "expected side-by-side separator '│' in both stream"
+
+
+def test_both_stream_left_column_has_tick_prefix() -> None:
+    """Every side-by-side row starts with the engineer's tNNN: prefix."""
+    out = _run_match(stream="both")
+    sbs_rows = [ln for ln in out.splitlines() if "│" in ln]
+    assert sbs_rows, "expected at least one side-by-side row"
+    for row in sbs_rows:
+        assert re.match(r"^t\d{3}: ", row), (
+            f"row missing tick prefix on left column: {row!r}"
+        )
+
+
+def test_both_stream_right_column_has_match_clock() -> None:
+    """Prose side shows a countdown clock in M:SS form, right after the
+    separator. A 120-tick match clock starts at 2:00; Hajime! on tick 0
+    should produce exactly that clock reading in the first prose row."""
+    out = _run_match(stream="both", max_ticks=120)
+    # Match one row that carries Hajime! — its prose column should open
+    # with the full-match clock.
+    hajime_rows = [ln for ln in out.splitlines()
+                   if "│" in ln and "Hajime!" in ln]
+    assert hajime_rows, "expected at least one side-by-side row with Hajime!"
+    # The clock appears right after the separator, followed by two spaces.
+    assert re.search(r"│\s+2:00\s+", hajime_rows[0]), (
+        f"expected '2:00' match clock after separator, got: {hajime_rows[0]!r}"
+    )
+
+
+def test_both_stream_clock_counts_down_with_ticks() -> None:
+    """A later event in the match shows a lower clock value than an
+    earlier one. Uses the generic ordering of clock readings across all
+    side-by-side rows rather than pinning specific ticks."""
+    out = _run_match(stream="both", max_ticks=120, seed=42)
+    clocks: list[tuple[int, int]] = []
+    pattern = re.compile(r"^t(\d{3}):.*?│\s+(\d+):(\d{2})\s")
+    for ln in out.splitlines():
+        m = pattern.match(ln)
+        if not m:
+            continue
+        tick = int(m.group(1))
+        minutes, seconds = int(m.group(2)), int(m.group(3))
+        clocks.append((tick, minutes * 60 + seconds))
+    assert len(clocks) >= 2, "expected at least 2 clocked rows"
+    # Clock = max_ticks - tick, so ticks ascending ⇔ clocks descending.
+    for (t1, c1), (t2, c2) in zip(clocks, clocks[1:]):
+        if t2 > t1:
+            assert c2 <= c1, (
+                f"clock should be monotonic non-increasing across ticks; "
+                f"tick {t1}={c1}s then tick {t2}={c2}s"
+            )
+
+
+def test_both_stream_debug_only_events_leave_prose_column_blank() -> None:
+    """Grip edge churn is debug-only; when such an event is the only thing
+    on its row, the right (prose) column must be blank — i.e. no separator
+    on that row. The row is still tick-prefixed on the left."""
+    out = _run_match(stream="both")
+    # Grip events are frequent; find at least one.
+    grip_rows = [ln for ln in out.splitlines() if "[grip]" in ln]
+    assert grip_rows, "expected at least one [grip] event row"
+    # Every grip-only row: starts with tNNN:, has no separator (no prose side).
+    for row in grip_rows:
+        assert re.match(r"^t\d{3}: ", row)
+        assert "│" not in row, (
+            f"debug-only [grip] event should not emit a prose column: {row!r}"
+        )
+
+
 def test_invalid_stream_name_rejected() -> None:
     from match import Match
     from referee import build_suzuki

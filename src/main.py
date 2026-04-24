@@ -355,8 +355,10 @@ if __name__ == "__main__":
                         help="Which log stream to emit (HAJ-65). `debug` is "
                              "tick-prefixed with physics, grip edges and "
                              "handles; `prose` is reader-facing narrative "
-                             "without tick prefix or eq= numerics; `both` "
-                             "(default) is the full engineer view.")
+                             "with no tick prefix or eq= numerics; `both` "
+                             "(default) renders the two streams side-by-side "
+                             "— engineer/tick on the left, prose with a "
+                             "countdown match clock on the right.")
     args = parser.parse_args()
 
     import random

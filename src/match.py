@@ -194,6 +194,48 @@ def _render_prose(desc: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# SIDE-BY-SIDE LAYOUT (HAJ-65 extension)
+# Two columns for stream="both": engineer tick-prefixed view on the left,
+# prose-with-match-clock on the right, sharing one row per emitted event.
+# The left column has a tNNN: prefix so readers can cross-reference against
+# the prose clock (tick is seconds elapsed; clock is seconds remaining).
+# Tests depend on tNNN: appearing at the start of each default-stream line,
+# so the engineer side is always printed first.
+# ---------------------------------------------------------------------------
+SBS_LEFT_COL_WIDTH: int = 80       # engineer column width; overflow is truncated
+SBS_SEPARATOR:      str = "  │  "  # vertical rule between the two columns
+
+
+def _format_match_clock(ticks_remaining: int) -> str:
+    """Render a countdown match clock as 'M:SS'. One tick = one second.
+
+    Negative values (golden-score overtime, not yet wired) render with a
+    leading '+'. Clamps to 0:00 floor at exactly zero.
+    """
+    if ticks_remaining < 0:
+        m, s = divmod(-ticks_remaining, 60)
+        return f"+{m}:{s:02d}"
+    m, s = divmod(ticks_remaining, 60)
+    return f"{m}:{s:02d}"
+
+
+def _render_side_by_side(debug_line: str, prose_line: str) -> str:
+    """Compose one side-by-side row. Left column is fixed-width (padded or
+    truncated with '…'); right column flows freely. When the prose column
+    is empty (debug-only event), the separator is suppressed and the row
+    is just the padded engineer line — still aligned with prose-bearing
+    rows above and below for a clean vertical scan.
+    """
+    if len(debug_line) > SBS_LEFT_COL_WIDTH:
+        left = debug_line[:SBS_LEFT_COL_WIDTH - 1] + "…"
+    else:
+        left = debug_line.ljust(SBS_LEFT_COL_WIDTH)
+    if not prose_line:
+        return left.rstrip()
+    return f"{left}{SBS_SEPARATOR}{prose_line}"
+
+
+# ---------------------------------------------------------------------------
 # THROW IN PROGRESS (Part 6.1 — multi-tick attempt state)
 # One instance per attacker mid-attempt. Cleared when KAKE_COMMIT resolves or
 # the attempt is aborted (stun, grip collapse, counter).
@@ -462,9 +504,12 @@ class Match:
         if self._debug is not None:
             self._debug.print_banner()
 
-        # Hajime
+        # Hajime — route through the event emitter so the Hajime call
+        # participates in side-by-side rendering (HAJ-65 extension):
+        # left column gets `t000: …`, right column gets the full-match
+        # clock reading (e.g. `4:00  [ref: ...] Hajime!`).
         hajime = self.referee.announce_hajime(tick=0)
-        print(hajime.description)
+        self._print_events([hajime])
         print()
 
         for tick in range(1, self.max_ticks + 1):
@@ -2018,14 +2063,28 @@ class Match:
                 # Prose stream: no tick prefix, no debug handles, eq= stripped.
                 print(_render_prose(ev.description))
                 continue
-            # "debug" and "both" share the tick-prefixed form. Every event
-            # carries match-state info (event_type + tick) that an engineer
-            # wants, so the debug view is a superset; narrative filtering
-            # only happens on the prose side.
+
+            # Compose the engineer (debug) line — tick prefix + description +
+            # optional debug-inspector handle suffix. Both "debug" and "both"
+            # need it.
             suffix = ""
             if self._debug is not None:
                 suffix = self._debug.annotate_event(ev)
-            print(f"t{ev.tick:03d}: {ev.description}{suffix}")
+            debug_line = f"t{ev.tick:03d}: {ev.description}{suffix}"
+
+            if self._stream == "debug":
+                print(debug_line)
+                continue
+
+            # "both" — side-by-side dual stream: engineer on the left with
+            # tick numbers, prose on the right with a countdown match clock.
+            # A reader can scan one side and read across to correlate.
+            if _is_debug_only_event(ev.event_type):
+                prose_line = ""
+            else:
+                clock = _format_match_clock(self.max_ticks - ev.tick)
+                prose_line = f"{clock}  {_render_prose(ev.description)}"
+            print(_render_side_by_side(debug_line, prose_line))
 
     def _print_header(self) -> None:
         a = self.fighter_a.identity
