@@ -359,6 +359,66 @@ def test_stunned_fighter_does_not_step() -> None:
 # End-to-end: Tanaka(PRESSURE) vs Sato(DEFENSIVE_EDGE) produces visible
 # CoM displacement over a short match.
 # ---------------------------------------------------------------------------
+def test_step_alternates_feet_via_trailing_pick() -> None:
+    """The trailing-foot picker (HAJ-128 fix to the dot-split bug) must
+    walk feet alternately. After two consecutive steps in the same
+    direction, both feet should have advanced — not just the dominant
+    one. Pre-fix: only the dominant foot ever moved, so over time the
+    off-side foot was stranded at the start position."""
+    from action_selection import _trailing_step_foot
+    t, _ = _pair()
+    bs = t.state.body_state
+    # Manual setup so this test is independent of place_judoka layout.
+    bs.com_position = (0.0, 0.0)
+    bs.foot_state_left.position  = (0.0, +0.18)
+    bs.foot_state_right.position = (0.0, -0.18)
+
+    # Direction +x; both feet equally trailing → tie, picks right_foot
+    # by ordering. Step it forward.
+    direction = (1.0, 0.0)
+    pick1 = _trailing_step_foot(t, direction)
+    bs.foot_state_right.position = (0.30, -0.18)
+    bs.com_position = (0.15, 0.0)
+
+    # Now left_foot is more trailing (proj=-0.15) than right (proj=+0.15).
+    pick2 = _trailing_step_foot(t, direction)
+    assert pick1 != pick2, (
+        f"feet should alternate; both picks were {pick1}"
+    )
+    assert pick2 == "left_foot"
+
+
+def test_facing_reorients_toward_opponent_each_tick() -> None:
+    """After a tick of physics, each fighter's facing is the unit vector
+    pointing at the opponent's CoM. Pre-fix the facing stayed at its
+    Hajime-time value while CoM drifted, so the viewer arrow was wrong."""
+    random.seed(1)
+    t = main_module.build_tanaka()
+    s = main_module.build_sato()
+    place_judoka(t, com_position=(-0.5, 0.0), facing=(1.0, 0.0))
+    place_judoka(s, com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
+    m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki(),
+              max_ticks=5, seed=1)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        m.run()
+
+    # facing_a should point from a → b, facing_b from b → a.
+    ax, ay = t.state.body_state.com_position
+    bx, by = s.state.body_state.com_position
+    dx, dy = bx - ax, by - ay
+    norm = (dx * dx + dy * dy) ** 0.5
+    expect_a = (dx / norm, dy / norm)
+    expect_b = (-expect_a[0], -expect_a[1])
+    fa = t.state.body_state.facing
+    fb = s.state.body_state.facing
+    # Allow a tiny numerical tolerance.
+    assert abs(fa[0] - expect_a[0]) < 1e-6
+    assert abs(fa[1] - expect_a[1]) < 1e-6
+    assert abs(fb[0] - expect_b[0]) < 1e-6
+    assert abs(fb[1] - expect_b[1]) < 1e-6
+
+
 def test_pressure_match_produces_visible_displacement() -> None:
     """Run a short match between the canonical fighters and verify
     that CoM displacement from the start position exceeds what

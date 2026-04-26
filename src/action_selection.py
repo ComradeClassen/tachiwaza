@@ -651,17 +651,20 @@ def _free_hand(judoka: "Judoka") -> Optional[str]:
 # weight-transfer phase, not a full body move). Step gates with grip range:
 # heavy opponent grips drag the fighter and reduce step magnitude.
 
-# Per-tick STEP magnitude in meters. Conservative — viewer-tunable.
-STEP_MAGNITUDE_M:           float = 0.18
-STEP_MAGNITUDE_REDUCED_M:   float = 0.08   # under heavy opponent grips
+# Per-tick STEP magnitude in meters. A real judo step is ~30-50 cm; we
+# pick the lower end so per-tick motion is calm but visibly cumulative
+# across a 4-minute match on the 8 m contest area. CoM advances at half
+# the foot magnitude (one tick = one weight-transfer phase).
+STEP_MAGNITUDE_M:           float = 0.30
+STEP_MAGNITUDE_REDUCED_M:   float = 0.14   # under heavy opponent grips
 
 # How frequently each style attempts a step (per-tick probability gates).
-PRESSURE_BASE_STEP_PROB:    float = 0.35   # always-on baseline for PRESSURE
-PRESSURE_RAMP_PROB_PER_M:   float = 0.20   # bonus per meter the opp is from edge
-DEFENSIVE_EDGE_TRIGGER_M:   float = 0.6    # perceived edge < this → retreat
+PRESSURE_BASE_STEP_PROB:    float = 0.55   # PRESSURE keeps the heat on
+PRESSURE_RAMP_PROB_PER_M:   float = 0.10   # extra prob per meter opp is from edge
+DEFENSIVE_EDGE_TRIGGER_M:   float = 1.6    # perceived edge < this → retreat
 DEFENSIVE_EDGE_STEP_PROB:   float = 0.85   # high — retreat is urgent
-HOLD_CENTER_DRIFT_M:        float = 0.4    # |com| > this → small recentering step
-HOLD_CENTER_STEP_PROB:      float = 0.20
+HOLD_CENTER_DRIFT_M:        float = 0.6    # |com| > this → small recentering step
+HOLD_CENTER_STEP_PROB:      float = 0.30
 
 # Grip-range gating: if any opponent grip on this fighter has depth ≥ DEEP,
 # consider the fighter "tied" and reduce step magnitude.
@@ -674,23 +677,42 @@ def _opponent_grip_drag(judoka: "Judoka", graph: "GripGraph") -> bool:
     return False
 
 
-def _alternating_step_foot(judoka: "Judoka") -> str:
-    """Pick which foot to step with. The trailing foot (closer to the body
-    center, lower-weight) is the natural mover. Light heuristic: step with
-    the dominant-side foot most of the time. Future calibration could read
-    foot weight_fraction; for v1 the alternation isn't load-bearing."""
-    return ("right_foot"
-            if judoka.identity.dominant_side == DominantSide.RIGHT
-            else "left_foot")
+def _trailing_step_foot(
+    judoka: "Judoka", direction: tuple[float, float],
+) -> str:
+    """Pick which foot to step with — the trailing one. Real walking
+    moves the foot that's currently behind the body in the direction of
+    travel; the leading foot stays planted as the new pivot. We pick
+    whichever foot has the smaller dot-product with the step direction
+    relative to the body's CoM (i.e. is further behind).
+
+    This avoids the pre-fix bug where one foot kept stepping forward and
+    the other was abandoned at the start position, splitting the dots.
+    """
+    bs = judoka.state.body_state
+    cx, cy = bs.com_position
+    dx, dy = direction
+    lx, ly = bs.foot_state_left.position
+    rx, ry = bs.foot_state_right.position
+    # Project each foot's offset-from-CoM onto the step direction. The
+    # foot with the SMALLER projection is the trailing foot — pick it.
+    left_proj  = (lx - cx) * dx + (ly - cy) * dy
+    right_proj = (rx - cx) * dx + (ry - cy) * dy
+    return "left_foot" if left_proj < right_proj else "right_foot"
 
 
-def _step_action(direction: tuple[float, float], magnitude: float, foot: str
-                 ) -> Action:
+def _step_action(judoka: "Judoka", direction: tuple[float, float],
+                 magnitude: float) -> Optional[Action]:
+    """Build a STEP action in `direction` of `magnitude`, picking the
+    trailing foot for the chosen direction so the pair walks naturally
+    instead of abandoning the off-side foot."""
     nx, ny = direction
     norm = (nx * nx + ny * ny) ** 0.5
     if norm == 0:
         return None
-    return step(foot, (nx / norm, ny / norm), magnitude)
+    unit = (nx / norm, ny / norm)
+    foot = _trailing_step_foot(judoka, unit)
+    return step(foot, unit, magnitude)
 
 
 def _maybe_emit_step(
@@ -712,7 +734,6 @@ def _maybe_emit_step(
     # Magnitude attenuates under deep opponent grips.
     mag = (STEP_MAGNITUDE_REDUCED_M if _opponent_grip_drag(judoka, graph)
            else STEP_MAGNITUDE_M)
-    foot = _alternating_step_foot(judoka)
 
     if style == PositionalStyle.HOLD_CENTER:
         # Only step toward center when the fighter has drifted noticeably.
@@ -721,7 +742,7 @@ def _maybe_emit_step(
             return None
         if rng.random() > HOLD_CENTER_STEP_PROB:
             return None
-        return _step_action((-x, -y), mag, foot)
+        return _step_action(judoka, (-x, -y), mag)
 
     if style == PositionalStyle.DEFENSIVE_EDGE:
         # Retreat toward center when own perceived edge is close.
@@ -733,14 +754,13 @@ def _maybe_emit_step(
         x, y = judoka.state.body_state.com_position
         if abs(x) < 1e-6 and abs(y) < 1e-6:
             return None
-        return _step_action((-x, -y), mag, foot)
+        return _step_action(judoka, (-x, -y), mag)
 
     if style == PositionalStyle.PRESSURE:
         # Drive opponent toward the edge by stepping into them. Probability
         # ramps up as opponent's PERCEIVED edge distance shrinks — pressure
         # builds when the prey nears the rope.
         opp_edge = perceive_edge_distance(opponent, MAT_HALF_WIDTH, rng)
-        # Higher prob when opp_edge is small.
         proximity_term = max(0.0, MAT_HALF_WIDTH - opp_edge) * PRESSURE_RAMP_PROB_PER_M
         prob = min(0.95, PRESSURE_BASE_STEP_PROB + proximity_term)
         if rng.random() > prob:
@@ -748,6 +768,6 @@ def _maybe_emit_step(
         # Direction: from this fighter's CoM toward opponent's CoM.
         ox, oy = opponent.state.body_state.com_position
         sx, sy = judoka.state.body_state.com_position
-        return _step_action((ox - sx, oy - sy), mag, foot)
+        return _step_action(judoka, (ox - sx, oy - sy), mag)
 
     return None

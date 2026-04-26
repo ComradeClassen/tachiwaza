@@ -102,19 +102,13 @@ MAT_COORDINATE_UNIT: str = "meters"
 # few ticks should accumulate measurable cardio drain.
 STEP_CARDIO_COST: float = 0.0015
 
-# HAJ-127 — out-of-bounds boundary. INTERIM VALUE: 1.5 m half-width.
+# HAJ-127 / HAJ-128 — out-of-bounds boundary, IJF reference half-width.
 #
-# IJF reference: 8 × 8 m contest area → real half-width is 4.0 m. We use a
-# tighter mat as a deliberate stop-gap because the engine has no autonomous
-# locomotion yet (HAJ-128). Force is only transmitted through grips, so two
-# equal fighters cancel out at the start position; with a competition-realistic
-# 4 m half-width, OOB would essentially never fire from organic action. A
-# 1.5 m half-width lets OOB fire from existing grip-driven drift, exercising
-# the referee infrastructure while we wait on locomotion.
-#
-# Widen to 4.0 m (or pull from a future MatGeometry config) when HAJ-128
-# lands and fighters can actually walk to the edge.
-MAT_HALF_WIDTH: float = 1.5
+# 4.0 m matches the IJF 8 × 8 m contest area, centered on the mat origin.
+# HAJ-128 added autonomous locomotion (PRESSURE / DEFENSIVE_EDGE / HOLD_CENTER
+# styles emit STEP actions), so fighters can actually traverse the contest
+# area now — OOB no longer needs the tighter 1.5 m stop-gap.
+MAT_HALF_WIDTH: float = 4.0
 
 
 def is_out_of_bounds(judoka: Judoka) -> bool:
@@ -888,6 +882,13 @@ class Match:
         self._apply_body_actions(self.fighter_a, actions_a)
         self._apply_body_actions(self.fighter_b, actions_b)
 
+        # HAJ-128 — re-aim each fighter's facing vector at the opponent
+        # after motion. Real judoka stay squared up to each other; without
+        # this, the facing arrow stays pinned at its Hajime-time direction
+        # while the dot drifts around the mat.
+        self._reorient_facing(self.fighter_a, self.fighter_b)
+        self._reorient_facing(self.fighter_b, self.fighter_a)
+
         # Step 9 — kuzushi check (post-update state).
         a_kuzushi = self._is_kuzushi(self.fighter_a)
         b_kuzushi = self._is_kuzushi(self.fighter_b)
@@ -1275,6 +1276,18 @@ class Match:
     # -----------------------------------------------------------------------
     # STEP 8 — BoS UPDATE (STEP / SWEEP_LEG)
     # -----------------------------------------------------------------------
+    def _reorient_facing(self, judoka: Judoka, opponent: Judoka) -> None:
+        """HAJ-128 — point this judoka's facing unit-vector at the opponent.
+        Called once per tick after CoM updates so the viewer arrow tracks
+        body orientation. Bails out if the two fighters share a position."""
+        sx, sy = judoka.state.body_state.com_position
+        ox, oy = opponent.state.body_state.com_position
+        dx, dy = ox - sx, oy - sy
+        norm = (dx * dx + dy * dy) ** 0.5
+        if norm < 1e-6:
+            return
+        judoka.state.body_state.facing = (dx / norm, dy / norm)
+
     def _apply_body_actions(self, judoka: Judoka, actions: list[Action]) -> None:
         for act in actions:
             if act.kind != ActionKind.STEP or act.foot is None or act.direction is None:

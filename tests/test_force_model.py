@@ -81,8 +81,12 @@ def test_selection_no_grips_returns_reach() -> None:
     g = GripGraph()
     random.seed(0)
     actions = select_actions(t, s, g, kumi_kata_clock=0)
-    assert all(a.kind == ActionKind.REACH for a in actions)
-    assert len(actions) == 2
+    # HAJ-128 — locomotion may append a STEP alongside the REACH pair.
+    # The grip-side invariant is "no edges → both grip actions are REACH";
+    # locomotion is orthogonal and rides the same tick.
+    grip_actions = [a for a in actions if a.kind != ActionKind.STEP]
+    assert all(a.kind == ActionKind.REACH for a in grip_actions)
+    assert len(grip_actions) == 2
 
 
 def test_selection_shallow_grips_deepen_and_strip() -> None:
