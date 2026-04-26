@@ -194,6 +194,10 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
         FailureOutcome.STANCE_RESET:         CompromisedStateConfig(),
         FailureOutcome.PARTIAL_THROW:        CompromisedStateConfig(),
         FailureOutcome.UKE_VOLUNTARY_NEWAZA: CompromisedStateConfig(),
+        # HAJ-57 — uke denied the hip-loading geometry. Tori's stance is
+        # intact (the throw never set up); no body-state mutation, no
+        # counter window. Clean reset to grip battle.
+        FailureOutcome.BLOCKED_BY_HIP:       CompromisedStateConfig(),
 
         # Clean-counter outcomes — the FailureSpec's secondary branches. The
         # counter throw itself has already fired (via Part 6.2 or the

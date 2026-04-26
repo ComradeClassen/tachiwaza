@@ -15,6 +15,7 @@ from typing import Optional, TYPE_CHECKING
 from actions import (
     Action, ActionKind,
     reach, deepen, strip, release, pull, push, hold_connective, step, commit_throw,
+    block_hip,
 )
 from enums import (
     GripTypeV2, GripDepth, GripTarget, GripMode, DominantSide,
@@ -111,6 +112,12 @@ FALSE_ATTACK_PREFERENCES: tuple[ThrowID, ...] = (
 # same tag-suffix pipeline the desperation path already uses.
 REASON_INTENTIONAL_FALSE_ATTACK: str = "intentional_false_attack"
 
+# HAJ-57 — uke's hip-block defensive rung tuning. Fire probability scales
+# with fight_iq so a high-IQ defender reliably blocks while a low-IQ one
+# may fail to read tori's commit and eat the throw. Posture-gated:
+# trunk_sagittal must be <= 0 (upright or back-leaning — not bent forward).
+HIP_BLOCK_FIRE_PROB_AT_FULL_IQ: float = 0.85
+
 
 # ---------------------------------------------------------------------------
 # TOP-LEVEL ENTRY POINT
@@ -123,6 +130,7 @@ def select_actions(
     rng: random.Random | None = None,
     defensive_desperation: bool = False,
     opponent_kumi_kata_clock: int = 0,
+    opponent_in_progress_throw: Optional[ThrowID] = None,
 ) -> list[Action]:
     """Return the judoka's chosen actions for this tick.
 
@@ -133,12 +141,27 @@ def select_actions(
     cross-tick history the ladder can't see) and bypasses the grip-
     presence gate when True. Offensive desperation is derived locally
     from composure + kumi_kata_clock.
+
+    HAJ-57: `opponent_in_progress_throw` is the throw_id the opponent
+    has mid-flight (None if no attempt active). When set and the throw
+    is hip-loading, the defensive-block rung fires BLOCK_HIP before any
+    grip/commit work — provided the judoka is upright (posture gate)
+    and a fight_iq-scaled perception roll succeeds.
     """
     r = rng if rng is not None else random
 
     # Rung 1: stunned → defensive-only (v0.1: just idle).
     if judoka.state.stun_ticks > 0:
         return _defensive_fallback(judoka)
+
+    # HAJ-57 — defensive hip-block. Fires before grip/commit work because
+    # interrupting an in-progress hip-loading throw is the highest-priority
+    # defensive action available. Posture-gated: bent-over uke can't drive
+    # hips forward.
+    if opponent_in_progress_throw is not None:
+        block = _try_hip_block(judoka, opponent_in_progress_throw, r)
+        if block is not None:
+            return [block]
 
     own_edges = graph.edges_owned_by(judoka.identity.name)
     opp_edges = graph.edges_owned_by(opponent.identity.name)
@@ -222,6 +245,38 @@ def select_actions(
 def _defensive_fallback(judoka: "Judoka") -> list[Action]:
     # Stunned: minimal-fatigue action.
     return [hold_connective("right_hand"), hold_connective("left_hand")]
+
+
+def _try_hip_block(
+    judoka: "Judoka", opponent_throw_id: ThrowID, rng: random.Random,
+) -> Optional[Action]:
+    """HAJ-57 — return a BLOCK_HIP Action if uke can and chooses to block
+    a hip-loading throw this tick, else None.
+
+    Three gates, all must pass:
+      1. Throw is hip-loading. Reads `body_part_requirement.hip_loading`
+         off the worked template; legacy throws (no template) can't be
+         blocked.
+      2. Posture: trunk_sagittal <= 0 (upright or back-leaning). A
+         bent-over uke's hips are out of position — they can't drive
+         them forward into tori's hip line.
+      3. Perception roll: fight_iq-scaled probability. iq=10 fires at
+         HIP_BLOCK_FIRE_PROB_AT_FULL_IQ; iq=0 never fires.
+    """
+    from worked_throws import worked_template_for
+    template = worked_template_for(opponent_throw_id)
+    if template is None:
+        return None
+    bpr = getattr(template, "body_part_requirement", None)
+    if bpr is None or not getattr(bpr, "hip_loading", False):
+        return None
+    if judoka.state.body_state.trunk_sagittal > 0.0:
+        return None
+    iq = max(0.0, min(10.0, float(judoka.capability.fight_iq))) / 10.0
+    fire_p = HIP_BLOCK_FIRE_PROB_AT_FULL_IQ * iq
+    if rng.random() >= fire_p:
+        return None
+    return block_hip()
 
 
 def _reach_actions(judoka: "Judoka") -> list[Action]:

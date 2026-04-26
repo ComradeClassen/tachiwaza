@@ -600,6 +600,13 @@ class Match:
 
         # Action selection (Part 3.3). Each judoka picks up to two actions
         # based on the priority ladder; COMMIT_THROW supersedes the cap.
+        # HAJ-57 — pass each defender the throw_id of any in-progress attack
+        # by their opponent so the defensive hip-block rung can fire.
+        a_opp_tip = self._throws_in_progress.get(self.fighter_b.identity.name)
+        b_opp_tip = self._throws_in_progress.get(self.fighter_a.identity.name)
+        a_opp_throw = a_opp_tip.throw_id if a_opp_tip is not None else None
+        b_opp_throw = b_opp_tip.throw_id if b_opp_tip is not None else None
+
         actions_a = select_actions(
             self.fighter_a, self.fighter_b, self.grip_graph,
             self.kumi_kata_clock[self.fighter_a.identity.name],
@@ -609,6 +616,7 @@ class Match:
             opponent_kumi_kata_clock=self.kumi_kata_clock[
                 self.fighter_b.identity.name
             ],
+            opponent_in_progress_throw=a_opp_throw,
         )
         actions_b = select_actions(
             self.fighter_b, self.fighter_a, self.grip_graph,
@@ -619,6 +627,7 @@ class Match:
             opponent_kumi_kata_clock=self.kumi_kata_clock[
                 self.fighter_a.identity.name
             ],
+            opponent_in_progress_throw=b_opp_throw,
         )
         # A fighter mid-attempt must not re-commit — strip any COMMIT_THROW
         # the ladder re-proposes this tick.
@@ -628,6 +637,14 @@ class Match:
         actions_b = self._strip_commits_if_in_progress(
             self.fighter_b.identity.name, actions_b,
         )
+
+        # HAJ-57 — resolve any defensive hip-block actions. If a fighter
+        # picked BLOCK_HIP and the opponent has a hip-loading throw mid-
+        # flight, abort the throw with BLOCKED_BY_HIP and clean reset.
+        hip_block_events = self._check_hip_blocks(
+            actions_a, actions_b, tick,
+        )
+        events.extend(hip_block_events)
 
         # Step 1 — grip state updates (REACH/DEEPEN/STRIP/RELEASE/...).
         # Snapshot pre-action depths so we can coalesce intra-tick
@@ -1350,6 +1367,90 @@ class Match:
         if fighter_name not in self._throws_in_progress:
             return actions
         return [a for a in actions if a.kind != ActionKind.COMMIT_THROW]
+
+    def _check_hip_blocks(
+        self,
+        actions_a: list[Action],
+        actions_b: list[Action],
+        tick: int,
+    ) -> list[Event]:
+        """HAJ-57 — resolve BLOCK_HIP defensive actions.
+
+        For each fighter who chose BLOCK_HIP, abort the opponent's in-
+        progress throw if it's hip-loading. Throw fails with BLOCKED_BY_HIP
+        outcome (clean stance reset, zero recovery, no compromised state).
+        """
+        events: list[Event] = []
+        for blocker, target_actions, attacker_name in (
+            (self.fighter_a, actions_a, self.fighter_b.identity.name),
+            (self.fighter_b, actions_b, self.fighter_a.identity.name),
+        ):
+            if not any(a.kind == ActionKind.BLOCK_HIP for a in target_actions):
+                continue
+            tip = self._throws_in_progress.get(attacker_name)
+            if tip is None:
+                continue
+            from worked_throws import worked_template_for
+            template = worked_template_for(tip.throw_id)
+            if template is None:
+                continue
+            bpr = getattr(template, "body_part_requirement", None)
+            if bpr is None or not getattr(bpr, "hip_loading", False):
+                continue
+            attacker = self._fighter_by_name(attacker_name)
+            if attacker is None:
+                continue
+            events.extend(self._abort_throw_blocked_by_hip(
+                tip, attacker, blocker, tick,
+            ))
+        return events
+
+    def _abort_throw_blocked_by_hip(
+        self, tip: "_ThrowInProgress", attacker: Judoka, blocker: Judoka,
+        tick: int,
+    ) -> list[Event]:
+        """HAJ-57 — terminate a hip-loading throw with BLOCKED_BY_HIP. No
+        compromised state for tori, zero recovery — uke denied the geometry
+        before tsukuri completed; fall back to grip battle next tick."""
+        from failure_resolution import (
+            FailureResolution, apply_failure_resolution, RECOVERY_TICKS_BY_OUTCOME,
+        )
+        from throw_templates import FailureOutcome
+
+        throw_name = THROW_REGISTRY[tip.throw_id].name
+        events: list[Event] = [Event(
+            tick=tick, event_type="THROW_BLOCKED_BY_HIP",
+            description=(
+                f"[throw] {attacker.identity.name} → {throw_name}: "
+                f"hip-blocked by {blocker.identity.name} — stance reset."
+            ),
+            data={"throw_id": tip.throw_id.name,
+                  "blocker": blocker.identity.name,
+                  "offset": tip.offset(tick),
+                  "compression_n": tip.compression_n},
+        )]
+        # Clean reset: empty CompromisedStateConfig, zero recovery. Side
+        # effects are limited to clearing the in-progress tip; tori's body
+        # state is untouched. Drop the commit-time bookkeeping so we don't
+        # leak state into the next attempt.
+        # No dimension failed — uke just denied the geometry. Use sentinel
+        # values so downstream consumers (which expect str/float) don't
+        # explode; the BLOCKED_BY_HIP outcome itself carries the meaning.
+        resolution = FailureResolution(
+            outcome=FailureOutcome.BLOCKED_BY_HIP,
+            recovery_ticks=RECOVERY_TICKS_BY_OUTCOME[FailureOutcome.BLOCKED_BY_HIP],
+            failed_dimension="",
+            dimension_score=0.0,
+        )
+        # No composure cost — the throw was prevented, not blown. Tori's
+        # read was reasonable; uke just had the right defense available.
+        apply_failure_resolution(resolution, attacker, composure_drop=0.0)
+        a_name = attacker.identity.name
+        self._commit_motivation.pop(a_name, None)
+        self._commit_kumi_kata_snapshot.pop(a_name, 0)
+        self._compromised_states[a_name] = resolution.outcome
+        del self._throws_in_progress[a_name]
+        return events
 
     # -----------------------------------------------------------------------
     # COUNTER-WINDOW OPPORTUNITIES (Part 6.2)

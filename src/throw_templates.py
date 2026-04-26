@@ -99,6 +99,10 @@ class FailureOutcome(Enum):
     PARTIAL_THROW                    = auto()
     STANCE_RESET                     = auto()
     UKE_VOLUNTARY_NEWAZA             = auto()
+    # HAJ-57 — uke denied tori the hip-loading geometry. Throw fails into
+    # a clean stance reset; tori takes no compromised state (this isn't
+    # tori's failure; it's uke's defense).
+    BLOCKED_BY_HIP                   = auto()
     # Named clean counters
     UCHI_MATA_SUKASHI                = auto()
     OSOTO_GAESHI                     = auto()
@@ -231,6 +235,14 @@ class CoupleBodyPartRequirement:
     `contact_quality` is populated (Part 5.2, HAJ-55) for throws whose body
     dimension should score continuously on torso-closure / contact-point
     instead of binary-at-threshold.
+
+    HAJ-57 — `hip_loading` is True when the throw's geometry requires tori
+    to tuck under uke's hip line (load uke onto a hip or rotate body past
+    the hip-line block). Hip-blockable by an upright uke. Note that this is
+    structural geometry, not mechanism: Uchi-mata is a Couple but still
+    requires hip-line proximity for the reap to land, so it sets True;
+    O-soto-gari is also a Couple but lands as a leg-reap behind uke with
+    no hip tuck and so leaves it False.
     """
     tori_supporting_foot: str
     tori_attacking_limb:  str
@@ -239,6 +251,7 @@ class CoupleBodyPartRequirement:
     timing_window:   Optional[TimingWindow]           = None
     contact_quality: Optional[ContactQualityProfile]  = None
     hip_engagement:  Optional[HipEngagementProfile]   = None
+    hip_loading:     bool                             = False
 
 
 @dataclass(frozen=True)
@@ -260,6 +273,12 @@ class LeverBodyPartRequirement:
     # throws (e.g., Tai-otoshi, shin fulcrum). Hip-fulcrum throws leave
     # this None; they want hip engagement.
     hip_engagement: Optional[HipEngagementProfile] = None
+    # HAJ-57 — True when the throw's geometry requires tori to tuck under
+    # uke's hip line (hip fulcrum, or shin/knee fulcrum that still demands
+    # hip-line proximity, e.g. Tai-otoshi). Sacrifice throws whose fulcrum
+    # is foot-on-belt below uke (Tomoe-nage, Sumi-gaeshi) leave this False
+    # — a hip drop helps tori, doesn't deny anything.
+    hip_loading: bool = False
 
 
 @dataclass(frozen=True)

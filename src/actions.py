@@ -10,7 +10,7 @@
 #                        REPOSITION_GRIP / RELEASE
 #   - FORCE actions    : PULL / PUSH / LIFT / COUPLE / HOLD_CONNECTIVE / FEINT
 #   - BODY actions     : STEP / PIVOT / DROP_COM / RAISE_COM / SWEEP_LEG /
-#                        BLOCK_LEG / LOAD_HIP / ABSORB
+#                        BLOCK_LEG / LOAD_HIP / ABSORB / BLOCK_HIP
 #   - COMPOUND actions : COMMIT_THROW
 #
 # v0.1 implements the kinds we need to keep matches running end-to-end
@@ -59,6 +59,7 @@ class ActionKind(Enum):
     BLOCK_LEG        = auto()
     LOAD_HIP         = auto()
     ABSORB           = auto()
+    BLOCK_HIP        = auto()        # HAJ-57 — uke's defensive hip drive (denies hip-loading throws)
     # Compound
     COMMIT_THROW     = auto()
 
@@ -77,7 +78,7 @@ FORCE_KINDS: frozenset[ActionKind] = frozenset({
 BODY_KINDS: frozenset[ActionKind] = frozenset({
     ActionKind.STEP, ActionKind.PIVOT, ActionKind.DROP_COM,
     ActionKind.RAISE_COM, ActionKind.SWEEP_LEG, ActionKind.BLOCK_LEG,
-    ActionKind.LOAD_HIP, ActionKind.ABSORB,
+    ActionKind.LOAD_HIP, ActionKind.ABSORB, ActionKind.BLOCK_HIP,
 })
 DRIVING_FORCE_KINDS: frozenset[ActionKind] = frozenset({
     ActionKind.PULL, ActionKind.PUSH, ActionKind.LIFT,
@@ -161,6 +162,18 @@ def feint(hand: str, direction: Tuple[float, float], magnitude: float) -> Action
 def step(foot: str, direction: Tuple[float, float], magnitude: float) -> Action:
     return Action(kind=ActionKind.STEP, foot=foot,
                   direction=direction, magnitude=magnitude)
+
+
+def block_hip() -> Action:
+    """HAJ-57 — uke's defensive hip-drive-forward block.
+
+    Denies tori the geometry of any in-progress hip-loading throw (a throw
+    whose body_part_requirement.hip_loading is True). Resolved Match-side
+    against tori's mid-flight attempt; the throw fails into a stance reset
+    and the dyad falls back to grip battle. Posture-gated at action-
+    selection time: a bent-over uke (trunk_sagittal > 0) cannot generate
+    the forward hip drive."""
+    return Action(kind=ActionKind.BLOCK_HIP)
 
 def commit_throw(
     throw_id: ThrowID,

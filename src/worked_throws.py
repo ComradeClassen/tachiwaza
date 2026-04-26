@@ -88,6 +88,10 @@ UCHI_MATA: CoupleThrow = CoupleThrow(
         # HAJ-59 — top-leg Uchi-mata variant: hip engagement turns the
         # lift into a bump. Throw still fires at reduced quality.
         hip_engagement=_HIP_ENGAGEMENT_SOFT,
+        # HAJ-57 — even though Uchi-mata is torque-driven (Couple), the
+        # body-part requirement demands tori's hip in close contact with
+        # uke's hip line for the reap to land. Hip-blockable.
+        hip_loading=True,
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-5), math.radians(20)),
@@ -207,6 +211,7 @@ SEOI_NAGE_MOROTE: LeverThrow = LeverThrow(
         fulcrum_contact_on_uke=BodyPart.CORE,    # chest-and-right-armpit → simplified to CORE
         fulcrum_offset_below_uke_com_m=0.15,     # tori's hips below uke's by ≥ 0.15 m
         tori_supporting_feet=SupportRequirement.DOUBLE_SUPPORT,
+        hip_loading=True,                        # HAJ-57 — shoulder lift loads uke's weight
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(0), math.radians(30)),    # upright or forward
@@ -330,6 +335,7 @@ O_GOSHI: LeverThrow = LeverThrow(
         fulcrum_contact_on_uke=BodyPart.CORE,
         fulcrum_offset_below_uke_com_m=0.12,
         tori_supporting_feet=SupportRequirement.DOUBLE_SUPPORT,
+        hip_loading=True,                        # HAJ-57 — sacrum/hip fulcrum, classical hip throw
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-5), math.radians(25)),
@@ -390,6 +396,10 @@ TAI_OTOSHI: LeverThrow = LeverThrow(
         # HAJ-59 — hips must stay back; shin-block geometry is incompatible
         # with hip loading. Hard collapse toward eq=0 when engaged.
         hip_engagement=_HIP_ENGAGEMENT_HARD,
+        # HAJ-57 — even with shin (not hip) as fulcrum, the throw demands
+        # tori rotate past uke's hip line. Uke's hip-drive denies the
+        # turn-in geometry, not the eventual fulcrum.
+        hip_loading=True,
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-5), math.radians(25)),
@@ -545,6 +555,9 @@ HARAI_GOSHI: CoupleThrow = CoupleThrow(
         tori_attacking_limb="right_leg",
         contact_point_on_uke=BodyPart.RIGHT_THIGH,   # sweeping leg brushes far thigh
         contact_height_range=(0.45, 0.80),
+        # HAJ-57 — competitive Harai-goshi still tucks tori's hip against
+        # uke's hip line for the sweep to be levered. Hip-blockable.
+        hip_loading=True,
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-5), math.radians(25)),
@@ -599,6 +612,7 @@ HARAI_GOSHI_CLASSICAL: LeverThrow = LeverThrow(
         fulcrum_contact_on_uke=BodyPart.CORE,
         fulcrum_offset_below_uke_com_m=0.10,
         tori_supporting_feet=SupportRequirement.DOUBLE_SUPPORT,
+        hip_loading=True,                        # HAJ-57 — classical hip-fulcrum hip throw
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(0), math.radians(25)),
@@ -658,6 +672,9 @@ TOMOE_NAGE: LeverThrow = LeverThrow(
         fulcrum_contact_on_uke=BodyPart.CORE,
         fulcrum_offset_below_uke_com_m=0.0,      # tori on the ground; offset not the usual constraint
         tori_supporting_feet=SupportRequirement.ONE_KNEE_DOWN_ONE_BENT,
+        # HAJ-57 — sacrifice throw with foot-on-belt fulcrum below uke. A
+        # uke hip drop helps tori (gives them the lift), so hip block is
+        # not a defense. Stays False.
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(-5), math.radians(30)),
@@ -713,6 +730,7 @@ O_GURUMA: LeverThrow = LeverThrow(
         fulcrum_contact_on_uke=BodyPart.CORE,
         fulcrum_offset_below_uke_com_m=0.08,
         tori_supporting_feet=SupportRequirement.DOUBLE_SUPPORT,
+        hip_loading=True,                        # HAJ-57 — extended-leg fulcrum at hip-line
     ),
     uke_posture_requirement=UkePostureRequirement(
         trunk_sagittal_range=(math.radians(0), math.radians(30)),

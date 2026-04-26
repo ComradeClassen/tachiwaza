@@ -59,6 +59,9 @@ RECOVERY_TICKS_BY_OUTCOME: dict[FailureOutcome, int] = {
     FailureOutcome.STANCE_RESET:                     0,
     FailureOutcome.PARTIAL_THROW:                    0,
     FailureOutcome.UKE_VOLUNTARY_NEWAZA:             0,
+    # HAJ-57 — uke's hip block stops the throw before tsukuri completes.
+    # Tori's CoM was never fully committed; clean reset, no recovery cost.
+    FailureOutcome.BLOCKED_BY_HIP:                   0,
     FailureOutcome.UCHI_MATA_SUKASHI:                1,
     FailureOutcome.OSOTO_GAESHI:                     1,
     FailureOutcome.URA_NAGE:                         1,
