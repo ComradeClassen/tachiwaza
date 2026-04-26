@@ -256,19 +256,31 @@ class GripType(Enum):
 # signature.
 # ---------------------------------------------------------------------------
 class GripTypeV2(Enum):
-    SLEEVE     = auto()  # Sode — controls uke's arm rotation (hikite).
-    LAPEL_LOW  = auto()  # Eri-tori lower — mid-chest, standard working grip.
-    LAPEL_HIGH = auto()  # Eri-tori upper — collarbone; strong lift (tsurite).
-    COLLAR     = auto()  # Oku-eri — deep behind neck; max rotation authority.
-    BELT       = auto()  # Obi-tori — wraps back to grip belt; max CoM lift.
-    PISTOL     = auto()  # Sode-tori — sleeve-cuff clamp; defensive, strip-resistant.
-    CROSS      = auto()  # Katate-ai-gumi — "wrong" hand across; breaks geometry.
+    # HAJ-53 — sleeve grip splits by height. Sensei's Tai-otoshi teaching
+    # makes the cuff/elbow distinction explicit: the cuff (LOW) gives wrist
+    # rotation control and a longer pull-around moment arm; the elbow/tricep
+    # (HIGH) gives leverage to lift uke's shoulder line for hikite-driven
+    # forward throws. Most throws prefer HIGH; Tai-otoshi prefers LOW.
+    SLEEVE_LOW  = auto()  # Cuff — wrist rotation, long moment arm, easier to slip.
+    SLEEVE_HIGH = auto()  # Elbow/tricep — strong lift, shorter moment arm, harder to strip.
+    LAPEL_LOW   = auto()  # Eri-tori lower — mid-chest, standard working grip.
+    LAPEL_HIGH  = auto()  # Eri-tori upper — collarbone; strong lift (tsurite).
+    COLLAR      = auto()  # Oku-eri — deep behind neck; max rotation authority.
+    BELT        = auto()  # Obi-tori — wraps back to grip belt; max CoM lift.
+    PISTOL      = auto()  # Sode-tori — sleeve-cuff clamp; defensive, strip-resistant.
+    CROSS       = auto()  # Katate-ai-gumi — "wrong" hand across; breaks geometry.
 
     def is_unconventional(self) -> bool:
         """Under current IJF rules, unconventional grips must lead to immediate
         attack. Used for the per-grip 5-tick unconventional-grip clock (Part 2.6).
         """
         return self in (GripTypeV2.BELT, GripTypeV2.PISTOL, GripTypeV2.CROSS)
+
+    def is_sleeve(self) -> bool:
+        """HAJ-53 — both sleeve sub-types share the sleeve family for any
+        logic that doesn't care about height (display, generic vocabulary
+        rules, kumi-kata clocks)."""
+        return self in (GripTypeV2.SLEEVE_LOW, GripTypeV2.SLEEVE_HIGH)
 
 
 # ---------------------------------------------------------------------------

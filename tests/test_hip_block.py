@@ -50,9 +50,9 @@ def _seat_grips(graph: GripGraph, attacker, defender) -> None:
     drops back to REACH while the test runs."""
     for fr, to, hand, target_loc, gt in (
         (attacker, defender, BodyPart.RIGHT_HAND, GripTarget.LEFT_LAPEL, GripTypeV2.LAPEL_HIGH),
-        (attacker, defender, BodyPart.LEFT_HAND,  GripTarget.RIGHT_SLEEVE, GripTypeV2.SLEEVE),
+        (attacker, defender, BodyPart.LEFT_HAND,  GripTarget.RIGHT_SLEEVE, GripTypeV2.SLEEVE_HIGH),
         (defender, attacker, BodyPart.RIGHT_HAND, GripTarget.LEFT_LAPEL, GripTypeV2.LAPEL_HIGH),
-        (defender, attacker, BodyPart.LEFT_HAND,  GripTarget.RIGHT_SLEEVE, GripTypeV2.SLEEVE),
+        (defender, attacker, BodyPart.LEFT_HAND,  GripTarget.RIGHT_SLEEVE, GripTypeV2.SLEEVE_HIGH),
     ):
         graph.add_edge(GripEdge(
             grasper_id=fr.identity.name, grasper_part=hand,

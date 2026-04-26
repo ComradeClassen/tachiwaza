@@ -108,7 +108,7 @@ def _gripped_graph(tori: Judoka, uke: Judoka) -> GripGraph:
     g.add_edge(GripEdge(
         grasper_id=tori.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=uke.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.STANDARD,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.STANDARD,
         strength=0.8, established_tick=0, mode=GripMode.CONNECTIVE,
     ))
     return g

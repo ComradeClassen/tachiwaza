@@ -55,7 +55,7 @@ def _seat_tori_deep_grips(graph: GripGraph, tori, uke) -> None:
     graph.add_edge(GripEdge(
         grasper_id=tori.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=uke.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.DEEP,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.DEEP,
         strength=1.0, established_tick=0, mode=GripMode.DRIVING,
     ))
     tori.state.body["right_hand"].contact_state = ContactState.GRIPPING_UKE
@@ -79,7 +79,7 @@ def _seat_tori_standard_grips_fatigued(
     graph.add_edge(GripEdge(
         grasper_id=tori.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=uke.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.STANDARD,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.STANDARD,
         strength=0.9, established_tick=0, mode=GripMode.DRIVING,
     ))
     tori.state.body["right_hand"].contact_state = ContactState.GRIPPING_UKE
@@ -99,7 +99,7 @@ def _seat_uke_counter_grips(graph: GripGraph, tori, uke) -> None:
     graph.add_edge(GripEdge(
         grasper_id=uke.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=tori.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.STANDARD,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.STANDARD,
         strength=0.9, established_tick=0, mode=GripMode.DRIVING,
     ))
     uke.state.body["right_hand"].contact_state = ContactState.GRIPPING_UKE

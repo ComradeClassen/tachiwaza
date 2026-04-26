@@ -120,7 +120,7 @@ def _uke_deep_grips(graph: GripGraph, tori: Judoka, uke: Judoka) -> None:
     graph.add_edge(GripEdge(
         grasper_id=uke.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=tori.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.DEEP,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.DEEP,
         strength=1.0, established_tick=0, mode=GripMode.DRIVING,
     ))
 
@@ -137,7 +137,7 @@ def _standard_grips(graph: GripGraph, tori: Judoka, uke: Judoka) -> None:
     graph.add_edge(GripEdge(
         grasper_id=tori.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=uke.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.STANDARD,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.STANDARD,
         strength=0.8, established_tick=0, mode=GripMode.CONNECTIVE,
     ))
 

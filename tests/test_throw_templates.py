@@ -65,7 +65,7 @@ def _seoi_lever() -> LeverThrow:
         force_grips=(
             GripRequirement(
                 hand="left_hand",
-                grip_type=(GripTypeV2.SLEEVE,),
+                grip_type=(GripTypeV2.SLEEVE_HIGH,),
                 min_depth=GripDepth.STANDARD,
                 mode=GripMode.DRIVING,
             ),
@@ -116,7 +116,7 @@ def _uchi_mata_couple() -> CoupleThrow:
         ),
         force_grips=(
             GripRequirement(
-                hand="left_hand", grip_type=(GripTypeV2.SLEEVE,),
+                hand="left_hand", grip_type=(GripTypeV2.SLEEVE_HIGH,),
                 min_depth=GripDepth.STANDARD, mode=GripMode.DRIVING,
             ),
             GripRequirement(
@@ -194,7 +194,7 @@ def _seat_deep_grips(graph: GripGraph, attacker, defender) -> None:
     graph.add_edge(GripEdge(
         grasper_id=attacker.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=defender.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.DEEP,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.DEEP,
         strength=1.0, established_tick=0, mode=GripMode.DRIVING,
     ))
 

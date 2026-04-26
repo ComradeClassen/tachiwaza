@@ -55,7 +55,7 @@ def _seat_deep_grips(graph, attacker, defender, tsurite=GripTypeV2.LAPEL_HIGH):
     graph.add_edge(GripEdge(
         grasper_id=attacker.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=defender.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.DEEP,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.DEEP,
         strength=1.0, established_tick=0, mode=GripMode.DRIVING,
     ))
 
@@ -195,7 +195,7 @@ def test_o_goshi_needs_hips_below() -> None:
     g.add_edge(GripEdge(
         grasper_id=t.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=s.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.DEEP,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.DEEP,
         strength=1.0, established_tick=0, mode=GripMode.DRIVING,
     ))
     s.state.body_state.com_position = (1.0, 0.0)

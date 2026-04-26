@@ -59,9 +59,19 @@ class ForceEnvelope:
 # TODO (Part 6 / Phase 3): calibrate against match telemetry.
 # ---------------------------------------------------------------------------
 FORCE_ENVELOPES: dict[GripTypeV2, ForceEnvelope] = {
-    GripTypeV2.SLEEVE: ForceEnvelope(
-        max_pull_force=500.0, max_push_force=150.0, max_lift_force=150.0,
-        moment_arm_to_uke_com=0.55, rotation_authority=1.0, strip_resistance=300.0,
+    # HAJ-53 — sleeve sub-types. SLEEVE_HIGH inherits the prior single-SLEEVE
+    # numbers (it's the standard hikite grip, ≈90% of throws prefer it).
+    # SLEEVE_LOW (cuff) trades lift force and strip resistance for a longer
+    # moment arm and stronger rotation authority — the cuff sits farther
+    # from uke's shoulder, gives the wrist around-the-axis control, and
+    # slips more readily under load.
+    GripTypeV2.SLEEVE_HIGH: ForceEnvelope(
+        max_pull_force=500.0, max_push_force=150.0, max_lift_force=200.0,
+        moment_arm_to_uke_com=0.50, rotation_authority=1.0, strip_resistance=350.0,
+    ),
+    GripTypeV2.SLEEVE_LOW: ForceEnvelope(
+        max_pull_force=500.0, max_push_force=150.0, max_lift_force=100.0,
+        moment_arm_to_uke_com=0.65, rotation_authority=1.3, strip_resistance=200.0,
     ),
     GripTypeV2.LAPEL_LOW: ForceEnvelope(
         max_pull_force=300.0, max_push_force=300.0, max_lift_force=300.0,

@@ -235,7 +235,7 @@ def test_commit_throw_resolves_via_resolve_throw() -> None:
     m.grip_graph.add_edge(GripEdge(
         grasper_id=t.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=s.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.DEEP,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.DEEP,
         strength=1.0, established_tick=0,
     ))
 

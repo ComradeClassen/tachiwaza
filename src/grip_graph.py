@@ -291,7 +291,7 @@ class GripGraph:
                 grasper_part=non_hand_part,
                 target_id=fighter_b.identity.name if attacker is fighter_a else fighter_a.identity.name,
                 target_location=sleeve_target,
-                grip_type_v2=GripTypeV2.SLEEVE,
+                grip_type_v2=GripTypeV2.SLEEVE_HIGH,   # HAJ-53 — default auto-seat to HIGH
                 strength=non_strength,
                 current_tick=current_tick,
             ))

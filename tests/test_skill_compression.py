@@ -50,7 +50,7 @@ def _seat_deep_grips(graph: GripGraph, attacker, defender) -> None:
     graph.add_edge(GripEdge(
         grasper_id=attacker.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=defender.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.DEEP,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.DEEP,
         strength=1.0, established_tick=0, mode=GripMode.DRIVING,
     ))
 

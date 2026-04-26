@@ -64,7 +64,7 @@ def _seat(graph: GripGraph, grasper_name: str, hand: BodyPart,
     edge = GripEdge(
         grasper_id=grasper_name, grasper_part=hand,
         target_id=target_name, target_location=target_loc,
-        grip_type_v2=GripTypeV2.LAPEL_HIGH if "lapel" in target_loc.value else GripTypeV2.SLEEVE,
+        grip_type_v2=GripTypeV2.LAPEL_HIGH if "lapel" in target_loc.value else GripTypeV2.SLEEVE_HIGH,
         depth_level=depth, strength=1.0, established_tick=0,
         mode=GripMode.CONNECTIVE,
     )

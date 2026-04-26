@@ -286,7 +286,11 @@ def _reach_actions(judoka: "Judoka") -> list[Action]:
     sleeve_target = GripTarget.RIGHT_SLEEVE if is_right else GripTarget.LEFT_SLEEVE
     return [
         reach("right_hand" if is_right else "left_hand", GripTypeV2.LAPEL_HIGH, lapel_target),
-        reach("left_hand"  if is_right else "right_hand", GripTypeV2.SLEEVE,     sleeve_target),
+        # HAJ-53 — default sleeve reach is HIGH (elbow/tricep): the standard
+        # hikite grip preferred by Seoi-nage, Uchi-mata, harai/hip throws,
+        # and the rest of the vocabulary. Tai-otoshi specialists who want
+        # SLEEVE_LOW will need a Ring-2 coach instruction layer.
+        reach("left_hand"  if is_right else "right_hand", GripTypeV2.SLEEVE_HIGH, sleeve_target),
     ]
 
 

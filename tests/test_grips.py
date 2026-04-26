@@ -37,7 +37,7 @@ import main as main_module
 def test_envelope_relative_ordering_matches_spec() -> None:
     e = FORCE_ENVELOPES
     # Sleeve pull > sleeve push (sleeves are pulled, not pushed)
-    assert e[GripTypeV2.SLEEVE].max_pull_force > e[GripTypeV2.SLEEVE].max_push_force
+    assert e[GripTypeV2.SLEEVE_HIGH].max_pull_force > e[GripTypeV2.SLEEVE_HIGH].max_push_force
     # Belt lift is category max (uchi-mata / tsurikomi lift)
     assert e[GripTypeV2.BELT].max_lift_force >= max(
         e[gt].max_lift_force for gt in GripTypeV2 if gt != GripTypeV2.BELT
@@ -64,8 +64,8 @@ def test_depth_modifier_chain_is_monotone() -> None:
 def test_delivered_force_scales_with_depth() -> None:
     t = main_module.build_tanaka()
     place_judoka(t, com_position=(0.0, 0.0), facing=(1.0, 0.0))
-    pocket = delivered_pull_force(GripTypeV2.SLEEVE, GripDepth.POCKET,   t, "right_hand")
-    deep   = delivered_pull_force(GripTypeV2.SLEEVE, GripDepth.DEEP,     t, "right_hand")
+    pocket = delivered_pull_force(GripTypeV2.SLEEVE_HIGH, GripDepth.POCKET,   t, "right_hand")
+    deep   = delivered_pull_force(GripTypeV2.SLEEVE_HIGH, GripDepth.DEEP,     t, "right_hand")
     assert deep > pocket > 0.0
 
 
@@ -231,7 +231,7 @@ def test_driving_mode_drains_hand_faster_than_connective() -> None:
     driv = GripEdge(
         grasper_id=t.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=s.identity.name, target_location=GripTarget.RIGHT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.STANDARD,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.STANDARD,
         strength=0.8, established_tick=0, mode=GripMode.DRIVING,
     )
     g.add_edge(conn)
@@ -265,7 +265,7 @@ def test_unconventional_grip_clock_ticks_under_tick_update() -> None:
     sleeve = GripEdge(
         grasper_id=t.identity.name, grasper_part=BodyPart.LEFT_HAND,
         target_id=s.identity.name, target_location=GripTarget.LEFT_SLEEVE,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.STANDARD,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.STANDARD,
         strength=0.8, established_tick=0,
     )
     g.add_edge(pistol)
@@ -371,7 +371,7 @@ def test_legacy_grip_type_maps_pocket_to_pocket() -> None:
     e = GripEdge(
         grasper_id="t", grasper_part=BodyPart.RIGHT_HAND,
         target_id="s", target_location=GripTarget.LEFT_LAPEL,
-        grip_type_v2=GripTypeV2.SLEEVE, depth_level=GripDepth.POCKET,
+        grip_type_v2=GripTypeV2.SLEEVE_HIGH, depth_level=GripDepth.POCKET,
         strength=0.8, established_tick=0,
     )
     assert e.grip_type == GripType.POCKET

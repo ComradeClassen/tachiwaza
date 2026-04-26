@@ -67,7 +67,7 @@ UCHI_MATA: CoupleThrow = CoupleThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",                    # hikite
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -122,7 +122,7 @@ O_SOTO_GARI: CoupleThrow = CoupleThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",                    # hikite
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -182,7 +182,7 @@ SEOI_NAGE_MOROTE: LeverThrow = LeverThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",                    # hikite
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -246,7 +246,7 @@ DE_ASHI_HARAI: CoupleThrow = CoupleThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",                    # hikite — destabilizes upper body
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -306,7 +306,7 @@ O_GOSHI: LeverThrow = LeverThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",                    # hikite (sleeve)
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -369,7 +369,12 @@ TAI_OTOSHI: LeverThrow = LeverThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",
-            grip_type=(GripTypeV2.SLEEVE,),
+            # HAJ-53 — Tai-otoshi is the canonical sleeve-LOW throw. The
+            # cuff grip gives the wrist-around-the-axis pull-around and
+            # the longer moment arm needed to rotate uke over the shin
+            # block. SLEEVE_HIGH (elbow control) collapses the rotational
+            # vector — it's the wrong grip for the shin-block geometry.
+            grip_type=(GripTypeV2.SLEEVE_LOW,),
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -435,7 +440,7 @@ KO_UCHI_GARI: CoupleThrow = CoupleThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.POCKET,
             mode=GripMode.DRIVING,
         ),
@@ -488,7 +493,7 @@ O_UCHI_GARI: CoupleThrow = CoupleThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -537,7 +542,7 @@ HARAI_GOSHI: CoupleThrow = CoupleThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -588,7 +593,7 @@ HARAI_GOSHI_CLASSICAL: LeverThrow = LeverThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -648,7 +653,7 @@ TOMOE_NAGE: LeverThrow = LeverThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
@@ -706,7 +711,7 @@ O_GURUMA: LeverThrow = LeverThrow(
     force_grips=(
         GripRequirement(
             hand="left_hand",
-            grip_type=(GripTypeV2.SLEEVE,),
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # HAJ-53 — hikite at elbow/tricep
             min_depth=GripDepth.STANDARD,
             mode=GripMode.DRIVING,
         ),
