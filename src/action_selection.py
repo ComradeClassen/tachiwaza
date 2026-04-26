@@ -139,6 +139,7 @@ def select_actions(
     opponent_kumi_kata_clock: int = 0,
     opponent_in_progress_throw: Optional[ThrowID] = None,
     desperation_jitter: Optional[dict] = None,
+    current_tick: int = 0,
 ) -> list[Action]:
     """Return the judoka's chosen actions for this tick.
 
@@ -153,6 +154,7 @@ def select_actions(
         opponent_kumi_kata_clock=opponent_kumi_kata_clock,
         opponent_in_progress_throw=opponent_in_progress_throw,
         desperation_jitter=desperation_jitter,
+        current_tick=current_tick,
     )
     # HAJ-128 — locomotion is additive, never replaces grip work. Skip
     # when a commit is in flight (commits are exclusive in the ladder)
@@ -178,6 +180,7 @@ def _select_grip_actions(
     opponent_kumi_kata_clock: int = 0,
     opponent_in_progress_throw: Optional[ThrowID] = None,
     desperation_jitter: Optional[dict] = None,
+    current_tick: int = 0,
 ) -> list[Action]:
     """The grip / commit / probe priority ladder. Pre-HAJ-128 this was
     the body of select_actions; locomotion now wraps it.
@@ -228,6 +231,7 @@ def _select_grip_actions(
         defensive_desperation=defensive_desperation,
         kumi_kata_clock=kumi_kata_clock,
         opponent_kumi_kata_clock=opponent_kumi_kata_clock,
+        current_tick=current_tick,
     )
     if commit is not None:
         return [commit]
@@ -350,6 +354,7 @@ def _try_commit(
     defensive_desperation: bool = False,
     kumi_kata_clock: int = 0,
     opponent_kumi_kata_clock: int = 0,
+    current_tick: int = 0,
 ) -> Optional[Action]:
     """If there's a throw whose *perceived* signature clears the commit
     threshold AND the formal grip-presence gate allows it (or is bypassed
@@ -391,7 +396,8 @@ def _try_commit(
             continue
         if judoka.capability.throw_profiles.get(tid) is None:
             continue
-        actual = actual_signature_match(tid, judoka, opponent, graph)
+        actual = actual_signature_match(tid, judoka, opponent, graph,
+                                        current_tick=current_tick)
         perceived = perceive(actual, judoka, rng=rng)
         # Small bonus for signature throws — tokui-waza bias.
         if tid in judoka.capability.signature_throws:

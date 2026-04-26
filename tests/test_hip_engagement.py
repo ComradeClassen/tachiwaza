@@ -39,6 +39,7 @@ from worked_throws import (
     SEOI_NAGE_MOROTE, O_GOSHI, HARAI_GOSHI_CLASSICAL, O_GURUMA,
 )
 from execution_quality import compute_execution_quality
+from kuzushi import seed_kuzushi_from_velocity
 import main as main_module
 
 
@@ -248,8 +249,8 @@ def test_execution_quality_drops_when_o_soto_hip_engaged() -> None:
     graph = GripGraph()
     t, s = _pair(tori_x=0.0, uke_x=0.45)  # close — contact quality high
     _seat_deep_grips(graph, t, s)
-    s.state.body_state.com_velocity = (0.4, 0.0)
     s.state.body_state.facing = (-1.0, 0.0)
+    seed_kuzushi_from_velocity(s, (0.4, 0.0))
 
     _set_clean_trunk(t)
     sig_clean = signature_match(O_SOTO_GARI, t, s, graph)

@@ -127,6 +127,7 @@ def select_failure_outcome(
     graph: "GripGraph",
     rng: random.Random | None = None,
     throw_id=None,
+    current_tick: int = 0,
 ) -> FailureResolution:
     """Pick a FailureOutcome for a failed commit attempt.
 
@@ -152,7 +153,8 @@ def select_failure_outcome(
     r = rng if rng is not None else random
 
     # 1. Per-dimension scores — identify the worst.
-    dim_scores = _dimension_scores(throw, attacker, defender, graph)
+    dim_scores = _dimension_scores(throw, attacker, defender, graph,
+                                   current_tick=current_tick)
     worst_dim = min(dim_scores, key=dim_scores.get)
     worst_score = dim_scores[worst_dim]
 
@@ -232,9 +234,11 @@ def apply_failure_resolution(
 def _dimension_scores(
     throw: ThrowTemplate, attacker: "Judoka", defender: "Judoka",
     graph: "GripGraph",
+    current_tick: int = 0,
 ) -> dict[str, float]:
     return {
-        "kuzushi": match_kuzushi_vector(throw, attacker, defender),
+        "kuzushi": match_kuzushi_vector(throw, attacker, defender,
+                                        current_tick=current_tick),
         "force":   match_force_application(throw, attacker, defender, graph),
         "body":    match_body_parts(throw, attacker, defender),
         "posture": match_uke_posture(throw, defender),

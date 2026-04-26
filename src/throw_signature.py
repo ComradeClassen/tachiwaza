@@ -107,32 +107,43 @@ def _in_range(x: float, lo_hi: tuple[float, float]) -> bool:
 
 # ---------------------------------------------------------------------------
 # DIMENSION 1 — KUZUSHI VECTOR (Part 4.2 dimension 1)
+# HAJ-132 — polarity reversal. This dimension now reads uke's decaying
+# event buffer, not uke's current CoM-velocity snapshot. Throws fire
+# because pulls composed, not because uke happens to be moving this tick.
+#
+# Force/body/posture dimensions remain snapshot reads — see ticket spec
+# for why each of those is naturally a current-tick check.
 # ---------------------------------------------------------------------------
 def match_kuzushi_vector(
     throw: ThrowTemplate, attacker: "Judoka", defender: "Judoka",
+    current_tick: int = 0,
 ) -> float:
     """Score uke's kuzushi against the throw's `kuzushi_requirement`.
 
-    Couple: direction alignment ∧ velocity magnitude ≥ threshold.
-    Lever:  direction alignment ∧ CoM displacement past recoverable envelope.
-    Special flag `aligned_with_uke_velocity` (De-ashi-harai) relaxes the
-    direction check — any non-zero velocity satisfies it.
-    """
-    req: KuzushiRequirement = throw.kuzushi_requirement
-    defender_state = defender.state.body_state
+    Direction is matched against the resultant of uke's decayed event
+    buffer (in uke's body frame). Magnitude is matched against the buffer's
+    accumulated magnitude — converted from the per-template m/s threshold
+    (Couple) or m threshold (Lever) via KUZUSHI_PER_MPS / KUZUSHI_PER_M.
 
-    # Uke's CoM velocity, brought into uke's body frame.
-    vel_body = _to_body_frame(defender_state.com_velocity, defender_state.facing)
-    speed = hypot(*vel_body)
+    Special flag `aligned_with_uke_velocity` (De-ashi-harai) relaxes the
+    direction check — any non-zero buffered kuzushi satisfies it.
+    """
+    from kuzushi import compromised_state, KUZUSHI_PER_MPS, KUZUSHI_PER_M
+    req: KuzushiRequirement = throw.kuzushi_requirement
+    facing = defender.state.body_state.facing
+
+    cs = compromised_state(defender.kuzushi_events, current_tick)
+    cv_body = _to_body_frame(cs.vector, facing)
+    cv_mag = hypot(*cv_body)
 
     # Direction score: 1.0 inside tolerance, linear falloff to 0 at 2×tolerance.
     if req.aligned_with_uke_velocity:
-        dir_score = 1.0 if speed > 1e-6 else 0.0
+        dir_score = 1.0 if cv_mag > 1e-6 else 0.0
     else:
-        if speed < 1e-6:
+        if cv_mag < 1e-6:
             dir_score = 0.0
         else:
-            angle = _angle_between(vel_body, req.direction)
+            angle = _angle_between(cv_body, req.direction)
             if angle <= req.tolerance_rad:
                 dir_score = 1.0
             elif angle >= 2.0 * req.tolerance_rad:
@@ -141,64 +152,20 @@ def match_kuzushi_vector(
                 dir_score = 1.0 - (angle - req.tolerance_rad) / req.tolerance_rad
 
     if throw.classification == ThrowClassification.COUPLE:
-        # Velocity magnitude floor.
         if req.min_velocity_magnitude <= 0.0:
             mag_score = 1.0
         else:
-            mag_score = min(1.0, speed / req.min_velocity_magnitude)
+            threshold_kuzushi = req.min_velocity_magnitude * KUZUSHI_PER_MPS
+            mag_score = min(1.0, cs.magnitude / threshold_kuzushi)
         return 0.5 * dir_score + 0.5 * mag_score
 
-    # Lever: displacement past recoverable envelope.
-    disp = _displacement_past_recoverable(defender)
+    # Lever: per-template displacement threshold converted to kuzushi units.
     if req.min_displacement_past_recoverable <= 0.0:
-        disp_score = 1.0 if disp > 0.0 else 0.0
+        disp_score = 1.0 if cs.magnitude > 0.0 else 0.0
     else:
-        disp_score = min(1.0, disp / req.min_displacement_past_recoverable)
+        threshold_kuzushi = req.min_displacement_past_recoverable * KUZUSHI_PER_M
+        disp_score = min(1.0, cs.magnitude / threshold_kuzushi)
     return 0.5 * dir_score + 0.5 * disp_score
-
-
-def _displacement_past_recoverable(defender: "Judoka") -> float:
-    """Signed distance of uke's CoM outside the recoverable envelope (m).
-
-    0.0 when uke is inside the envelope; positive when outside. Uses the same
-    envelope as Part 1.5's `is_kuzushi` predicate.
-    """
-    from body_state import recoverable_envelope, _point_in_polygon
-    state = defender.state.body_state
-    leg = min(
-        defender.effective_body_part("right_leg"),
-        defender.effective_body_part("left_leg"),
-    ) / 10.0
-    fatigue = 0.5 * (
-        defender.state.body["right_leg"].fatigue
-        + defender.state.body["left_leg"].fatigue
-    )
-    ceiling = max(1.0, float(defender.capability.composure_ceiling))
-    composure = max(0.0, min(1.0, defender.state.composure_current / ceiling))
-
-    envelope = recoverable_envelope(state, leg, fatigue, composure)
-    if not envelope:
-        return 0.0
-    if _point_in_polygon(state.com_position, envelope):
-        return 0.0
-    # Minimum distance from com_position to the envelope polygon.
-    cx, cy = state.com_position
-    min_d = float("inf")
-    n = len(envelope)
-    for i in range(n):
-        x1, y1 = envelope[i]
-        x2, y2 = envelope[(i + 1) % n]
-        dx, dy = x2 - x1, y2 - y1
-        seg_len2 = dx * dx + dy * dy
-        if seg_len2 < 1e-12:
-            d = hypot(cx - x1, cy - y1)
-        else:
-            t = max(0.0, min(1.0, ((cx - x1) * dx + (cy - y1) * dy) / seg_len2))
-            px, py = x1 + t * dx, y1 + t * dy
-            d = hypot(cx - px, cy - py)
-        if d < min_d:
-            min_d = d
-    return min_d
 
 
 # ---------------------------------------------------------------------------
@@ -566,6 +533,7 @@ def signature_match(
     defender: "Judoka",
     graph: "GripGraph",
     weights: SignatureWeights | None = None,
+    current_tick: int = 0,
 ) -> float:
     """The weighted four-dimension actual_match score in [0.0, 1.0].
 
@@ -584,7 +552,7 @@ def signature_match(
     b = match_body_parts(throw, attacker, defender)
     if b == 0.0 and _has_hard_body_gate(throw):
         return 0.0
-    k = match_kuzushi_vector(throw, attacker, defender)
+    k = match_kuzushi_vector(throw, attacker, defender, current_tick=current_tick)
     f = match_force_application(throw, attacker, defender, graph)
     p = match_uke_posture(throw, defender)
     score = w.kuzushi * k + w.force * f + w.body * b + w.posture * p

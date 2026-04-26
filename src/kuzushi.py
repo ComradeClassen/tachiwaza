@@ -168,6 +168,42 @@ def record_kuzushi_event(judoka: "Judoka", event: KuzushiEvent) -> None:
     judoka.kuzushi_events.append(event)
 
 
+def seed_kuzushi_from_velocity(
+    judoka:       "Judoka",
+    velocity:     Vector2,
+    current_tick: int = 0,
+    source_kind:  "KuzushiSource" = None,
+) -> Optional[KuzushiEvent]:
+    """Test-fixture / scenario helper. Synthesizes the buffer state that
+    pre-HAJ-132 tests created by setting `defender.com_velocity` directly.
+
+    `velocity` is in the mat frame (same convention as `com_velocity`). The
+    helper appends one event whose magnitude × decay equals the velocity's
+    magnitude scaled by KUZUSHI_PER_MPS, with direction matching the
+    velocity's. Querying compromised_state at `current_tick` then returns a
+    vector aligned with `velocity` and a magnitude that, after the in-throw-
+    signature unit conversion, matches the original Couple m/s threshold.
+
+    Production code does NOT call this — PULL emits via pull_kuzushi_event
+    in match.py. This is the fixture-only equivalent for unit tests that
+    don't simulate a full tick.
+    """
+    if source_kind is None:
+        source_kind = KuzushiSource.PULL
+    vx, vy = velocity
+    speed = (vx * vx + vy * vy) ** 0.5
+    if speed < 1e-9:
+        return None
+    direction = (vx / speed, vy / speed)
+    magnitude = speed * KUZUSHI_PER_MPS
+    event = KuzushiEvent(
+        tick_emitted=current_tick, vector=direction,
+        magnitude=magnitude, source_kind=source_kind,
+    )
+    judoka.kuzushi_events.append(event)
+    return event
+
+
 # ===========================================================================
 # HAJ-131 — PULL → KuzushiEvent emission
 # ===========================================================================
@@ -186,6 +222,29 @@ def record_kuzushi_event(judoka: "Judoka", event: KuzushiEvent) -> None:
 # black-belt with neutral fight_iq a magnitude of order ~30, comparable
 # in scale to the CoM forces in match.py. Final value tuned in HAJ-A.7.
 BASE_PULL_KUZUSHI_FORCE: float = 100.0
+
+
+# ---------------------------------------------------------------------------
+# UNIT CONVERSIONS (HAJ-132 — signature_match reads buffer)
+# ---------------------------------------------------------------------------
+# Throw templates declare kuzushi-vector thresholds in physical units:
+#   - Couple: `min_velocity_magnitude` in m/s
+#   - Lever:  `min_displacement_past_recoverable` in meters
+# The buffer's accumulated magnitude is in symbolic kuzushi-force units
+# (dimensionless multiples of BASE_PULL_KUZUSHI_FORCE). These constants
+# convert the per-template thresholds into the buffer's units so the
+# throw-signature comparison is meaningful.
+#
+# Tuning rationale (calibration stubs; HAJ-A.7 will tune):
+#   - KUZUSHI_PER_MPS = 100: a 0.4 m/s threshold (e.g. Sumi-gaeshi) becomes
+#     40 kuzushi units, achievable from one strong PULL or two moderate
+#     pulls composing in the buffer.
+#   - KUZUSHI_PER_M = 400: a 0.10 m displacement threshold (Lever) becomes
+#     40 kuzushi units, achievable from one strong PULL — Lever throws are
+#     supposed to require sustained kuzushi accumulation, so 0.13–0.15 m
+#     thresholds map to 52–60 units (~2 well-timed pulls).
+KUZUSHI_PER_MPS: float = 100.0
+KUZUSHI_PER_M:   float = 400.0
 
 
 # ---------------------------------------------------------------------------

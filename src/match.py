@@ -825,6 +825,7 @@ class Match:
             desperation_jitter=self._desperation_jitter.get(
                 self.fighter_a.identity.name
             ),
+            current_tick=tick,
         )
         actions_b = select_actions(
             self.fighter_b, self.fighter_a, self.grip_graph,
@@ -839,6 +840,7 @@ class Match:
             desperation_jitter=self._desperation_jitter.get(
                 self.fighter_b.identity.name
             ),
+            current_tick=tick,
         )
         # A fighter mid-attempt must not re-commit — strip any COMMIT_THROW
         # the ladder re-proposes this tick.
@@ -1447,7 +1449,8 @@ class Match:
         # path so a sequence of attacks accumulates even if they're all N=1.
         self._defensive_pressure[defender.identity.name].record_opponent_commit(tick)
 
-        actual = actual_signature_match(throw_id, attacker, defender, self.grip_graph)
+        actual = actual_signature_match(throw_id, attacker, defender, self.grip_graph,
+                                        current_tick=tick)
         commit_threshold = commit_threshold_for(throw_id)
         eq = compute_execution_quality(actual, commit_threshold)
         n = compression_n_for(attacker, throw_id)
@@ -1588,6 +1591,7 @@ class Match:
                 # quality and is_forced flag derived from this fresh value.
                 kake_actual = actual_signature_match(
                     tip.throw_id, attacker, defender, self.grip_graph,
+                    current_tick=tick,
                 )
                 events.extend(self._resolve_kake(
                     attacker, defender, tip.throw_id, kake_actual, tick,
@@ -2252,7 +2256,7 @@ class Match:
         # with near-zero kuzushi). Physics doesn't care about motivation.
         resolution = select_failure_outcome(
             template, attacker, defender, self.grip_graph,
-            throw_id=throw_id,
+            throw_id=throw_id, current_tick=tick,
         )
 
         # HAJ-49 / HAJ-67 — any non-None commit motivation forces the

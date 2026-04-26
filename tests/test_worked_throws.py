@@ -28,6 +28,7 @@ from worked_throws import (
     WORKED_THROWS, worked_template_for,
 )
 from perception import actual_signature_match
+from kuzushi import seed_kuzushi_from_velocity
 import main as main_module
 
 
@@ -105,8 +106,8 @@ def test_uchi_mata_scores_high_when_properly_staged() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite_type=GripTypeV2.LAPEL_HIGH)
-    # Sato facing (-1, 0) — velocity (-0.6, 0) means "forward" in Sato's frame.
-    s.state.body_state.com_velocity = (-0.6, 0.0)
+    # Sato facing (-1, 0) — kuzushi event (-0.6, 0) means "forward" in Sato's frame.
+    seed_kuzushi_from_velocity(s, (-0.6, 0.0))
     score = signature_match(UCHI_MATA, t, s, g)
     assert score >= 0.55   # clears Uchi-mata's commit threshold
 
@@ -136,8 +137,8 @@ def test_o_soto_gari_scores_high_with_backward_kuzushi() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite_type=GripTypeV2.LAPEL_LOW)
-    # Sato tilted slightly back with backward velocity — o-soto kuzushi.
-    s.state.body_state.com_velocity = (0.4, 0.0)       # backward in Sato's frame
+    # Sato tilted slightly back with backward kuzushi event — o-soto.
+    seed_kuzushi_from_velocity(s, (0.4, 0.0))          # backward in Sato's frame
     s.state.body_state.trunk_sagittal = math.radians(-3)
     score = signature_match(O_SOTO_GARI, t, s, g)
     assert score >= O_SOTO_GARI.commit_threshold
@@ -147,9 +148,9 @@ def test_seoi_nage_requires_displaced_uke_and_hips_below() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite_type=GripTypeV2.LAPEL_HIGH)
-    # Staged seoi: uke's CoM forward, tori dropped.
+    # Staged seoi: uke's CoM forward, tori dropped, strong kuzushi event.
     s.state.body_state.com_position = (1.0, 0.0)
-    s.state.body_state.com_velocity = (-0.4, 0.0)
+    seed_kuzushi_from_velocity(s, (-0.4, 0.0))
     t.state.body_state.com_height   = s.state.body_state.com_height - 0.20
     score = signature_match(SEOI_NAGE_MOROTE, t, s, g)
     assert score >= SEOI_NAGE_MOROTE.commit_threshold
@@ -161,7 +162,7 @@ def test_seoi_nage_fails_when_tori_hips_not_below() -> None:
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite_type=GripTypeV2.LAPEL_HIGH)
     s.state.body_state.com_position = (1.0, 0.0)
-    s.state.body_state.com_velocity = (-0.4, 0.0)
+    seed_kuzushi_from_velocity(s, (-0.4, 0.0))
     # Tori's hips LEVEL with uke's — fulcrum geometry fails.
     score = signature_match(SEOI_NAGE_MOROTE, t, s, g)
     assert score < SEOI_NAGE_MOROTE.commit_threshold
@@ -171,7 +172,7 @@ def test_de_ashi_harai_zero_outside_timing_window() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite_type=GripTypeV2.LAPEL_LOW)
-    s.state.body_state.com_velocity = (0.0, 0.4)   # lateral motion
+    seed_kuzushi_from_velocity(s, (0.0, 0.4))   # lateral kuzushi
     # Default weight_fraction = 0.5 — outside (0.1, 0.3).
     score = signature_match(DE_ASHI_HARAI, t, s, g)
     assert score < DE_ASHI_HARAI.commit_threshold
@@ -181,7 +182,7 @@ def test_de_ashi_harai_fires_inside_timing_window() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite_type=GripTypeV2.LAPEL_LOW)
-    s.state.body_state.com_velocity = (0.0, 0.4)
+    seed_kuzushi_from_velocity(s, (0.0, 0.4))
     # Catch the foot mid-step.
     s.state.body_state.foot_state_right.weight_fraction = 0.2
     score = signature_match(DE_ASHI_HARAI, t, s, g)
@@ -210,7 +211,7 @@ def test_template_scorer_matches_direct_call() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s)
-    s.state.body_state.com_velocity = (-0.5, 0.0)
+    seed_kuzushi_from_velocity(s, (-0.5, 0.0))
     direct = signature_match(UCHI_MATA, t, s, g)
     routed = actual_signature_match(ThrowID.UCHI_MATA, t, s, g)
     assert abs(direct - routed) < 1e-9

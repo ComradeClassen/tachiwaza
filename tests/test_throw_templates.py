@@ -39,6 +39,7 @@ from throw_signature import (
     match_body_parts, match_uke_posture,
     signature_match,
 )
+from kuzushi import seed_kuzushi_from_velocity
 import main as main_module
 
 
@@ -241,16 +242,17 @@ def test_kuzushi_zero_when_defender_is_stationary() -> None:
 
 def test_kuzushi_scores_high_with_forward_velocity_matching_direction() -> None:
     t, s = _pair()
-    # Sato faces (-1, 0). Moving in mat-frame (-1, 0) means "forward" in Sato's
-    # body frame — satisfies Uchi-mata's +X direction.
-    s.state.body_state.com_velocity = (-0.6, 0.0)
+    # Sato faces (-1, 0). HAJ-132 — kuzushi-vector reads the event buffer.
+    # A forward-kuzushi event (mat-frame -X) translates to +X in Sato's body
+    # frame, satisfying Uchi-mata's +X direction.
+    seed_kuzushi_from_velocity(s, (-0.6, 0.0))
     throw = _uchi_mata_couple()
     assert match_kuzushi_vector(throw, t, s) >= 0.9
 
 
 def test_kuzushi_penalizes_misaligned_velocity() -> None:
     t, s = _pair()
-    s.state.body_state.com_velocity = (0.0, 0.6)   # perpendicular to +X
+    seed_kuzushi_from_velocity(s, (0.0, 0.6))   # perpendicular to +X
     throw = _uchi_mata_couple()
     # Direction score collapses but magnitude floor is met.
     score = match_kuzushi_vector(throw, t, s)
@@ -259,7 +261,7 @@ def test_kuzushi_penalizes_misaligned_velocity() -> None:
 
 def test_kuzushi_aligned_with_uke_velocity_flag_ignores_direction() -> None:
     t, s = _pair()
-    s.state.body_state.com_velocity = (0.0, 0.5)   # lateral
+    seed_kuzushi_from_velocity(s, (0.0, 0.5))   # lateral
     throw = _deashi_harai_timing()
     assert match_kuzushi_vector(throw, t, s) >= 0.9
 
@@ -372,7 +374,7 @@ def test_signature_match_is_between_zero_and_one() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s)
-    s.state.body_state.com_velocity = (-0.6, 0.0)
+    seed_kuzushi_from_velocity(s, (-0.6, 0.0))
     throw = _uchi_mata_couple()
     score = signature_match(throw, t, s, g)
     assert 0.0 <= score <= 1.0
@@ -386,10 +388,9 @@ def test_signature_match_lever_weighting_differs_from_couple() -> None:
     """
     t, s = _pair()
     g = GripGraph()
-    # No grips. Strong displacement past recoverable envelope — CoM a full
-    # meter forward of centroid so even the narrowed envelope is cleared.
+    # No grips. Strong kuzushi event composed in uke's buffer.
     s.state.body_state.com_position = (1.0, 0.0)
-    s.state.body_state.com_velocity = (-0.5, 0.0)   # forward in uke's frame
+    seed_kuzushi_from_velocity(s, (-0.5, 0.0))   # forward in uke's frame
 
     couple = _uchi_mata_couple()
     lever  = _seoi_lever()

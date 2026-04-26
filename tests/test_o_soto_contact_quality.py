@@ -28,6 +28,7 @@ from throw_signature import (
 )
 from worked_throws import O_SOTO_GARI, DE_ASHI_HARAI
 from execution_quality import compute_execution_quality
+from kuzushi import seed_kuzushi_from_velocity
 import main as main_module
 
 
@@ -176,16 +177,16 @@ def test_execution_quality_varies_with_contact_distance() -> None:
 
     t_close, s_close = _pair(tori_x=0.0, uke_x=prof.ideal_torso_closure_m - 0.05)
     _seat_deep_grips(graph, t_close, s_close)
-    # Give uke a tiny backward velocity so the kuzushi-vector dim is non-zero.
-    s_close.state.body_state.com_velocity = (0.4, 0.0)
+    # Seed a backward kuzushi event so the kuzushi-vector dim is non-zero.
     s_close.state.body_state.facing = (-1.0, 0.0)
+    seed_kuzushi_from_velocity(s_close, (0.4, 0.0))
     sig_close = signature_match(O_SOTO_GARI, t_close, s_close, graph)
 
     graph2 = GripGraph()
     t_far, s_far = _pair(tori_x=0.0, uke_x=prof.max_reaping_contact_m)
     _seat_deep_grips(graph2, t_far, s_far)
-    s_far.state.body_state.com_velocity = (0.4, 0.0)
     s_far.state.body_state.facing = (-1.0, 0.0)
+    seed_kuzushi_from_velocity(s_far, (0.4, 0.0))
     sig_far = signature_match(O_SOTO_GARI, t_far, s_far, graph2)
 
     eq_close = compute_execution_quality(sig_close, O_SOTO_GARI.commit_threshold)

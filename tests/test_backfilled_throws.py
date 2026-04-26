@@ -31,6 +31,7 @@ from worked_throws import (
     HARAI_GOSHI, HARAI_GOSHI_CLASSICAL, TOMOE_NAGE, O_GURUMA,
 )
 from perception import actual_signature_match
+from kuzushi import seed_kuzushi_from_velocity
 import main as main_module
 
 
@@ -156,7 +157,7 @@ def test_actual_signature_match_routes_all_backfilled_throws() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s)
-    s.state.body_state.com_velocity = (-0.5, 0.0)   # forward in uke's frame
+    seed_kuzushi_from_velocity(s, (-0.5, 0.0))   # forward in uke's frame
     for tid in (ThrowID.O_GOSHI, ThrowID.TAI_OTOSHI, ThrowID.KO_UCHI_GARI,
                 ThrowID.O_UCHI_GARI, ThrowID.HARAI_GOSHI,
                 ThrowID.HARAI_GOSHI_CLASSICAL, ThrowID.TOMOE_NAGE,
@@ -177,8 +178,8 @@ def test_o_uchi_gari_scores_with_backward_kuzushi() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite=GripTypeV2.LAPEL_LOW)
-    # Sato facing (-1, 0); backward in body frame means mat +X velocity.
-    s.state.body_state.com_velocity = (0.4, 0.0)
+    # Sato facing (-1, 0); backward in body frame means mat +X kuzushi.
+    seed_kuzushi_from_velocity(s, (0.4, 0.0))
     score = signature_match(O_UCHI_GARI, t, s, g)
     assert score >= O_UCHI_GARI.commit_threshold
 
@@ -199,7 +200,7 @@ def test_o_goshi_needs_hips_below() -> None:
         strength=1.0, established_tick=0, mode=GripMode.DRIVING,
     ))
     s.state.body_state.com_position = (1.0, 0.0)
-    s.state.body_state.com_velocity = (-0.4, 0.0)
+    seed_kuzushi_from_velocity(s, (-0.4, 0.0))
     # Tori hips level → fulcrum geometry fails → score zero (hard gate).
     flat = signature_match(O_GOSHI, t, s, g)
     assert flat == 0.0
@@ -213,7 +214,7 @@ def test_ko_uchi_gari_fires_inside_timing_window() -> None:
     t, s = _pair()
     g = GripGraph()
     _seat_deep_grips(g, t, s, tsurite=GripTypeV2.LAPEL_LOW)
-    s.state.body_state.com_velocity = (0.2, -0.2)
+    seed_kuzushi_from_velocity(s, (0.2, -0.2))
     # Default weight fraction 0.5 — outside the (0.15, 0.40) window.
     outside = signature_match(KO_UCHI_GARI, t, s, g)
     s.state.body_state.foot_state_right.weight_fraction = 0.25

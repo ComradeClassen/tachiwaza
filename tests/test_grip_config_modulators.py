@@ -28,6 +28,7 @@ from throw_signature import (
     DOMINANT_HAND_FREE_LEVER_PENALTY, UKE_UNGRIPPED_COUPLE_BONUS,
 )
 from worked_throws import SEOI_NAGE_MOROTE, O_SOTO_GARI
+from kuzushi import seed_kuzushi_from_velocity
 import main as main_module
 
 
@@ -116,7 +117,7 @@ def _set_seoi_scene(graph: GripGraph, tori, uke) -> None:
     # frame, i.e. backward — not what we want. Flip sign: uke velocity in
     # mat-frame -X direction = +X in uke frame = forward kuzushi.
     uke.state.body_state.com_position = (0.50, 0.0)
-    uke.state.body_state.com_velocity = (-0.6, 0.0)
+    seed_kuzushi_from_velocity(uke, (-0.6, 0.0))
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +246,7 @@ def test_couple_uke_ungripped_raises_execution_quality() -> None:
     g1 = GripGraph()
     _seat_tori_standard_grips_fatigued(g1, t1, s1)
     _seat_uke_counter_grips(g1, t1, s1)
-    s1.state.body_state.com_velocity = (0.4, 0.0)  # backward in uke frame
+    seed_kuzushi_from_velocity(s1, (0.4, 0.0))  # backward in uke frame
     sig_gripped = signature_match(O_SOTO_GARI, t1, s1, g1)
     eq_gripped = compute_execution_quality(
         sig_gripped, O_SOTO_GARI.commit_threshold,
@@ -255,7 +256,7 @@ def test_couple_uke_ungripped_raises_execution_quality() -> None:
     t2, s2 = _pair()
     g2 = GripGraph()
     _seat_tori_standard_grips_fatigued(g2, t2, s2)
-    s2.state.body_state.com_velocity = (0.4, 0.0)
+    seed_kuzushi_from_velocity(s2, (0.4, 0.0))
     sig_free = signature_match(O_SOTO_GARI, t2, s2, g2)
     eq_free = compute_execution_quality(
         sig_free, O_SOTO_GARI.commit_threshold,

@@ -128,12 +128,14 @@ def actual_signature_match(
     attacker: "Judoka",
     defender: "Judoka",
     graph: "GripGraph",
+    current_tick: int = 0,
 ) -> float:
     from worked_throws import worked_template_for
     template = worked_template_for(throw_id)
     if template is not None:
         from throw_signature import signature_match
-        base = signature_match(template, attacker, defender, graph)
+        base = signature_match(template, attacker, defender, graph,
+                               current_tick=current_tick)
     else:
         # --- Legacy two-factor path ---
         td_ = THROW_DEFS.get(throw_id)
