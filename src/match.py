@@ -69,7 +69,15 @@ from commit_motivation import (
 
 # Engagement (Part 2.7): baseline floor; actual duration is max of
 # reach_ticks_for(a) and reach_ticks_for(b), enforced from the graph.
-ENGAGEMENT_TICKS_FLOOR: int = 2
+#
+# HAJ-141 — this floor is the closing-phase tick window. Both fighters
+# begin a match (and every matte resume) in Position.STANDING_DISTANT
+# with no edges. While distant, the action ladder issues REACH and the
+# locomotion intent steps the dyad into engagement range; first grip
+# seating is held off until the floor elapses. v0.1 calibration: 1 tick
+# = 1 second, so 3 ticks ≈ "fighters spend 1–3 seconds closing distance
+# before the first grip attempt" from the issue's real-match observation.
+ENGAGEMENT_TICKS_FLOOR: int = 3
 
 # Part 2.6 passivity clocks (1 tick = 1 second in v0.1).
 KUMI_KATA_SHIDO_TICKS:        int = 30   # grip-to-attack threshold
@@ -826,6 +834,7 @@ class Match:
                 self.fighter_a.identity.name
             ),
             current_tick=tick,
+            position=self.position,
         )
         actions_b = select_actions(
             self.fighter_b, self.fighter_a, self.grip_graph,
@@ -841,6 +850,7 @@ class Match:
                 self.fighter_b.identity.name
             ),
             current_tick=tick,
+            position=self.position,
         )
         # A fighter mid-attempt must not re-commit — strip any COMMIT_THROW
         # the ladder re-proposes this tick.
@@ -1445,6 +1455,32 @@ class Match:
         # Reject a second commit from the same attacker while one is in-flight.
         if attacker.identity.name in self._throws_in_progress:
             return []
+
+        # HAJ-141 — engagement-distance gate. A fighter cannot commit a
+        # throw while the dyad is still in STANDING_DISTANT (closing phase
+        # before grips have seated). Defense in depth: the action ladder
+        # already routes to REACH when own_edges is empty, but the
+        # defensive-desperation flag bypasses that path. This gate stops
+        # the bypass from firing throws out of thin air at match start /
+        # post-matte before the closing phase has elapsed.
+        #
+        # The own-edges check makes the gate a true closing-phase check
+        # (no grips → no contact → no throw geometry). Tests that seat
+        # edges manually for direct-resolve coverage flow through; only
+        # genuinely pre-engagement commits are denied.
+        if (self.position == Position.STANDING_DISTANT
+                and not self.grip_graph.edges_owned_by(attacker.identity.name)):
+            return [Event(
+                tick=tick,
+                event_type="THROW_DENIED_DISTANT",
+                description=(
+                    f"[throw] {attacker.identity.name} commit denied — "
+                    f"still closing distance (no engagement yet)."
+                ),
+                data={"attacker": attacker.identity.name,
+                      "throw_id": throw_id.name,
+                      "reason": "standing_distant"},
+            )]
 
         # HAJ-127 — start-of-attack OOB gate. A fighter already over the
         # boundary cannot legally fire a throw — denies edge cheese (foot
@@ -2653,6 +2689,15 @@ class Match:
         A passivity penalty during an active commit is incoherent: the
         fighter IS attacking. The clock advances again the tick after the
         attempt resolves (success, failure, or block).
+
+        HAJ-141 — the `if owned` gate is what anchors the kumi-kata clock
+        to first-grip-seated rather than to hajime. While the dyad is in
+        STANDING_DISTANT (no edges have seated yet), no fighter owns any
+        grip, so the clock stays at 0 across the whole closing phase. The
+        first tick the fighter can be passive about kumi-kata is the tick
+        their first grip exists — which is the spec's intent (Part 2.6:
+        "from the moment a judoka establishes any grip, they have 30
+        seconds to make an attack").
         """
         for fighter in (self.fighter_a, self.fighter_b):
             name = fighter.identity.name

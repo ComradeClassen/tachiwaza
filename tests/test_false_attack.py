@@ -294,6 +294,9 @@ def test_commit_log_line_tags_commit_motivation() -> None:
         fighter_a=tori, fighter_b=uke, referee=build_suzuki(),
         stream="debug", seed=1,
     )
+    # HAJ-141 — bypass the engagement-distance gate for the direct-resolve call.
+    from enums import Position
+    m.position = Position.GRIPPING
     # Directly resolve a non-scoring-motivation commit via the match API.
     evts = m._resolve_commit_throw(
         tori, uke, ThrowID.TAI_OTOSHI, tick=20,

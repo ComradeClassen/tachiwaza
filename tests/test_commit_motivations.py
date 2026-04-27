@@ -343,10 +343,17 @@ def test_dispatcher_priority_clock_reset_wins_over_others() -> None:
 def _build_match(tori, uke):
     from match import Match
     from referee import build_suzuki
-    return Match(
+    from enums import Position
+    m = Match(
         fighter_a=tori, fighter_b=uke, referee=build_suzuki(),
         stream="debug", seed=1,
     )
+    # HAJ-141 — these tests poke _resolve_commit_throw and _resolve_failed_commit
+    # directly to verify motivation tagging; bypass the engagement-distance gate
+    # by flipping out of STANDING_DISTANT (production flow does the same the
+    # tick first edges seat).
+    m.position = Position.GRIPPING
+    return m
 
 
 def test_grip_escape_renders_grip_escape_prose() -> None:

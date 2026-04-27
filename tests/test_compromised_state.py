@@ -197,10 +197,14 @@ def test_match_tracks_compromised_state_on_failure() -> None:
     """A failed worked-template throw sets _compromised_states[attacker]."""
     from match import Match
     from referee import build_suzuki
+    from enums import Position
     random.seed(0)
     t, s = _pair()
     t.identity.belt_rank = BeltRank.BLACK_5   # N=1 for single-tick resolve
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+    # HAJ-141 — bypass the engagement-distance gate for this commit-resolution
+    # unit test. Production flow would set this when first edges seat.
+    m.position = Position.GRIPPING
     import match as match_module
     real_resolve = match_module.resolve_throw
     match_module.resolve_throw = lambda *a, **kw: ("FAILED", -5.0)
@@ -234,12 +238,15 @@ def test_match_desperation_overlay_in_failed_event() -> None:
     """
     from match import Match
     from referee import build_suzuki
+    from enums import Position
     random.seed(0)
     t, s = _pair()
     t.identity.belt_rank = BeltRank.BLACK_5     # N=1
     # Panic tori's composure.
     t.state.composure_current = 0.1
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+    # HAJ-141 — bypass the engagement-distance gate for the direct-resolve call.
+    m.position = Position.GRIPPING
     # Load the kumi-kata clock near shido.
     m.kumi_kata_clock[t.identity.name] = DESPERATION_CLOCK_TICKS + 5
     import match as match_module

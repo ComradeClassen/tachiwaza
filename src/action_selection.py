@@ -19,7 +19,7 @@ from actions import (
 )
 from enums import (
     GripTypeV2, GripDepth, GripTarget, GripMode, DominantSide, StanceMatchup,
-    PositionalStyle,
+    PositionalStyle, Position,
 )
 from throws import THROW_DEFS, ThrowID
 from grip_presence_gate import evaluate_gate, GateResult, REASON_OK
@@ -140,13 +140,26 @@ def select_actions(
     opponent_in_progress_throw: Optional[ThrowID] = None,
     desperation_jitter: Optional[dict] = None,
     current_tick: int = 0,
+    position: Optional[Position] = None,
 ) -> list[Action]:
     """Return the judoka's chosen actions for this tick.
 
     Implements the Part 3.3 priority ladder. Returns 1-2 Actions, or a
     single-element list containing COMMIT_THROW. HAJ-128 may append a
     STEP locomotion action to the result when positional intent fires.
+
+    HAJ-141 — `position` lets the ladder skip the commit/grip-sub-loop
+    rungs entirely while the dyad is in STANDING_DISTANT (closing phase).
+    No grip exists, no commit is reachable; the only legal output is the
+    REACH pair that drives engagement. None preserves legacy behavior
+    for tests that call select_actions directly without a Match context.
     """
+    # HAJ-141 — closing-phase short-circuit. During STANDING_DISTANT the
+    # only legal action is to reach for engagement; the commit / drive /
+    # rung-2-bypass paths assume an established dyad and must not fire.
+    if position == Position.STANDING_DISTANT:
+        return _reach_actions(judoka)
+
     r = rng if rng is not None else random
     actions = _select_grip_actions(
         judoka, opponent, graph, kumi_kata_clock, r,

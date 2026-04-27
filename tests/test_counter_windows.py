@@ -266,6 +266,11 @@ def test_counter_fires_mid_attempt_and_aborts_original() -> None:
     s.state.composure_current = float(s.capability.composure_ceiling)
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
     _seat_deep_grips(m.grip_graph, t, s)
+    # HAJ-141 — Sato is the counter-attacker but has no own edges in this
+    # setup; the engagement-distance gate would deny her commit. Production
+    # flow always has the dyad in GRIPPING/ENGAGED before counters fire.
+    from enums import Position
+    m.position = Position.GRIPPING
 
     # Tanaka starts a 2-tick Uchi-mata attempt (sukashi_vulnerability=0.75).
     m._resolve_commit_throw(t, s, ThrowID.UCHI_MATA, tick=1)

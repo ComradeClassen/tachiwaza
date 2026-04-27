@@ -117,6 +117,12 @@ class PositionMachine:
         Requires:
           1. Position is GRIPPING or ENGAGED (not distant, not scramble, not ne-waza)
           2. The grip graph satisfies the throw's EdgeRequirements
+
+        HAJ-141 — STANDING_DISTANT is explicitly excluded: the closing
+        phase is pre-engagement and no throw is reachable. Match enforces
+        the same guard at the resolution layer (see _resolve_commit_throw)
+        as defense in depth against ladder paths that bypass the grip-
+        presence gate (e.g. defensive desperation).
         """
         if current_pos not in (Position.GRIPPING, Position.ENGAGED):
             return False

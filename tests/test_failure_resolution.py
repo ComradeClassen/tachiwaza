@@ -165,6 +165,9 @@ def test_match_failed_branch_emits_typed_failure_event_for_worked_throws() -> No
     t, s = _pair()
     t.identity.belt_rank = BeltRank.BLACK_5   # Force N=1 for predictable single-tick resolve.
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+    # HAJ-141 — direct-resolve unit test; bypass the engagement-distance gate.
+    from enums import Position
+    m.position = Position.GRIPPING
     import match as match_module
     real_resolve = match_module.resolve_throw
     match_module.resolve_throw = lambda *a, **kw: ("FAILED", -5.0)
@@ -190,6 +193,9 @@ def test_multi_tick_failure_resolves_at_kake_commit_tick() -> None:
     t, s = _pair()
     # Tanaka BLACK_1 + UCHI_MATA (non-signature) → N=2.
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+    # HAJ-141 — direct-resolve unit test; bypass the engagement-distance gate.
+    from enums import Position
+    m.position = Position.GRIPPING
     import match as match_module
     real_resolve = match_module.resolve_throw
     match_module.resolve_throw = lambda *a, **kw: ("FAILED", -5.0)
@@ -222,6 +228,9 @@ def test_match_failed_branch_for_legacy_throw_is_unchanged() -> None:
     t, s = _pair()
     t.identity.belt_rank = BeltRank.BLACK_5
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+    # HAJ-141 — direct-resolve unit test; bypass the engagement-distance gate.
+    from enums import Position
+    m.position = Position.GRIPPING
     import match as match_module
     real_resolve = match_module.resolve_throw
     match_module.resolve_throw = lambda *a, **kw: ("FAILED", -5.0)
