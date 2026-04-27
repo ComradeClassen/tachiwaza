@@ -125,6 +125,17 @@ STANCE_LEASH_M: float = 0.45
 # ENGAGEMENT_TICKS_FLOOR + POST_SCORE_RECOVERY_TICKS ≈ 5 ticks.
 POST_SCORE_RECOVERY_TICKS: int = 2
 
+# HAJ-140 — stun applied to a stuffed aggressor regardless of whether the
+# stuffed dispatch transitioned to ne-waza. Real judo: the stuffed fighter
+# is on a knee or worse, and cannot fire another commit on the very next
+# tick. Pre-fix the stuffed aggressor's `defensive_desperation` flag
+# bypassed the empty-grip rung and produced eq=0.00 commits the same tick
+# they were stuffed (HAJ-140 example log). Stun blocks action selection
+# entirely (it's the rung-1 gate in select_actions) so even desperation
+# can't push through. Tunes for ~3 ticks of recovery, slightly less than
+# a typical FAILED throw's recovery (those are deeper compromises).
+STUFFED_AGGRESSOR_STUN_TICKS: int = 3
+
 # HAJ-127 / HAJ-128 — out-of-bounds boundary, IJF reference half-width.
 #
 # 4.0 m matches the IJF 8 × 8 m contest area, centered on the mat origin.
@@ -2281,6 +2292,16 @@ class Match:
                 attacker.state.composure_current = max(
                     0.0,
                     attacker.state.composure_current - 0.3
+                )
+                # HAJ-140 — stun the stuffed aggressor so they can't fire
+                # another commit on the very next tick. Action selection's
+                # rung-1 stun gate blocks even defensive-desperation pushes.
+                # Stun applies regardless of whether ne-waza dispatch fires;
+                # if it does, the stun is moot (sub_loop_state goes NE_WAZA);
+                # if it doesn't, this is what holds the stuffed fighter from
+                # firing a fresh throw inside the STUFFED_MATTE window.
+                attacker.state.stun_ticks = max(
+                    attacker.state.stun_ticks, STUFFED_AGGRESSOR_STUN_TICKS,
                 )
                 # Roll for ne-waza commitment
                 stuffed_events = self._resolve_newaza_transition(

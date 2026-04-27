@@ -141,8 +141,21 @@ class NewazaResolver:
         """Roll whether the fighters go to the ground after a stuffed throw.
 
         Either fighter committing transitions both to NE_WAZA.
-        The fighter with higher ne_waza_skill and lower fatigue is more
-        likely to commit — they see the ground window and go for it.
+
+        HAJ-140 — pre-fix probabilities sat around ~0.10-0.20 each, so
+        stuffed throws stayed standing ~75% of the time and the aggressor
+        + defender both kept firing desperation commits in the next tick.
+        Real judo: a stuffed throw is a near-instant transition to ne-waza
+        because the aggressor is on a knee / off-balance and the defender
+        capitalizes immediately. The defender is heavily favored — their
+        posture is intact, they've absorbed the throw force, and the
+        ground window is wide open. The aggressor sometimes commits too
+        (sacrifice scramble for top position).
+
+        Defender is the dominant dispatcher; aggressor is opportunistic.
+        Both probabilities scale with ne_waza_skill so a no-ne-waza fighter
+        still occasionally lets the dyad reset (and then the referee's
+        STUFFED_MATTE_TICKS window catches it).
         """
         agg_nw  = aggressor.capability.ne_waza_skill / 10.0
         def_nw  = defender.capability.ne_waza_skill / 10.0
@@ -151,12 +164,29 @@ class NewazaResolver:
         def_fat = 1.0 - (defender.state.cardio_current * 0.5 +
                          0.5 * (1.0 - defender.state.body["core"].fatigue))
 
-        # Either fighter committing is enough
-        agg_commit_prob = agg_nw * (1.0 - agg_fat) * window_quality * 0.6
-        def_commit_prob = def_nw * (1.0 - def_fat) * 0.5   # defender opportunistic
+        # Defender: heavy baseline (0.65) + skill bonus up to +0.30, lightly
+        # modulated by fatigue. A median-skill, average-fatigued defender
+        # commits ~0.85 of the time; an elite ne-waza specialist nearly
+        # always commits.
+        def_commit_prob = (
+            0.65 + 0.30 * def_nw - 0.15 * def_fat
+        )
+        # Aggressor: still sometimes commits (sacrifice scramble for top
+        # position). Modest baseline (0.30) + skill bonus, scaled by
+        # window quality so a clean stuff (worse aggressor positioning)
+        # means less follow-through.
+        agg_commit_prob = (
+            0.30 + 0.30 * agg_nw - 0.15 * agg_fat
+        ) * max(0.5, window_quality)
 
-        return (random.random() < agg_commit_prob
-                or random.random() < def_commit_prob)
+        # Clamp to [0.0, 0.98] so a stuffed throw is never a guaranteed
+        # transition — there's always a small chance both fighters reset
+        # and the referee's STUFFED_MATTE_TICKS handles it.
+        def_commit_prob = max(0.0, min(0.98, def_commit_prob))
+        agg_commit_prob = max(0.0, min(0.98, agg_commit_prob))
+
+        return (random.random() < def_commit_prob
+                or random.random() < agg_commit_prob)
 
     # -----------------------------------------------------------------------
     # PER-TICK RESOLUTION
