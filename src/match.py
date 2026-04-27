@@ -117,6 +117,14 @@ STEP_CARDIO_COST: float = 0.0015
 # resting separation; 0.45 m is generous enough to allow open stances.
 STANCE_LEASH_M: float = 0.45
 
+# HAJ-139 — post-score recovery bonus. After a non-match-ending waza-ari
+# (or downgraded NO_SCORE landing), both fighters reset to STANDING_DISTANT
+# for the closing-phase pause, plus this many extra ticks of recovery so
+# the post-throw beat (getting up, walking back near the mark, gi adjust)
+# isn't compressed into a single tick. Total pause before next grip seat:
+# ENGAGEMENT_TICKS_FLOOR + POST_SCORE_RECOVERY_TICKS ≈ 5 ticks.
+POST_SCORE_RECOVERY_TICKS: int = 2
+
 # HAJ-127 / HAJ-128 — out-of-bounds boundary, IJF reference half-width.
 #
 # 4.0 m matches the IJF 8 × 8 m contest area, centered on the mat origin.
@@ -2217,9 +2225,17 @@ class Match:
                         event_type="IPPON_AWARDED",
                         description=f"[ref: {self.referee.name}] Two waza-ari — Ippon! {a_name} wins.",
                     ))
-                # HAJ-44 — single waza-ari is announced and play continues.
-                # Real judo does not call Matte here; the sub-loop carries
-                # on, and should_call_matte will fire if the action stalls.
+                else:
+                    # HAJ-139 — single waza-ari is announced and play
+                    # continues, but the dyad must reset to STANDING_DISTANT
+                    # before the next throw can fire. Pre-HAJ-139 the
+                    # sub-loop carried on with all the same grips, so
+                    # the next commit could land the very next tick;
+                    # post-fix, both fighters disengage, recover, and
+                    # close distance again. Real judo: ~5s beat for the
+                    # uke to roll, both to get up, gi adjustment, walk
+                    # back near the mark.
+                    events.extend(self._post_score_reset(tick, "waza-ari"))
 
             else:  # NO_SCORE despite high raw net — ref downgraded it
                 events.append(Event(
@@ -2233,6 +2249,10 @@ class Match:
                     data={"execution_quality": execution_quality,
                           "quality_band": band.name},
                 ))
+                # HAJ-139 — even a downgraded landing put a fighter on
+                # the mat; reset to STANDING_DISTANT so the post-throw
+                # beat plays out before re-engagement.
+                events.extend(self._post_score_reset(tick, "no-score landing"))
 
         elif outcome == "STUFFED":
             # HAJ-49 / HAJ-67 — a STUFFED result on any non-scoring
@@ -2563,7 +2583,58 @@ class Match:
     # MATTE HANDLING — resets match state for next exchange
     # -----------------------------------------------------------------------
     def _handle_matte(self, tick: int) -> None:
-        """Reset the sub-loop for the next exchange after a Matte call."""
+        """Reset the sub-loop for the next exchange after a Matte call.
+
+        HAJ-139 — delegates to _reset_dyad_to_distant. Matte uses the
+        baseline closing phase (no extra recovery): the matte announcement
+        itself is the prose beat, and the standard 3-tick floor handles
+        the walk-back rhythm.
+        """
+        self._reset_dyad_to_distant(tick, recovery_bonus=0)
+
+    def _post_score_reset(self, tick: int, reason: str) -> list[Event]:
+        """HAJ-139 — reset the dyad to STANDING_DISTANT after a non-match-
+        ending score landing (waza-ari, downgraded NO_SCORE).
+
+        Emits a SCORE_RESET event for prose visibility and dispatches
+        through the shared _reset_dyad_to_distant helper with the
+        post-score recovery bonus so the closing-phase pause is a beat
+        longer than first-engagement (gi adjust, walk back to mark).
+        """
+        self._reset_dyad_to_distant(
+            tick, recovery_bonus=POST_SCORE_RECOVERY_TICKS,
+        )
+        return [Event(
+            tick=tick,
+            event_type="SCORE_RESET",
+            description=(
+                f"[reset] Both fighters return to engagement distance "
+                f"after {reason}."
+            ),
+            data={"reason": reason,
+                  "recovery_bonus": POST_SCORE_RECOVERY_TICKS},
+        )]
+
+    # -----------------------------------------------------------------------
+    # POST-SCORE / POST-MATTE — shared dyad reset to STANDING_DISTANT
+    # -----------------------------------------------------------------------
+    def _reset_dyad_to_distant(self, tick: int, recovery_bonus: int = 0) -> None:
+        """Reset the dyad to STANDING_DISTANT and seed the closing phase.
+
+        HAJ-139 — extracted from _handle_matte so post-score awards
+        (waza-ari, NO_SCORE-downgraded landings) can dispatch through the
+        same path. Match-side dispatch points:
+
+          - _handle_matte (recovery_bonus=0)
+          - _apply_throw_result post-WAZA_ARI / post-NO_SCORE
+            (recovery_bonus=POST_SCORE_RECOVERY_TICKS)
+
+        recovery_bonus pre-decrements engagement_ticks below zero so the
+        closing-phase floor takes that many extra ticks to clear before
+        the next grip can seat. With STANDING_DISTANT short-circuiting
+        select_actions to REACH (HAJ-141), engagement_ticks accumulates
+        monotonically and the bonus is honored.
+        """
         # Break all edges
         self.grip_graph.break_all_edges()
         # Stop osaekomi if running
@@ -2575,13 +2646,13 @@ class Match:
         # Reset sub-loop to standing + physics state.
         self._stuffed_throw_tick = 0
         self.sub_loop_state      = SubLoopState.STANDING
-        self.engagement_ticks    = 0
+        self.engagement_ticks    = -recovery_bonus
         self.stalemate_ticks     = 0
         self._a_was_kuzushi_last_tick = False
         self._b_was_kuzushi_last_tick = False
         self.position = Position.STANDING_DISTANT
         # Reset postures + CoM velocity/position for a clean re-engage.
-        # HAJ-128 — also reset feet via place_judoka so a Matte after a
+        # HAJ-128 — also reset feet via place_judoka so a reset after a
         # throw / ne-waza chunk doesn't leave foot dots stranded where
         # the displacement happened.
         from body_state import place_judoka as _place
