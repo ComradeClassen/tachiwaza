@@ -249,7 +249,19 @@ def _select_grip_actions(
     deep_enough = [e for e in own_edges
                    if e.depth_level in (GripDepth.STANDARD, GripDepth.DEEP)]
     if not deep_enough:
-        out: list[Action] = [deepen(own_edges[0])]
+        # HAJ-138 — rotate which shallow edge to deepen. Pre-fix, this
+        # always picked own_edges[0] (the lapel, created first at
+        # engagement), so the sleeve never advanced and the log was an
+        # endless string of "deepens LAPEL_HIGH" lines. Rotate through
+        # the shallow edges by tick so both hands get a turn, with the
+        # established_tick as a stable secondary key so the order is
+        # deterministic across calls.
+        shallow_sorted = sorted(
+            own_edges,
+            key=lambda e: (e.depth_level.modifier(), e.established_tick),
+        )
+        edge_to_deepen = shallow_sorted[current_tick % len(shallow_sorted)]
+        out: list[Action] = [deepen(edge_to_deepen)]
         if opp_edges:
             target = max(opp_edges, key=lambda e: e.depth_level.modifier())
             strip_hand = _free_hand(judoka) or "right_hand"

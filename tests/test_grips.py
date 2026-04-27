@@ -378,6 +378,139 @@ def test_legacy_grip_type_maps_pocket_to_pocket() -> None:
 
 
 # ---------------------------------------------------------------------------
+# HAJ-138 — net-zero oscillation coalescing
+# ---------------------------------------------------------------------------
+def test_oscillation_coalescing_drops_both_deepen_and_degrade() -> None:
+    """When a tick contains both a successful DEEPEN and a degrade that
+    return an edge to its pre-tick depth, neither event should appear in
+    the log. Pre-fix, the GRIP_DEGRADE was dropped but the GRIP_DEEPEN
+    was kept, producing 20+ ticks of asymmetric "Tanaka deepens
+    LAPEL_HIGH → STANDARD" lines while nothing actually changed.
+    """
+    from match import Match
+    from referee import build_suzuki
+    from grip_graph import Event as _Event
+
+    t = main_module.build_tanaka()
+    s = main_module.build_sato()
+    place_judoka(t, com_position=(-0.5, 0.0), facing=(1.0, 0.0))
+    place_judoka(s, com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
+    m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+
+    edge = GripEdge(
+        grasper_id=t.identity.name, grasper_part=BodyPart.RIGHT_HAND,
+        target_id=s.identity.name, target_location=GripTarget.LEFT_LAPEL,
+        grip_type_v2=GripTypeV2.LAPEL_HIGH, depth_level=GripDepth.POCKET,
+        strength=1.0, established_tick=0,
+    )
+    m.grip_graph.add_edge(edge)
+
+    pre_tick_depths = {id(edge): GripDepth.POCKET}
+    events: list[_Event] = [
+        _Event(tick=10, event_type="GRIP_DEEPEN",
+               description="[grip] t deepens LAPEL_HIGH → STANDARD",
+               data={"edge_id": id(edge), "from": "POCKET", "to": "STANDARD"}),
+        _Event(tick=10, event_type="GRIP_DEGRADE",
+               description="[grip] t right_hand LAPEL_HIGH → POCKET",
+               data={"edge_id": id(edge)}),
+    ]
+    # Edge ended the tick at POCKET (pre-tick depth) — pure oscillation.
+    edge.depth_level = GripDepth.POCKET
+
+    progress = m._coalesce_grip_oscillation(events, pre_tick_depths)
+    assert progress is False, "no real grip progress made"
+    assert not any(ev.event_type in ("GRIP_DEEPEN", "GRIP_DEGRADE")
+                   for ev in events), \
+        "both oscillating events should be coalesced away"
+
+
+def test_oscillation_does_not_reset_stalemate_counter() -> None:
+    """Pre-fix, two fighters infinitely cancelling each other's grips
+    reset the stalemate counter every tick (any DEEPEN/STRIP action
+    counted as progress), so matte never fired even though nothing was
+    actually changing. Post-fix, only events that survive
+    `_coalesce_grip_oscillation` count as progress.
+    """
+    from match import Match
+    from referee import build_suzuki
+    from actions import deepen, strip
+
+    t = main_module.build_tanaka()
+    s = main_module.build_sato()
+    place_judoka(t, com_position=(-0.5, 0.0), facing=(1.0, 0.0))
+    place_judoka(s, com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
+    m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+
+    fake_t_edge = GripEdge(
+        grasper_id=t.identity.name, grasper_part=BodyPart.RIGHT_HAND,
+        target_id=s.identity.name, target_location=GripTarget.LEFT_LAPEL,
+        grip_type_v2=GripTypeV2.LAPEL_HIGH, depth_level=GripDepth.POCKET,
+        strength=1.0, established_tick=0,
+    )
+    fake_s_edge = GripEdge(
+        grasper_id=s.identity.name, grasper_part=BodyPart.RIGHT_HAND,
+        target_id=t.identity.name, target_location=GripTarget.LEFT_LAPEL,
+        grip_type_v2=GripTypeV2.LAPEL_HIGH, depth_level=GripDepth.POCKET,
+        strength=1.0, established_tick=0,
+    )
+    m.grip_graph.add_edge(fake_t_edge)
+    m.grip_graph.add_edge(fake_s_edge)
+
+    actions_a = [deepen(fake_t_edge), strip("left_hand", fake_s_edge)]
+    actions_b = [deepen(fake_s_edge), strip("left_hand", fake_t_edge)]
+
+    m.stalemate_ticks = 5
+    # Net-zero: simulate by passing net_grip_progress=False directly.
+    m._update_stalemate_counter(
+        actions_a, actions_b, a_kuzushi=False, b_kuzushi=False,
+        net_grip_progress=False,
+    )
+    assert m.stalemate_ticks == 6, \
+        "oscillation alone should not reset the stalemate counter"
+
+    # Real progress (an event that survived coalescing) does reset.
+    m._update_stalemate_counter(
+        actions_a, actions_b, a_kuzushi=False, b_kuzushi=False,
+        net_grip_progress=True,
+    )
+    assert m.stalemate_ticks == 0
+
+
+def test_real_deepen_progress_still_emits_event() -> None:
+    """Sanity: when a deepen takes an edge POCKET → STANDARD with no
+    matching degrade, the event must survive coalescing — otherwise we
+    silence real grip progress along with the oscillation."""
+    from match import Match
+    from referee import build_suzuki
+    from grip_graph import Event as _Event
+
+    t = main_module.build_tanaka()
+    s = main_module.build_sato()
+    place_judoka(t, com_position=(-0.5, 0.0), facing=(1.0, 0.0))
+    place_judoka(s, com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
+    m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
+
+    edge = GripEdge(
+        grasper_id=t.identity.name, grasper_part=BodyPart.RIGHT_HAND,
+        target_id=s.identity.name, target_location=GripTarget.LEFT_LAPEL,
+        grip_type_v2=GripTypeV2.LAPEL_HIGH, depth_level=GripDepth.STANDARD,
+        strength=1.0, established_tick=0,
+    )
+    m.grip_graph.add_edge(edge)
+
+    pre_tick_depths = {id(edge): GripDepth.POCKET}
+    events: list[_Event] = [
+        _Event(tick=10, event_type="GRIP_DEEPEN",
+               description="[grip] t deepens LAPEL_HIGH → STANDARD",
+               data={"edge_id": id(edge), "from": "POCKET", "to": "STANDARD"}),
+    ]
+    progress = m._coalesce_grip_oscillation(events, pre_tick_depths)
+    assert progress is True
+    assert len(events) == 1
+    assert events[0].event_type == "GRIP_DEEPEN"
+
+
+# ---------------------------------------------------------------------------
 # Integration — match still runs end-to-end
 # ---------------------------------------------------------------------------
 def test_match_still_runs_end_to_end_with_part_2_wiring() -> None:

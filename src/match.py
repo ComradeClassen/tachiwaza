@@ -868,7 +868,9 @@ class Match:
         pre_tick_depths = {id(e): e.depth_level for e in self.grip_graph.edges}
         self._apply_grip_actions(self.fighter_a, actions_a, tick, events)
         self._apply_grip_actions(self.fighter_b, actions_b, tick, events)
-        self._coalesce_grip_degrades(events, pre_tick_depths)
+        net_grip_progress = self._coalesce_grip_oscillation(
+            events, pre_tick_depths,
+        )
 
         # If still pre-engagement (no edges) and both fighters issued REACH
         # this tick, accumulate engagement_ticks. Seat POCKET grips once the
@@ -964,7 +966,10 @@ class Match:
 
         # Stalemate counter: increments on ticks with no kuzushi on either
         # fighter and no commit — referee Matte hinges on this.
-        self._update_stalemate_counter(actions_a, actions_b, a_kuzushi, b_kuzushi)
+        self._update_stalemate_counter(
+            actions_a, actions_b, a_kuzushi, b_kuzushi,
+            net_grip_progress=net_grip_progress,
+        )
 
         # Part 2.6 + legacy passivity clocks.
         self._update_grip_passivity(tick, events)
@@ -1135,31 +1140,47 @@ class Match:
                 if edge.grasper_id == self.fighter_a.identity.name
                 else self.fighter_b)
 
-    def _coalesce_grip_degrades(
+    def _coalesce_grip_oscillation(
         self, events: list[Event], pre_tick_depths: dict,
-    ) -> None:
-        """Drop GRIP_DEGRADE events whose edge ended the tick at its pre-tick
-        depth. Both fighters deepen-then-strip each other's grips every tick
-        in the shallow-grips branch of the action ladder; the strip fires a
-        degrade event even when the grasper's own DEEPEN this tick already
-        reversed it. Net-zero transitions are log noise.
+    ) -> bool:
+        """Drop GRIP_DEEPEN and GRIP_DEGRADE events whose edge ended the tick
+        at its pre-tick depth. HAJ-138 — both fighters deepen-then-strip each
+        other every tick in the shallow-grips branch of the action ladder;
+        each edge ends back at its starting depth. The pre-fix code dropped
+        only the degrade events, so the log read like one-sided endless
+        deepening ("Tanaka deepens LAPEL_HIGH → STANDARD" repeating for
+        20+ ticks) when in fact nothing was changing. We now drop the deepen
+        too — net-zero transitions produce no log line.
+
+        Returns True if any GRIP_DEEPEN / GRIP_DEGRADE / GRIP_STRIPPED event
+        survived after coalescing — i.e. real grip progress happened this
+        tick. The caller feeds this into the stalemate counter so endless
+        oscillation no longer prevents matte.
         """
         live_edges = {id(e): e for e in self.grip_graph.edges}
         filtered: list[Event] = []
+        net_progress = False
         for ev in events:
-            if ev.event_type != "GRIP_DEGRADE":
+            if ev.event_type not in ("GRIP_DEEPEN", "GRIP_DEGRADE"):
+                if ev.event_type == "GRIP_STRIPPED":
+                    net_progress = True
                 filtered.append(ev)
                 continue
             edge_id = ev.data.get("edge_id")
             edge = live_edges.get(edge_id) if edge_id is not None else None
             if edge is None:
+                # Edge went away (force-break, stripped past SLIPPING) — keep
+                # the event; it represents a real change.
                 filtered.append(ev)
+                net_progress = True
                 continue
             pre = pre_tick_depths.get(edge_id)
             if pre is not None and edge.depth_level == pre:
-                continue  # net-zero oscillation
+                continue  # net-zero oscillation — drop both directions
             filtered.append(ev)
+            net_progress = True
         events[:] = filtered
+        return net_progress
 
     # -----------------------------------------------------------------------
     # ENGAGEMENT RESOLUTION — both fighters reaching, no edges → seat POCKETs
@@ -2035,28 +2056,35 @@ class Match:
     def _update_stalemate_counter(
         self, actions_a: list[Action], actions_b: list[Action],
         a_kuzushi: bool, b_kuzushi: bool,
+        net_grip_progress: bool = False,
     ) -> None:
         """Increment the stalemate counter unless *progress* was made this
-        tick. Progress is any of: a commit, a kuzushi event, OR an active
-        grip action (DEEPEN / STRIP) from either fighter.
+        tick. Progress is any of: a commit, a kuzushi event, OR a grip
+        change that survived oscillation coalescing.
 
         HAJ-36 surfaced a pre-existing bug: before the grip-presence gate,
         low-quality commits fired constantly from POCKET grips and reset
         this counter for free. With the gate, matches that are genuinely
         doing grip-fighting work looked identical to a dead hold — because
         the counter only counted commits. Grip contests now count.
+
+        HAJ-138 follow-on: pre-fix, ANY DEEPEN/STRIP action attempt reset
+        the counter, so two fighters infinitely cancelling each other's
+        grips never tripped matte. We now require *net* grip progress
+        (an event that survived `_coalesce_grip_oscillation`). Action
+        attempts that nullify each other count as stalemate.
         """
         committed = any(
             act.kind == ActionKind.COMMIT_THROW
             for act in (actions_a + actions_b)
         )
-        active_grip_fight = any(
-            act.kind in (ActionKind.DEEPEN, ActionKind.STRIP,
-                         ActionKind.STRIP_TWO_ON_ONE, ActionKind.DEFEND_GRIP,
+        defensive_grip_work = any(
+            act.kind in (ActionKind.DEFEND_GRIP, ActionKind.STRIP_TWO_ON_ONE,
                          ActionKind.REPOSITION_GRIP)
             for act in (actions_a + actions_b)
         )
-        if committed or a_kuzushi or b_kuzushi or active_grip_fight:
+        if (committed or a_kuzushi or b_kuzushi
+                or net_grip_progress or defensive_grip_work):
             self.stalemate_ticks = 0
         else:
             self.stalemate_ticks += 1
