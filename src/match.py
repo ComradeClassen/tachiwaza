@@ -1067,6 +1067,32 @@ class Match:
         )
         events.extend(ne_events)
 
+        # HAJ-129 — track stalemate during ne-waza so the referee's
+        # NEWAZA_MATTE_TICKS window can fire. Pre-fix the counter was only
+        # incremented in the standing path, so should_call_matte's
+        # stalemate-ticks branch never tripped during ne-waza no matter
+        # how long the fighters sat in a non-progressing position.
+        # Progress = active sub/choke technique, active pin, or any tick
+        # event that signals movement (technique initiated, pin started,
+        # submission landed, escape, counter-action partial success).
+        progress_event_types = {
+            "OSAEKOMI_BEGIN", "OSAEKOMI_BROKEN",
+            "SUBMISSION_VICTORY", "ESCAPE_SUCCESS", "COUNTER_ACTION",
+        }
+        had_progress_event = any(
+            ev.event_type in progress_event_types
+            or ev.event_type.endswith("_INITIATED")
+            for ev in ne_events
+        )
+        active_progress = (
+            self.ne_waza_resolver.active_technique is not None
+            or self.osaekomi.active
+        )
+        if had_progress_event or active_progress:
+            self.stalemate_ticks = 0
+        else:
+            self.stalemate_ticks += 1
+
         for ev in ne_events:
             if ev.event_type == "SUBMISSION_VICTORY":
                 winner_name = ev.data.get("winner", "")
@@ -1079,14 +1105,19 @@ class Match:
             if ev.event_type == "ESCAPE_SUCCESS":
                 self.ne_waza_resolver.active_technique = None
                 self.osaekomi.break_pin()
-                reset_events = self.grip_graph.transform_for_position(
-                    self.position, Position.STANDING_DISTANT, tick
+                # HAJ-129 — escape resets to STANDING_DISTANT with the same
+                # post-score-style recovery bonus so getting up off the mat
+                # eats real time before the next grip can seat. Drops any
+                # stale throws_in_progress (a multi-tick standing throw
+                # could have been parked when ne-waza started) so the
+                # standing tick after escape doesn't fire a "grips
+                # collapsed" abort line for a throw the user already
+                # forgot about.
+                self._throws_in_progress.clear()
+                self._reset_dyad_to_distant(
+                    tick, recovery_bonus=POST_SCORE_RECOVERY_TICKS,
                 )
-                events.extend(reset_events)
-                self.position         = Position.STANDING_DISTANT
-                self.sub_loop_state   = SubLoopState.STANDING
-                self.engagement_ticks = 0
-                self.ne_waza_top_id   = None
+                self.ne_waza_top_id = None
                 break
 
     # -----------------------------------------------------------------------
@@ -2520,6 +2551,18 @@ class Match:
             self.position       = start_pos
             self.sub_loop_state = SubLoopState.NE_WAZA
             self._stuffed_throw_tick = 0  # clear — ne-waza is live
+            # HAJ-129 — drop any other-fighter throws that were mid-flight
+            # when ne-waza started. _advance_throws_in_progress doesn't run
+            # during NE_WAZA, so without this clear the stranded throw
+            # would re-emerge as a "grips collapsed" abort line on the
+            # first standing tick after escape. The attacker's own entry
+            # is left intact for the caller (_advance_throws_in_progress)
+            # to delete once _apply_throw_result returns.
+            for name in list(self._throws_in_progress.keys()):
+                if name != aggressor.identity.name:
+                    del self._throws_in_progress[name]
+            # Reset stalemate counter — ne-waza just started, no stalemate.
+            self.stalemate_ticks = 0
 
             # Set who is on top
             if start_pos == Position.SIDE_CONTROL:
@@ -2610,7 +2653,13 @@ class Match:
         baseline closing phase (no extra recovery): the matte announcement
         itself is the prose beat, and the standard 3-tick floor handles
         the walk-back rhythm.
+
+        HAJ-129 — also drops any stranded throws_in_progress so the post-
+        matte standing tick doesn't fire stale "grips collapsed" abort
+        lines for a throw that was parked when ne-waza started. A matte
+        cleanly ends the prior exchange.
         """
+        self._throws_in_progress.clear()
         self._reset_dyad_to_distant(tick, recovery_bonus=0)
 
     def _post_score_reset(self, tick: int, reason: str) -> list[Event]:

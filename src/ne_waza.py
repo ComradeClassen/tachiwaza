@@ -117,8 +117,17 @@ class NewazaResolver:
     """Drives ground work each tick. Called by match._tick() when in NE_WAZA."""
 
     # Tuning knobs — Phase 3 calibration
-    BASE_ESCAPE_PROB:        float = 0.08   # per-tick baseline escape probability
-    SKILL_ESCAPE_BONUS:      float = 0.025  # bonus per point of ne_waza_skill
+    #
+    # HAJ-129 — escape rates were too generous. Pre-fix, BASE=0.08 + up to
+    # +0.25 skill bonus produced an escape probability of ~0.30-0.40 per
+    # tick for an elite from open guard, so a typical bottom fighter was
+    # back to standing within 2-4 ticks. Real judo: escapes from dominant
+    # positions are rare; most ne-waza resolves to pin/sub or to ref-called
+    # matte after a stalemate window. Post-fix base 0.025 + 0.008/skill →
+    # roughly 0.10 escape prob for an elite, 0.04 for a median fighter,
+    # which mostly times out into matte rather than into a re-engagement.
+    BASE_ESCAPE_PROB:        float = 0.025  # per-tick baseline escape probability
+    SKILL_ESCAPE_BONUS:      float = 0.008  # bonus per point of ne_waza_skill
     CARDIO_ESCAPE_MULT:      float = 0.6    # escape prob scales with cardio
     CHOKE_BASE_TIGHTEN_PROB: float = 0.7    # per-tick chance choke advances
     ARMBAR_BASE_EXTEND_PROB: float = 0.65

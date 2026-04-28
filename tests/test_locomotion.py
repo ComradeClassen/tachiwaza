@@ -666,7 +666,14 @@ def test_pressure_match_produces_visible_displacement() -> None:
     grip-only force pulses would produce. Without locomotion, neither
     fighter drifts more than ~0.05 m from start in 30 ticks; with
     locomotion, displacement should be in the hundreds of millimeters
-    range."""
+    range.
+
+    HAJ-129 — disable the stuffed → ne-waza dispatch for this test so
+    we measure pure standing locomotion. Post-HAJ-140, stuffed throws
+    nearly always go to ne-waza, and post-HAJ-129 escapes reset CoM
+    via _reset_dyad_to_distant; both effects truncate standing time and
+    obscure the locomotion signal we want to measure here.
+    """
     random.seed(42)
     t = main_module.build_tanaka()
     s = main_module.build_sato()
@@ -676,6 +683,8 @@ def test_pressure_match_produces_visible_displacement() -> None:
         fighter_a=t, fighter_b=s, referee=build_suzuki(),
         max_ticks=30, seed=42,
     )
+    # Pin the dyad to standing for the duration of the test.
+    m.ne_waza_resolver.attempt_ground_commit = lambda *a, **kw: False
     buf = io.StringIO()
     with redirect_stdout(buf):
         m.run()
