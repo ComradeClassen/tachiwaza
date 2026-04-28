@@ -36,6 +36,13 @@ class Event:
     event_type: str       # e.g. "GRIP_ESTABLISH", "KUZUSHI_WINDOW_OPENED"
     description: str      # functional log string for Phase 2
     data: dict = field(default_factory=dict)   # extra data for Phase 4 rendering
+    # HAJ-144 acceptance #1 — significance score in [0, 10]. Computed at
+    # emit time from event_class + recognition + match_context + execution
+    # magnitude. Altitude readers (mat-side, stands, review, broadcast)
+    # filter by `significance >= reader.threshold`. Default is 1 — the
+    # vast majority of grip-war / locomotion noise sits at the floor; the
+    # significance_for() helper bumps interesting events at emit time.
+    significance: int = 1
 
 
 # ---------------------------------------------------------------------------

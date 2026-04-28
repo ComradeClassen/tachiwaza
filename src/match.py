@@ -68,6 +68,10 @@ from body_part_decompose import (
     decompose_commit, decompose_counter, compute_head_state,
 )
 from narration import MatSideNarrator, MatchClockEntry
+from significance import significance_for
+from recognition import (
+    recognition_score, recognition_band, recognized_name, name_lands_at,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -670,6 +674,15 @@ class Match:
         self._narrator = MatSideNarrator()
         self.match_clock_log: list[MatchClockEntry] = []
 
+        # HAJ-144 acceptance #11 — altitude persistence stub. The Match
+        # remembers which altitude the player chose to occupy. v0.1 always
+        # defaults to MAT_SIDE; the Ring 2 attendance-choice mechanic
+        # writes the field at match start. Re-reading a cornered match
+        # from a higher-resolution altitude than the player chose is not
+        # permitted (HAJ-144 part E persistence rule); the field bounds
+        # what the prose layer is allowed to render.
+        self.altitude_chosen: str = "MAT_SIDE"
+
         # HAJ-47 — per-fighter desperation-trigger jitter. Symmetric fighters
         # in symmetric states would otherwise enter desperation on the same
         # tick. A small offset from a stable per-fighter seed (name + match
@@ -1140,6 +1153,17 @@ class Match:
         # outside _DEBUG_ONLY_EVENT_TYPES so it flows on both debug and
         # prose streams. Source-tag is preserved on Event.data for the
         # viewer's future altitude reader.
+        # HAJ-144 acceptance #1 — attach a significance score (0-10) to
+        # every event before the narrator runs. The narrator and the
+        # other altitude readers filter the tick log by significance
+        # threshold; without the score they can't decide what to render.
+        for ev in events:
+            eq = ev.data.get("execution_quality")
+            recog = ev.data.get("recognition_score")
+            ev.significance = significance_for(
+                ev.event_type, execution_quality=eq, recognition=recog,
+            )
+
         bpe_slice = [
             b for b in self.body_part_events if b.tick == tick
         ]
@@ -1153,6 +1177,8 @@ class Match:
         # outcome gap, modifier reveal, phase transition, sampled summary)
         # surface as MATCH_CLOCK Events so the existing print / viewer-
         # ticker pipeline shows them without further wiring.
+        # `desperation` is NOT in the echo set — we WANT the body-part
+        # rewrite (HAJ-144 acceptance #13) to surface as a new line.
         _ECHO_SOURCES = frozenset({
             "throw", "counter", "score", "matte", "newaza", "grip_kill",
         })
@@ -1879,11 +1905,35 @@ class Match:
             # bypass slot but is more informative on its own).
             tags.append(f"gate bypassed: {gate_bypass_reason}")
         tag_suffix = f"  ({'; '.join(tags)})" if tags else ""
+        # HAJ-144 acceptance #5/#6 — recognition runs *after commit only*.
+        # The commit-time score reads the kuzushi vector + grips + posture
+        # state at the moment tori chose to fire; HAJ-148+ may refine the
+        # score during throw resolution as state evolves.
+        from worked_throws import worked_template_for as _worked_template_for
+        _commit_template = _worked_template_for(throw_id)
+        recog = (
+            recognition_score(
+                _commit_template, attacker, defender, self.grip_graph, tick,
+            )
+            if _commit_template is not None else 0.0
+        )
+        recog_band = recognition_band(recog)
+        # HAJ-144 acceptance #6 — name lands at score only when recognition
+        # is `most_clean` or `all_clean`. THROW_ENTRY itself reads as a
+        # technique commit at all bands so the player sees what tori is
+        # *doing*; the name vs no-name decision lives at the score line
+        # (HAJ-147 prose composition for IPPON / WAZA_ARI).
+        # HAJ-144 acceptance #10 — eq= moves to debug-only metadata.
+        # The visible THROW_ENTRY line is now pure body-part prose at the
+        # commit beat; the numeric execution_quality lives in Event.data
+        # and surfaces through the debug stream (HAJ-65 _is_debug_only)
+        # via the inspector handle suffix and the explicit `(eq=…)` parse
+        # done by the debug renderer. Tags (desperation, gate-bypass,
+        # commit-motivation) keep their visible parenthetical.
         entry_event = Event(
             tick=tick, event_type="THROW_ENTRY",
             description=(
-                f"[throw] {attacker.identity.name} commits — {throw_name} "
-                f"(eq={eq:.2f}).{tag_suffix}"
+                f"[throw] {attacker.identity.name} commits — {throw_name}.{tag_suffix}"
             ),
             data={
                 "throw_id": throw_id.name,
@@ -1898,6 +1948,12 @@ class Match:
                 "commit_motivation": (
                     commit_motivation.name if commit_motivation else None
                 ),
+                # HAJ-144 acceptance #5/#6 — surface the recognition score
+                # and band so altitude readers can decide whether the
+                # technique name should land at the score line.
+                "recognition_score": recog,
+                "recognition_band":  recog_band,
+                "name_lands":        name_lands_at(recog_band),
             },
         )
         events: list[Event] = [entry_event]
@@ -1908,8 +1964,6 @@ class Match:
         # / reaping limb, hip beat, posture beat). Throws on the legacy
         # ThrowDef path (no worked template) skip decomposition; HAJ-29
         # backfilled all v0.1 throws so this is a defensive fallthrough.
-        from worked_throws import worked_template_for as _worked_template_for
-        _commit_template = _worked_template_for(throw_id)
         if _commit_template is not None:
             self._attach_bpe(entry_event, decompose_commit(
                 attacker, defender, _commit_template, tick,
@@ -2008,13 +2062,20 @@ class Match:
         sub_events: list[SubEvent], tick: int,
         silent: bool = False,
     ) -> list[Event]:
+        # HAJ-144 acceptance #7 — sub-event lines no longer carry the
+        # technique name by default. The reader stops seeing
+        # "O-soto-gari: kuzushi / O-soto-gari: tsukuri / O-soto-gari: kake"
+        # — the body-part decomposition (HAJ-145 / HAJ-146 / HAJ-147)
+        # already conveys what tori is doing, and the name (when earned
+        # by recognition) lands at score time. The throw_name is retained
+        # in Event.data for downstream debug / inspector use.
         events: list[Event] = []
         for sub in sub_events:
             label = SUB_EVENT_LABELS.get(sub, sub.name.lower())
             events.append(Event(
                 tick=tick, event_type=f"SUB_{sub.name}",
                 description=(
-                    f"[throw] {attacker.identity.name} — {throw_name}: {label}."
+                    f"[throw] {attacker.identity.name} — {label}."
                 ),
                 data={"sub_event": sub.name, "throw_name": throw_name,
                       "silent": silent},

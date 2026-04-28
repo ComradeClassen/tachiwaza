@@ -290,7 +290,10 @@ def test_throw_entry_event_carries_execution_quality() -> None:
     assert "execution_quality" in e.data
     assert "commit_threshold" in e.data
     assert 0.0 <= e.data["execution_quality"] <= 1.0
-    assert "eq=" in e.description
+    # HAJ-144 acceptance #10 — eq= no longer surfaces in the visible
+    # THROW_ENTRY description; the numeric value lives only in
+    # Event.data for the debug stream / inspector.
+    assert "eq=" not in e.description
 
 
 def test_in_progress_throw_records_commit_execution_quality() -> None:
