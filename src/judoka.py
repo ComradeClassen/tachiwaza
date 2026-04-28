@@ -337,10 +337,24 @@ class Judoka:
     # HAJ-135 — multi-tick sequence intent. A Plan instance when the
     # fighter is mid-combo (lapel pull → sleeve pull → foot attack →
     # commit), None when reacting tick-locally. Sequencing precision
-    # (stubbed from fight_iq until HAJ-136 wires the dedicated axis)
+    # (now wired to skill_vector.sequencing_precision via HAJ-137)
     # gates whether each tick advances the plan or delays/drops it,
     # which is what produces elite-vs-novice combo emergence.
     current_plan: "object" = None
+
+    # HAJ-137 — fine-grained 22-axis skill vector (grip-as-cause.md §5.1).
+    # Defaults are belt-correlated per §6; per-fighter signature
+    # overrides land on top after construction. Earlier tickets'
+    # fight_iq stubs (HAJ-131/133/134/135/136) now read from this
+    # vector via skill_vector.axis(). None on legacy-fixture instances
+    # falls back to fight_iq / 10.0.
+    skill_vector: "object" = None
+
+    def __post_init__(self) -> None:
+        # Lazy import to avoid circular dependency.
+        if self.skill_vector is None:
+            from skill_vector import default_for_belt
+            self.skill_vector = default_for_belt(self.identity.belt_rank)
 
     def leg_strength(self) -> float:
         """Derived leg strength in [0, 1] for the Part 1.5 envelope.

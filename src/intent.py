@@ -212,10 +212,11 @@ LOW_DROP_PROB:    float = 0.20   # low-skill chance to drop the step entirely
 def sequencing_precision(judoka: "Judoka") -> float:
     """Derive sequencing precision in [0, 1].
 
-    v0.1 stub: fight_iq / 10.0. HAJ-136 (Phase C.2) replaces this with a
-    dedicated skill axis on the ~20-axis vector (HAJ-137).
+    HAJ-137 — reads `sequencing_precision` off the skill vector, with
+    fight_iq/10 fallback for legacy fixtures via skill_vector.axis().
     """
-    return max(0.0, min(1.0, judoka.capability.fight_iq / 10.0))
+    from skill_vector import axis
+    return max(0.0, min(1.0, axis(judoka, "sequencing_precision")))
 
 
 def _step_outcome(

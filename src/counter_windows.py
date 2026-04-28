@@ -212,8 +212,15 @@ def perceived_counter_window(
     shouldn't summon ghost attacks.
     """
     r = rng if rng is not None else random
-    iq = max(0.0, min(10.0, float(defender.capability.fight_iq)))
-    novice_w = (10.0 - iq) / 10.0
+    # HAJ-137 — perception flip rate now reads counter_window_reading
+    # off the skill vector instead of fight_iq. The "novice misreads
+    # the region" effect is now a function of the dedicated perception
+    # axis, so a fighter can be cardio-strong but counter-blind (or
+    # vice-versa) — what makes brown-belt fight-IQ structurally
+    # different from black-belt fight-IQ §5.1.
+    from skill_vector import axis
+    skill = max(0.0, min(1.0, axis(defender, "counter_window_reading")))
+    novice_w = 1.0 - skill
     flip_p = max(0.02, COUNTER_PERCEPTION_FLIP_PROB * novice_w)
     if defensive_desperation and actual != CounterWindow.NONE:
         from defensive_desperation import CW_PERCEPTION_BONUS

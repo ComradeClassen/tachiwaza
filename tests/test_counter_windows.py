@@ -128,6 +128,7 @@ def test_go_no_sen_fires_at_tsukuri_and_kake() -> None:
 def test_elite_perception_almost_always_matches_actual() -> None:
     _, s = _pair()
     s.capability.fight_iq = 10
+    s.skill_vector.counter_window_reading = 1.0
     matches = 0
     for seed in range(200):
         p = perceived_counter_window(
@@ -142,6 +143,7 @@ def test_elite_perception_almost_always_matches_actual() -> None:
 def test_novice_perception_misreads_often() -> None:
     _, s = _pair()
     s.capability.fight_iq = 0
+    s.skill_vector.counter_window_reading = 0.0
     mismatches = 0
     for seed in range(200):
         p = perceived_counter_window(

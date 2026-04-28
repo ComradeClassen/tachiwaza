@@ -93,15 +93,15 @@ def test_uchi_mata_template_has_setup_components() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. Sequencing precision derives from fight_iq (HAJ-136 will replace).
+# 2. Sequencing precision is the dedicated skill axis (HAJ-137).
 # ---------------------------------------------------------------------------
-def test_sequencing_precision_scales_with_fight_iq() -> None:
+def test_sequencing_precision_scales_with_axis() -> None:
     t = main_module.build_tanaka()
-    t.capability.fight_iq = 10
+    t.skill_vector.sequencing_precision = 1.0
     high = sequencing_precision(t)
-    t.capability.fight_iq = 5
+    t.skill_vector.sequencing_precision = 0.5
     mid = sequencing_precision(t)
-    t.capability.fight_iq = 1
+    t.skill_vector.sequencing_precision = 0.1
     low = sequencing_precision(t)
     assert high > mid > low
     assert 0.0 <= low and high <= 1.0
@@ -162,7 +162,7 @@ def test_pull_lapel_step_produces_pull_action() -> None:
     )
     rng = _r.Random(0)
     # Force high-precision so the step always fires.
-    t.capability.fight_iq = 10
+    t.skill_vector.sequencing_precision = 1.0
     action, outcome = next_plan_action(plan, t, s, m.grip_graph, rng)
     assert outcome == "fire"
     assert action is not None
@@ -229,7 +229,7 @@ def test_elite_completes_plan_within_decay_window() -> None:
     the 4-step plan completes within the 5-tick kuzushi decay half-life
     window. Events stack into a meaningful compromised state."""
     t, s, m = _pair_match()
-    t.capability.fight_iq = 10   # high precision
+    t.skill_vector.sequencing_precision = 1.0   # high precision
     _seat_grips(m, t, s)
     template = list(PLAN_TEMPLATES[ThrowID.UCHI_MATA])
     plan = Plan(target_throw_id=ThrowID.UCHI_MATA, sequence=template)
@@ -246,7 +246,7 @@ def test_low_skill_mistimes_plan() -> None:
     well beyond the kuzushi decay window. Even given many ticks, fewer
     setup steps fire than for the elite; some are dropped."""
     t, s, m = _pair_match()
-    t.capability.fight_iq = 1   # low precision
+    t.skill_vector.sequencing_precision = 0.1   # low precision
     _seat_grips(m, t, s)
     template = list(PLAN_TEMPLATES[ThrowID.UCHI_MATA])
     plan = Plan(target_throw_id=ThrowID.UCHI_MATA, sequence=template)
@@ -254,7 +254,7 @@ def test_low_skill_mistimes_plan() -> None:
     fires = _run_plan(t, s, m.grip_graph, plan, ticks=8, rng_seed=0)
     # Compare against elite's fire count under same seed.
     elite = main_module.build_tanaka()
-    elite.capability.fight_iq = 10
+    elite.skill_vector.sequencing_precision = 1.0
     place_judoka(elite, com_position=(-0.5, 0.0), facing=(1.0, 0.0))
     plan2 = Plan(
         target_throw_id=ThrowID.UCHI_MATA,
@@ -274,9 +274,16 @@ def test_elite_kuzushi_state_dominates_novice() -> None:
     events stacked within decay window'."""
     from kuzushi import record_kuzushi_event, foot_attack_kuzushi_event, pull_kuzushi_event
 
-    def run_one(precision_iq: int) -> float:
+    def run_one(precision: float) -> float:
         t, s, m = _pair_match()
-        t.capability.fight_iq = precision_iq
+        t.skill_vector.sequencing_precision = precision
+        # Also drive the per-axis kuzushi technique factors so the elite
+        # vs novice difference shows up in event magnitudes (PULL reads
+        # pull_execution; foot attacks read their own axes).
+        t.skill_vector.pull_execution = precision
+        t.skill_vector.foot_sweeps = precision
+        t.skill_vector.leg_attacks = precision
+        t.skill_vector.disruptive_stepping = precision
         _seat_grips(m, t, s)
         template = list(PLAN_TEMPLATES[ThrowID.UCHI_MATA])
         plan = Plan(target_throw_id=ThrowID.UCHI_MATA, sequence=template)
@@ -325,8 +332,8 @@ def test_elite_kuzushi_state_dominates_novice() -> None:
         state = compromised_state(s.kuzushi_events, current_tick=eval_tick)
         return state.magnitude
 
-    elite_mag = run_one(precision_iq=10)
-    novice_mag = run_one(precision_iq=1)
+    elite_mag = run_one(precision=1.0)
+    novice_mag = run_one(precision=0.1)
     # Elite's composed kuzushi should be meaningfully larger than novice's.
     assert elite_mag > novice_mag, (
         f"elite kuzushi {elite_mag:.2f} not greater than novice {novice_mag:.2f}"

@@ -89,7 +89,8 @@ def test_stepping_into_pull_cancels_for_novice() -> None:
     """Low-skill attacker stepping toward uke while pulling — full
     self-cancellation exposure."""
     t, _ = _pair()
-    t.capability.fight_iq = 0   # zero pull_execution skill
+    t.capability.fight_iq = 0
+    t.skill_vector.pull_execution = 0.0   # zero pull_execution skill
     # Pull direction is opp→me (toward -x); attacker moves toward +x (toward uke).
     pull_dir = (-1.0, 0.0)
     t.state.body_state.com_velocity = (PULL_CANCELLATION_SAT_SPEED, 0.0)
@@ -102,7 +103,8 @@ def test_stepping_into_pull_minimal_for_elite() -> None:
     """High-skill attacker eats almost no penalty — the body knows
     how to brace and pull cleanly even while moving."""
     t, _ = _pair()
-    t.capability.fight_iq = 10   # max pull_execution skill
+    t.capability.fight_iq = 10
+    t.skill_vector.pull_execution = 1.0   # max pull_execution skill
     pull_dir = (-1.0, 0.0)
     t.state.body_state.com_velocity = (PULL_CANCELLATION_SAT_SPEED, 0.0)
     factor = pull_self_cancellation_factor(t, pull_dir)
@@ -116,11 +118,11 @@ def test_partial_cancel_scales_with_skill() -> None:
     t, _ = _pair()
     pull_dir = (-1.0, 0.0)
     t.state.body_state.com_velocity = (PULL_CANCELLATION_SAT_SPEED * 0.5, 0.0)
-    t.capability.fight_iq = 1
+    t.skill_vector.pull_execution = 0.1
     f_low = pull_self_cancellation_factor(t, pull_dir)
-    t.capability.fight_iq = 5
+    t.skill_vector.pull_execution = 0.5
     f_mid = pull_self_cancellation_factor(t, pull_dir)
-    t.capability.fight_iq = 10
+    t.skill_vector.pull_execution = 1.0
     f_high = pull_self_cancellation_factor(t, pull_dir)
     assert f_low < f_mid < f_high
     assert f_high == 1.0
@@ -141,9 +143,9 @@ def test_event_magnitude_reflects_actual_delivered_force() -> None:
     The novice's emitted event must be smaller than the planted version."""
     from grip_graph import GripGraph
     t, s = _pair()
-    # Low pull_execution but non-zero (pull_kuzushi_magnitude has its
-    # own fight_iq-derived technique factor; iq=0 zeros the whole event).
-    t.capability.fight_iq = 1
+    # Low pull_execution but non-zero (pull_kuzushi_magnitude reads
+    # pull_execution as the technique factor; 0 zeros the whole event).
+    t.skill_vector.pull_execution = 0.1
     g = GripGraph()
     edge = _seat_lapel(g, t, s)
     pull_dir = (-1.0, 0.0)
@@ -174,7 +176,7 @@ def test_elite_event_magnitude_unaffected_by_motion() -> None:
     """At max pull_execution, motion doesn't reduce the emitted event."""
     from grip_graph import GripGraph
     t, s = _pair()
-    t.capability.fight_iq = 10
+    t.skill_vector.pull_execution = 1.0
     g = GripGraph()
     edge = _seat_lapel(g, t, s)
     pull_dir = (-1.0, 0.0)
@@ -206,7 +208,7 @@ def test_physics_force_reduced_for_self_cancelling_pull() -> None:
     from actions import pull as pull_action
 
     t, s = _pair()
-    t.capability.fight_iq = 1
+    t.skill_vector.pull_execution = 0.1
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
     edge = _seat_lapel(m.grip_graph, t, s)
     edge.depth_level = GripDepth.DEEP   # full envelope to make signal clearer
@@ -245,9 +247,9 @@ def test_novice_kuzushi_doesnt_compose_to_throw_threshold() -> None:
     from kuzushi import compromised_state, record_kuzushi_event
     from grip_graph import GripGraph
 
-    def run_three(precision_iq: int, com_velocity: tuple[float, float]) -> float:
+    def run_three(precision: float, com_velocity: tuple[float, float]) -> float:
         t, s = _pair()
-        t.capability.fight_iq = precision_iq
+        t.skill_vector.pull_execution = precision
         t.state.body_state.com_velocity = com_velocity
         g = GripGraph()
         edge = _seat_lapel(g, t, s)
@@ -262,13 +264,13 @@ def test_novice_kuzushi_doesnt_compose_to_throw_threshold() -> None:
         return state.magnitude
 
     novice_into_pull = run_three(
-        precision_iq=1, com_velocity=(PULL_CANCELLATION_SAT_SPEED, 0.0),
+        precision=0.1, com_velocity=(PULL_CANCELLATION_SAT_SPEED, 0.0),
     )
     elite_into_pull = run_three(
-        precision_iq=10, com_velocity=(PULL_CANCELLATION_SAT_SPEED, 0.0),
+        precision=1.0, com_velocity=(PULL_CANCELLATION_SAT_SPEED, 0.0),
     )
     elite_planted = run_three(
-        precision_iq=10, com_velocity=(0.0, 0.0),
+        precision=1.0, com_velocity=(0.0, 0.0),
     )
 
     # Novice's composed kuzushi is materially smaller than elite's at

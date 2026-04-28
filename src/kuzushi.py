@@ -387,14 +387,13 @@ PULL_CANCELLATION_MIN_FACTOR: float = 0.30
 
 
 def _pull_execution_factor(attacker: "Judoka") -> float:
-    """v0.1 stub — pull execution quality in [0, 1] derived from fight_iq.
+    """Pull execution quality in [0, 1].
 
-    HAJ-137 (Phase C.3) will replace with a dedicated `pull_execution`
-    axis on the ~20-axis skill vector. The stub keeps ordering plausible
-    (white belts mechanically self-cancel; black belts brace cleanly)
-    until the real axis ships.
+    HAJ-137 — reads `pull_execution` off the skill vector. Falls back
+    to fight_iq/10 on legacy fixtures via skill_vector.axis().
     """
-    return max(0.0, min(1.0, attacker.capability.fight_iq / 10.0))
+    from skill_vector import axis
+    return max(0.0, min(1.0, axis(attacker, "pull_execution")))
 
 
 def pull_self_cancellation_factor(
@@ -468,9 +467,10 @@ def pull_kuzushi_magnitude(
     physical CoM force the same PULL drives through the grip envelope.
     """
     from force_envelope import grip_strength
+    from skill_vector import axis
     strength    = grip_strength(attacker)
-    # TODO: HAJ-C.3 — switch to pull_execution axis from the skill vector.
-    technique   = max(0.0, min(1.0, attacker.capability.fight_iq / 10.0))
+    # HAJ-137 — technique now reads pull_execution off the skill vector.
+    technique   = max(0.0, min(1.0, axis(attacker, "pull_execution")))
     experience  = _belt_experience_factor(attacker)
     depth       = edge.depth_level.modifier()
     posture_v   = uke_posture_vulnerability(victim)
@@ -599,17 +599,27 @@ def foot_attack_kuzushi_magnitude(
     """Return event magnitude for one foot-attack action this tick.
 
     Mirrors `pull_kuzushi_magnitude` but without a grip-depth term (foot
-    attacks don't go through a grip). HAJ-137 will replace the generic
-    skill placeholder with offensive_footwork axes (foot_sweeps /
-    leg_attacks / disruptive_stepping); for now the technique factor is
-    fight_iq-derived to keep behavior plausible until the skill vector
-    lands.
+    attacks don't go through a grip).
+
+    HAJ-137 — technique now reads the per-kind offensive-footwork axis
+    off the skill vector: FOOT_SWEEP_SETUP → foot_sweeps,
+    LEG_ATTACK_SETUP → leg_attacks, DISRUPTIVE_STEP → disruptive_stepping.
+    A fighter with a high foot_sweeps axis but low leg_attacks now
+    delivers visibly different magnitudes between the two action kinds.
 
     `intensity` lets the caller scale the magnitude (e.g. a heavy reap
     vs. a light probe).
     """
     from actions import ActionKind
-    technique  = max(0.0, min(1.0, attacker.capability.fight_iq / 10.0))
+    from skill_vector import axis
+    axis_for_kind = {
+        ActionKind.FOOT_SWEEP_SETUP: "foot_sweeps",
+        ActionKind.LEG_ATTACK_SETUP: "leg_attacks",
+        ActionKind.DISRUPTIVE_STEP:  "disruptive_stepping",
+    }.get(action_kind)
+    if axis_for_kind is None:
+        return 0.0
+    technique  = max(0.0, min(1.0, axis(attacker, axis_for_kind)))
     experience = _belt_experience_factor(attacker)
     posture_v  = uke_posture_vulnerability(victim)
     # Per-kind weight: leg attacks land harder than probing sweeps;
