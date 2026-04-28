@@ -1371,6 +1371,18 @@ class Match:
             delivered = (requested * depth_mod * strength_mod * hand_fatigue
                          * composure_mod * noise * stance_parity_mod)
 
+            # HAJ-136 — pull self-cancellation. A novice pulling while
+            # stepping into uke moves their base under the force vector
+            # and loses delivered force; a high-skill fighter braces and
+            # pulls clean. Apply only to PULL — PUSH/LIFT/COUPLE/FEINT
+            # have different geometry and aren't covered by §13.8 yet.
+            if act.kind == ActionKind.PULL:
+                from kuzushi import pull_self_cancellation_factor
+                cancel_factor = pull_self_cancellation_factor(
+                    attacker, act.direction,
+                )
+                delivered *= cancel_factor
+
             dx, dy = act.direction
             fx += dx * delivered
             fy += dy * delivered

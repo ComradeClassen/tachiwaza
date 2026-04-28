@@ -354,6 +354,85 @@ def uke_posture_vulnerability(victim: "Judoka") -> float:
 
 
 # ---------------------------------------------------------------------------
+# HAJ-136 — PULL SELF-CANCELLATION
+# ---------------------------------------------------------------------------
+# Per grip-as-cause.md §13.8: soft-vs-hard pull is emergent from execution
+# quality, not a parameter the fighter sets. A novice's pull can mechanically
+# cancel itself — they pull while simultaneously stepping toward uke, which
+# moves their base under the force vector and reduces net delivered force.
+# They feel like they pulled hard; they actually pulled soft.
+#
+# Geometry: the pull direction is "force applied to uke" (opp → me when
+# drawing uke toward attacker). The attacker's CoM moving in the OPPOSITE
+# of pull_direction (i.e., me → opp, "stepping into the pull") is the
+# self-cancellation case — the lever arm collapses as the attacker's
+# base shifts toward the force vector.
+#
+# Cancellation severity is the speed component along the bad axis,
+# clamped to a calibration ceiling. The pull_execution skill axis (stub
+# from fight_iq until HAJ-137 ships the proper axis) modulates how much
+# of the raw cancellation actually lands on the delivered force: a high-
+# skill fighter braces and pulls cleanly; a low-skill fighter eats the
+# full penalty.
+
+# Speed at which the cancellation factor saturates (the attacker's base
+# is moving the wrong way fast enough that any stronger drift adds no
+# additional penalty). 0.6 m/s ≈ a brisk walking step into uke.
+PULL_CANCELLATION_SAT_SPEED: float = 0.6
+
+# Floor on the delivered-force multiplier when the pull is fully cancelled
+# AND the attacker has zero pull_execution skill. Per the ticket: "fully
+# self-cancelled pull = ~0.3× envelope force." Calibration stub.
+PULL_CANCELLATION_MIN_FACTOR: float = 0.30
+
+
+def _pull_execution_factor(attacker: "Judoka") -> float:
+    """v0.1 stub — pull execution quality in [0, 1] derived from fight_iq.
+
+    HAJ-137 (Phase C.3) will replace with a dedicated `pull_execution`
+    axis on the ~20-axis skill vector. The stub keeps ordering plausible
+    (white belts mechanically self-cancel; black belts brace cleanly)
+    until the real axis ships.
+    """
+    return max(0.0, min(1.0, attacker.capability.fight_iq / 10.0))
+
+
+def pull_self_cancellation_factor(
+    attacker: "Judoka", pull_direction: Vector2,
+) -> float:
+    """Multiplier on delivered pull force given the attacker's CoM motion.
+
+    Returns 1.0 when the pull is clean (CoM is planted or moving with the
+    pull, e.g. a step backward that adds to the lever arm). Returns
+    [PULL_CANCELLATION_MIN_FACTOR, 1.0] otherwise, with low-skill fighters
+    eating proportionally more of the penalty.
+
+    Math:
+      cancel_speed = max(0, -dot(com_velocity, pull_direction_unit))
+                     # speed in m/s along the wrong axis
+      raw_cancel  = clamp01(cancel_speed / SAT_SPEED)
+                     # 0 = clean, 1 = fully canceled at saturation
+      effective   = raw_cancel * (1 - pull_execution)
+                     # high skill nullifies; low skill exposes full
+      factor      = 1 - effective * (1 - MIN_FACTOR)
+                     # in [MIN_FACTOR, 1.0]
+    """
+    dx, dy = pull_direction
+    norm = math.hypot(dx, dy)
+    if norm < 1e-9:
+        return 1.0
+    ux, uy = dx / norm, dy / norm
+    vx, vy = attacker.state.body_state.com_velocity
+    # Negative dot = attacker moving against the pull (the cancel case).
+    cancel_speed = max(0.0, -(vx * ux + vy * uy))
+    if cancel_speed <= 0.0:
+        return 1.0
+    raw_cancel = min(1.0, cancel_speed / PULL_CANCELLATION_SAT_SPEED)
+    effective = raw_cancel * (1.0 - _pull_execution_factor(attacker))
+    return 1.0 - effective * (1.0 - PULL_CANCELLATION_MIN_FACTOR)
+
+
+# ---------------------------------------------------------------------------
 # EXPERIENCE FACTOR (placeholder until HAJ-C.3 ships pull_execution axis)
 # ---------------------------------------------------------------------------
 def _belt_experience_factor(attacker: "Judoka") -> float:
@@ -410,11 +489,21 @@ def pull_kuzushi_event(
 ) -> Optional[KuzushiEvent]:
     """Build the KuzushiEvent emitted by one PULL action this tick.
 
+    HAJ-136 — the emitted magnitude reflects *actual delivered force*,
+    not requested. A pull executed while the attacker's CoM is moving
+    into uke (the novice "felt-hard, actually-soft" pattern) loses
+    magnitude per pull_self_cancellation_factor. High-skill fighters
+    brace and pull clean; low-skill fighters eat the full penalty.
+
     Returns None when the event would be a no-op (zero magnitude or
     zero direction) — callers can append unconditionally and skip the
     None case, or guard before calling. Either pattern works.
     """
     mag = pull_kuzushi_magnitude(attacker, edge, victim)
+    if mag <= 0.0:
+        return None
+    cancel_factor = pull_self_cancellation_factor(attacker, pull_direction)
+    mag *= cancel_factor
     if mag <= 0.0:
         return None
     direction = kuzushi_direction(edge.grip_type_v2, pull_direction)
