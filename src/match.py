@@ -933,6 +933,14 @@ class Match:
         self._apply_foot_attacks(self.fighter_a, self.fighter_b, actions_a, tick)
         self._apply_foot_attacks(self.fighter_b, self.fighter_a, actions_b, tick)
 
+        # HAJ-134 — open vulnerability windows on each fighter for the
+        # actions they committed this tick. Windows are first-class data
+        # consumed by counter_windows.actual_counter_window in the next
+        # tick's counter check. Expired windows from prior ticks are
+        # purged before opening new ones so the active list stays small.
+        self._update_vulnerability_windows(self.fighter_a, actions_a, tick)
+        self._update_vulnerability_windows(self.fighter_b, actions_b, tick)
+
         # HAJ-128 — re-aim each fighter's facing vector at the opponent
         # after motion. Real judoka stay squared up to each other; without
         # this, the facing arrow stays pinned at its Hajime-time direction
@@ -1441,6 +1449,39 @@ class Match:
         if norm < 1e-6:
             return
         judoka.state.body_state.facing = (dx / norm, dy / norm)
+
+    # -----------------------------------------------------------------------
+    # STEP 8c — VULNERABILITY WINDOWS (HAJ-134)
+    # -----------------------------------------------------------------------
+    def _update_vulnerability_windows(
+        self, judoka: Judoka, actions: list[Action], tick: int,
+    ) -> None:
+        """Purge expired windows and open new ones for declared actions.
+
+        Per HAJ-134 spec, every committing action declares a window via
+        vulnerability_window.WINDOW_DECLARATIONS. The window's orientation
+        comes from the action's `direction` when present; for grip
+        actions without an explicit direction (DEEPEN), we substitute
+        the attacker's facing so uke's counter logic still gets a usable
+        orientation read.
+        """
+        from vulnerability_window import (
+            purge_expired_windows, open_window_for_action, window_spec_for,
+        )
+        purge_expired_windows(judoka, tick)
+        facing = judoka.state.body_state.facing
+        for act in actions:
+            if window_spec_for(act.kind) is None:
+                continue
+            # For force/foot actions with a direction, _orientation_for
+            # reads it directly. For grip actions (DEEPEN, STRIP) without
+            # a direction, fall back to the attacker's facing.
+            override = None
+            if getattr(act, "direction", None) is None:
+                override = facing
+            open_window_for_action(
+                judoka, act, current_tick=tick, orientation_override=override,
+            )
 
     # -----------------------------------------------------------------------
     # STEP 8b — FOOT_ATTACK FAMILY (HAJ-133)
@@ -1996,6 +2037,7 @@ class Match:
 
         actual = actual_counter_window(
             attacker, defender, self.grip_graph, tip, last_sub,
+            current_tick=tick,
         )
         if actual == CounterWindow.NONE:
             return None
@@ -2025,10 +2067,14 @@ class Match:
 
         vuln = attacker_vulnerability_for(effective_throw_id)
         tori_eq = tip.commit_execution_quality if tip is not None else None
+        # HAJ-134 — read attacker's total commitment from active windows.
+        from vulnerability_window import total_commitment
+        commitment = total_commitment(attacker, tick)
         p = counter_fire_probability(
             defender, perceived, vuln,
             defensive_desperation=def_desp,
             tori_execution_quality=tori_eq,
+            attacker_commitment=commitment,
         )
         # Part 6.3 — per-state counter-vulnerability bonus. When tori is
         # currently in a named compromised state, uke's fire probability

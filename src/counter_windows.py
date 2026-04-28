@@ -55,6 +55,13 @@ COUNTER_PERCEPTION_FLIP_PROB: float = 0.25   # base misperception for iq=0, clam
 COUNTER_BASE_PROBABILITY:     float = 0.30   # baseline fire chance for iq=10, fresh, vuln=1.0
 COUNTER_WINDOW_QUALITY_BONUS: float = 0.15   # bonus to window_quality when counter lands
 
+# HAJ-134 — multiplier on counter-fire probability per unit of total
+# attacker commitment_cost across all active vulnerability windows. With
+# the typical PULL+DEEPEN load (~0.85), this lifts the fire prob ~25%
+# above the legacy baseline; a fully-loaded foot-attack stack (~1.2)
+# lifts it ~35%. Calibration stub; HAJ-A.7 will tune.
+COMMITMENT_FIRE_BONUS:        float = 0.30
+
 # HAJ-58 — stiffness telegraphing. A bent-over attacker broadcasts intent
 # through grip tension before commit; the defender feels the attack coming
 # early, so reduce the misperception flip probability. Threshold reuses
@@ -94,16 +101,21 @@ def actual_counter_window(
     graph: "GripGraph",
     tip: Optional["_ThrowInProgress"],
     last_sub_event: Optional[SubEvent],
+    current_tick: Optional[int] = None,
 ) -> CounterWindow:
     """Return the counter-window region the dyad currently occupies from the
     defender's vantage point. Rules mirror spec 6.2 region definitions.
 
     `tip` is the attacker's in-progress attempt (None if they haven't
     committed). `last_sub_event` is the most recent sub-event emitted by
-    that attempt.
+    that attempt. `current_tick` is needed for HAJ-134's window-data read
+    (legacy callers can omit it; behavior falls back to the pre-HAJ-134
+    heuristic).
     """
     if tip is None:
-        return _sen_sen_region(attacker, defender, graph)
+        return _sen_sen_region(
+            attacker, defender, graph, current_tick=current_tick,
+        )
 
     # An attempt is mid-flight.
     if last_sub_event in (SubEvent.TSUKURI, SubEvent.KAKE_COMMIT):
@@ -117,10 +129,29 @@ def actual_counter_window(
 
 def _sen_sen_region(
     attacker: "Judoka", defender: "Judoka", graph: "GripGraph",
+    current_tick: Optional[int] = None,
 ) -> CounterWindow:
-    """Pre-commit region test. Tori has at least one driving grip AND is
-    moving toward defender above the approach-speed gate.
+    """Pre-commit region test.
+
+    HAJ-134 — primary signal is now the attacker's `active_windows`
+    list (vulnerability windows declared by their own actions). When
+    any window is active, the attacker is in sen-sen-no-sen — uke can
+    read the load and counter pre-commit. Pre-HAJ-134 this used a
+    driving-grip + approach-speed heuristic that missed setup-action
+    vulnerabilities (foot-attack setups, deepen on a strong grip);
+    the data-driven check covers all of those uniformly.
+
+    Legacy fallback: when `current_tick` is None (older test callers
+    that didn't thread the tick through), preserve the pre-HAJ-134
+    heuristic so existing tests don't drift.
     """
+    if current_tick is not None:
+        from vulnerability_window import has_active_window
+        if has_active_window(attacker, current_tick):
+            return CounterWindow.SEN_SEN_NO_SEN
+        return CounterWindow.NONE
+
+    # Pre-HAJ-134 heuristic preserved for tick-less callers.
     has_driving = any(
         e.mode == GripMode.DRIVING
         for e in graph.edges_owned_by(attacker.identity.name)
@@ -274,6 +305,7 @@ def counter_fire_probability(
     *,
     defensive_desperation: bool = False,
     tori_execution_quality: Optional[float] = None,
+    attacker_commitment: float = 0.0,
 ) -> float:
     """Per-tick probability the defender actually commits the counter.
 
@@ -292,6 +324,14 @@ def counter_fire_probability(
     GO_NO_SEN / SEN_NO_SEN against an in-progress attempt) multiplies the
     base probability by counter_vulnerability_multiplier(eq). Passing None
     preserves legacy behaviour (no eq-aware adjustment).
+
+    HAJ-134 — `attacker_commitment` is the sum of commitment_cost across
+    tori's currently-active vulnerability windows. A heavier load
+    (multiple open windows, a force action with strong cost) widens the
+    counter window. Modeled as a 1.0 + commitment * COMMITMENT_FIRE_BONUS
+    multiplier so 0.0 commitment leaves the prob unchanged (legacy
+    callers) and a fully-committed action ladder lifts the fire prob
+    meaningfully without dominating the iq/composure terms.
     """
     if window == CounterWindow.NONE:
         return 0.0
@@ -311,6 +351,8 @@ def counter_fire_probability(
     ):
         from execution_quality import counter_vulnerability_multiplier
         base *= counter_vulnerability_multiplier(tori_execution_quality)
+    if attacker_commitment > 0.0:
+        base *= 1.0 + attacker_commitment * COMMITMENT_FIRE_BONUS
     return min(1.0, base)
 
 

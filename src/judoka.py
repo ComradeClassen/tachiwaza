@@ -326,6 +326,14 @@ class Judoka:
         default_factory=lambda: __import__("kuzushi").fresh_buffer()
     )
 
+    # HAJ-134 — vulnerability windows opened by this fighter's own
+    # committing actions. Each entry is a VulnerabilityWindow declared
+    # in vulnerability_window.WINDOW_DECLARATIONS and emitted at action
+    # execution time. Expired windows are purged each tick; uke's
+    # counter logic reads the remaining list as the source of truth for
+    # tori's current exposure (replacing pre-fix action-type heuristics).
+    active_windows: "list" = field(default_factory=list)
+
     def leg_strength(self) -> float:
         """Derived leg strength in [0, 1] for the Part 1.5 envelope.
 
