@@ -67,6 +67,7 @@ from body_part_decompose import (
     decompose_pull, decompose_foot_attack, decompose_step,
     decompose_commit, decompose_counter, compute_head_state,
 )
+from narration import MatSideNarrator, MatchClockEntry
 
 
 # ---------------------------------------------------------------------------
@@ -659,6 +660,16 @@ class Match:
         # layer (HAJ-147) reads from.
         self.body_part_events: list[BodyPartEvent] = []
 
+        # HAJ-147 — mat-side narration layer. Two outputs:
+        #   - tick log (existing Match events): full fidelity, debug.
+        #   - match clock log (this list): editorial prose, sampled at
+        #     match-clock granularity per the five promotion rules.
+        # The narrator is a stateful filter over the BPE + Event streams;
+        # we run it from _post_tick once both have stabilized for the
+        # current tick.
+        self._narrator = MatSideNarrator()
+        self.match_clock_log: list[MatchClockEntry] = []
+
         # HAJ-47 — per-fighter desperation-trigger jitter. Symmetric fighters
         # in symmetric states would otherwise enter desperation on the same
         # tick. A small offset from a stable per-fighter seed (name + match
@@ -1119,6 +1130,42 @@ class Match:
                 matte_event = self.referee.announce_matte(matte_reason, tick)
                 events.append(matte_event)
                 self._handle_matte(tick)
+
+        # HAJ-147 — run the mat-side narrator over this tick's events +
+        # BPE slice. The narrator filter applies the five promotion rules
+        # and returns MatchClockEntry records; we extend the per-match
+        # clock log AND surface each entry as an Event in the visible
+        # stream so the existing print / viewer-ticker pipeline shows them
+        # without further wiring. Engine event_type "MATCH_CLOCK" sits
+        # outside _DEBUG_ONLY_EVENT_TYPES so it flows on both debug and
+        # prose streams. Source-tag is preserved on Event.data for the
+        # viewer's future altitude reader.
+        bpe_slice = [
+            b for b in self.body_part_events if b.tick == tick
+        ]
+        clock_entries = self._narrator.consume_tick(
+            tick, events, bpe_slice, self,
+        )
+        # Sources that ECHO an existing engine event (the narrator copied
+        # ev.description verbatim) live only in match_clock_log — emitting
+        # them as MATCH_CLOCK Events would duplicate the visible line.
+        # Sources that are NEW prose (self-cancel detection, intent-
+        # outcome gap, modifier reveal, phase transition, sampled summary)
+        # surface as MATCH_CLOCK Events so the existing print / viewer-
+        # ticker pipeline shows them without further wiring.
+        _ECHO_SOURCES = frozenset({
+            "throw", "counter", "score", "matte", "newaza", "grip_kill",
+        })
+        for entry in clock_entries:
+            self.match_clock_log.append(entry)
+            if entry.source in _ECHO_SOURCES:
+                continue
+            events.append(Event(
+                tick=tick, event_type="MATCH_CLOCK",
+                description=entry.prose,
+                data={"source": entry.source,
+                      "actors": list(entry.actors)},
+            ))
 
         self._print_events(events)
 
