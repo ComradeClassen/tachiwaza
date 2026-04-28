@@ -60,6 +60,13 @@ from commit_motivation import (
     CommitMotivation, debug_tag_for as motivation_debug_tag,
     narration_for as motivation_narration_for,
 )
+from body_part_events import BodyPartEvent
+from body_part_decompose import (
+    decompose_grip_establish, decompose_grip_deepen, decompose_grip_strip,
+    decompose_grip_release, decompose_reach,
+    decompose_pull, decompose_foot_attack, decompose_step,
+    decompose_commit, decompose_counter,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -643,6 +650,15 @@ class Match:
         # entries per match.
         self._scoring_events: list[Event] = []
 
+        # HAJ-145 — flat append-only log of every BodyPartEvent emitted this
+        # match. Each engine event that goes through the decomposition layer
+        # (commits, kuzushi attempts, counters, grip changes) extends this
+        # list AND attaches its slice to the parent Event's `data["bpe"]`
+        # so altitude readers can either iterate the flat stream or walk
+        # source-event-grouped slices. This is the substrate the prose
+        # layer (HAJ-147) reads from.
+        self.body_part_events: list[BodyPartEvent] = []
+
         # HAJ-47 — per-fighter desperation-trigger jitter. Symmetric fighters
         # in symmetric states would otherwise enter desperation on the same
         # tick. A small offset from a stable per-fighter seed (name + match
@@ -728,6 +744,25 @@ class Match:
         finally:
             if self._renderer is not None:
                 self._renderer.stop()
+
+    # -----------------------------------------------------------------------
+    # HAJ-145 — BodyPartEvent emission helper
+    # -----------------------------------------------------------------------
+    def _attach_bpe(
+        self, parent: Optional[Event], bpes: list[BodyPartEvent],
+    ) -> None:
+        """Append decomposed BodyPartEvents to the match-level log AND
+        embed their dict form on the parent Event's `data["bpe"]` slot so
+        altitude readers can group by source. Safe to call with parent=None
+        (e.g. for source-events that aren't surfaced as Engine `Event`s in
+        the visible log — kuzushi-buffer emissions, locomotion steps)."""
+        if not bpes:
+            return
+        self.body_part_events.extend(bpes)
+        if parent is not None:
+            slot = parent.data.setdefault("bpe", [])
+            for b in bpes:
+                slot.append(b.to_dict())
 
     # -----------------------------------------------------------------------
     # PUBLIC LOOP API (HAJ-126)
@@ -923,8 +958,8 @@ class Match:
         self._apply_physics_update(self.fighter_b, net_force_b)
 
         # Step 8 — BoS update (STEP/SWEEP_LEG are v0.1 stubs).
-        self._apply_body_actions(self.fighter_a, actions_a)
-        self._apply_body_actions(self.fighter_b, actions_b)
+        self._apply_body_actions(self.fighter_a, actions_a, tick=tick)
+        self._apply_body_actions(self.fighter_b, actions_b, tick=tick)
 
         # HAJ-133 — FOOT_ATTACK family emits KuzushiEvents into uke's
         # buffer (parallel to PULL emission inside _compute_net_force_on).
@@ -1159,6 +1194,15 @@ class Match:
                 ps = judoka.state.body.get(act.hand)
                 if ps is not None and ps.contact_state == _CS.FREE:
                     ps.contact_state = _CS.REACHING
+                # HAJ-145 — surface the reach as a BodyPartEvent. No engine
+                # Event is emitted (REACH is per-tick noise in the visible
+                # log), but the BPE feeds the substrate.
+                target_loc = (act.target_location.value
+                              if act.target_location else None)
+                self._attach_bpe(
+                    None,
+                    decompose_reach(judoka, act.hand, target_loc, tick),
+                )
 
             elif act.kind == ActionKind.DEEPEN and act.edge is not None:
                 if act.edge in self.grip_graph.edges:
@@ -1168,7 +1212,7 @@ class Match:
                         # the ticker / prose log shows the grip war is
                         # alive across the whole match, not just at the
                         # initial engagement.
-                        events.append(Event(
+                        ev = Event(
                             tick=tick, event_type="GRIP_DEEPEN",
                             description=(
                                 f"[grip] {judoka.identity.name} deepens "
@@ -1178,6 +1222,10 @@ class Match:
                             data={"edge_id": id(act.edge),
                                   "from": pre_depth.name,
                                   "to": act.edge.depth_level.name},
+                        )
+                        events.append(ev)
+                        self._attach_bpe(ev, decompose_grip_deepen(
+                            act.edge, pre_depth, judoka, tick,
                         ))
 
             elif act.kind == ActionKind.STRIP and act.edge is not None:
@@ -1189,21 +1237,41 @@ class Match:
                     FORCE_ENVELOPES[act.edge.grip_type_v2].strip_resistance
                     * 1.1 * _grip_strength(judoka)
                 )
+                # Snapshot whether the edge was alive before the strip
+                # call — apply_strip_pressure removes the edge when it
+                # collapses entirely, so the post-call membership read
+                # tells us success.
+                target_edge = act.edge
+                pre_alive = target_edge in self.grip_graph.edges
                 result = self.grip_graph.apply_strip_pressure(
-                    act.edge, strip_force, grasper=self._owner(act.edge),
+                    target_edge, strip_force, grasper=self._owner(target_edge),
                 )
                 if result is not None:
                     result.tick = tick
                     events.append(result)
+                    succeeded = (
+                        pre_alive
+                        and target_edge not in self.grip_graph.edges
+                    )
+                    self._attach_bpe(result, decompose_grip_strip(
+                        judoka, target_edge, tick, succeeded=succeeded,
+                    ))
 
             elif act.kind == ActionKind.RELEASE and act.edge is not None:
                 if act.edge in self.grip_graph.edges:
-                    self.grip_graph.remove_edge(act.edge)
-                    key = act.edge.grasper_part.value
+                    released_edge = act.edge
+                    self.grip_graph.remove_edge(released_edge)
+                    key = released_edge.grasper_part.value
                     if not key.startswith("__"):
                         ps = judoka.state.body.get(key)
                         if ps is not None:
                             ps.contact_state = _CS.FREE
+                    # HAJ-145 — surface the release as a BodyPartEvent. No
+                    # engine Event is emitted today; the BPE substrate feeds
+                    # downstream readers.
+                    self._attach_bpe(None, decompose_grip_release(
+                        released_edge, judoka, tick,
+                    ))
 
             elif act.kind == ActionKind.HOLD_CONNECTIVE and act.hand is not None:
                 # Find any owned edge on this hand and ensure CONNECTIVE mode.
@@ -1289,7 +1357,7 @@ class Match:
         )
         self.engagement_ticks = 0
         for edge in new_edges:
-            events.append(Event(
+            ev = Event(
                 tick=tick, event_type="GRIP_ESTABLISH",
                 description=(
                     f"[grip] {edge.grasper_id} ({edge.grasper_part.value}) → "
@@ -1297,7 +1365,11 @@ class Match:
                     f"{edge.grip_type_v2.name} @ {edge.depth_level.name})"
                 ),
                 data={"edge_id": id(edge)},
-            ))
+            )
+            events.append(ev)
+            grasper = self._fighter_by_name(edge.grasper_id)
+            if grasper is not None:
+                self._attach_bpe(ev, decompose_grip_establish(edge, grasper, tick))
         if new_edges:
             self.position = Position.GRIPPING
 
@@ -1398,6 +1470,13 @@ class Match:
                 )
                 if event is not None:
                     record_kuzushi_event(victim, event)
+                # HAJ-145 — body-part decomposition of the PULL. Carries
+                # the pull direction so §13.8 self-cancel detection can
+                # compose against base-step directions emitted by
+                # _apply_body_actions.
+                self._attach_bpe(None, decompose_pull(
+                    attacker, edge, act.direction, act.magnitude, tick,
+                ))
 
         return (fx, fy)
 
@@ -1529,6 +1608,11 @@ class Match:
             )
             if event is not None:
                 record_kuzushi_event(victim, event)
+            # HAJ-145 — body-part decomposition of the foot attack.
+            self._attach_bpe(None, decompose_foot_attack(
+                attacker, act.kind.name, act.foot, act.direction,
+                act.magnitude, tick,
+            ))
             # Leg + cardio cost. Modest — foot attacks are setups, not
             # commits. The leg doing the work pays a per-attack fatigue
             # bump; both fighters' general cardio dips slightly.
@@ -1541,7 +1625,9 @@ class Match:
                 0.0, attacker.state.cardio_current - STEP_CARDIO_COST,
             )
 
-    def _apply_body_actions(self, judoka: Judoka, actions: list[Action]) -> None:
+    def _apply_body_actions(
+        self, judoka: Judoka, actions: list[Action], tick: int = 0,
+    ) -> None:
         for act in actions:
             if act.kind != ActionKind.STEP or act.foot is None or act.direction is None:
                 continue
@@ -1552,6 +1638,12 @@ class Match:
             mag = max(0.0, act.magnitude)
             fx, fy = foot.position
             foot.position = (fx + dx * mag, fy + dy * mag)
+            # HAJ-145 — emit a FEET-STEP body-part event. Direction carries
+            # the base-step vector so §13.8 self-cancel detection can score
+            # the dot product against same-tick HAND-PULL directions.
+            self._attach_bpe(None, decompose_step(
+                judoka, act.foot, act.direction, mag, tick,
+            ))
             # HAJ-128 — tactical-step semantics. The fighter's center of
             # mass advances with the foot at half the step magnitude (one
             # tick = one weight-transfer phase, not a full body shift).
@@ -1712,7 +1804,7 @@ class Match:
             # bypass slot but is more informative on its own).
             tags.append(f"gate bypassed: {gate_bypass_reason}")
         tag_suffix = f"  ({'; '.join(tags)})" if tags else ""
-        events: list[Event] = [Event(
+        entry_event = Event(
             tick=tick, event_type="THROW_ENTRY",
             description=(
                 f"[throw] {attacker.identity.name} commits — {throw_name} "
@@ -1732,7 +1824,23 @@ class Match:
                     commit_motivation.name if commit_motivation else None
                 ),
             },
-        )]
+        )
+        events: list[Event] = [entry_event]
+
+        # HAJ-145 — body-part decomposition of the commit. Walks the
+        # worked-throw template's four signature dimensions and produces
+        # the structured event sequence (hikite pull, tsurite pull, fulcrum
+        # / reaping limb, hip beat, posture beat). Throws on the legacy
+        # ThrowDef path (no worked template) skip decomposition; HAJ-29
+        # backfilled all v0.1 throws so this is a defensive fallthrough.
+        from worked_throws import worked_template_for as _worked_template_for
+        _commit_template = _worked_template_for(throw_id)
+        if _commit_template is not None:
+            self._attach_bpe(entry_event, decompose_commit(
+                attacker, defender, _commit_template, tick,
+                overcommitted=offensive_desperation or defensive_desperation,
+                source="COMMIT",
+            ))
 
         # Emit tick-0 sub-events.
         events.extend(self._emit_sub_events(
@@ -2099,7 +2207,7 @@ class Match:
             return None
 
         # Counter fires.
-        events: list[Event] = [Event(
+        counter_event = Event(
             tick=tick, event_type="COUNTER_COMMIT",
             description=(
                 f"[counter] {defender.identity.name} reads {perceived.name} — "
@@ -2114,7 +2222,17 @@ class Match:
                 "attacker":        attacker.identity.name,
                 "defender":        defender.identity.name,
             },
-        )]
+        )
+        # HAJ-145 — body-part decomposition of the counter commit. Routed
+        # through the same template-walk used by direct commits, but tagged
+        # source="COUNTER_COMMIT" so altitude readers can group it.
+        from worked_throws import worked_template_for as _worked_template_for
+        _counter_template = _worked_template_for(counter_id)
+        if _counter_template is not None:
+            self._attach_bpe(counter_event, decompose_counter(
+                defender, attacker, _counter_template, tick,
+            ))
+        events: list[Event] = [counter_event]
 
         # If tori was mid-attempt, abort it — the counter preempts.
         if tip is not None:
