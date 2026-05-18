@@ -54,7 +54,7 @@ techniques:
 
   - technique_id: uchi_mata
     name_japanese: Uchi-mata
-    name_english: Inner Thigh Throw
+    name_english: Inner-thigh Reaping Throw
     family: koshi_waza
     subfamily: forward_throw
     kodokan_status: gokyo_no_waza
@@ -299,3 +299,186 @@ techniques:
   - technique_id: harai_goshi
     name_japanese: Harai-goshi
     name_english: Hip Sweep
+    family: koshi_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: forward_rotation_about_hip_axis
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 50
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1895
+
+  - technique_id: kosoto_gari
+    name_japanese: Kosoto-gari
+    name_english: Small Outer Reap
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: shallow
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+    couple_type: reverse_rotation_about_ankle_axis
+    posture_requirements: extended_backward
+    base_difficulty: 60
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1895
+
+  - technique_id: kouchi_gari
+    name_japanese: Kouchi-gari
+    name_english: Small Inner Reap
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: shallow
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_left_diagonal
+    couple_type: reverse_rotation_about_ankle_axis
+    posture_requirements: extended_backward
+    base_difficulty: 55
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1895
+
+  - technique_id: koshi_guruma
+    name_japanese: Koshi-guruma
+    name_english: Hip Wheel
+    family: koshi_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: forward_rotation_about_hip_axis
+    posture_requirements: upright_or_forward_compromised 
+    base_difficulty: 65
+    pedagogical_prerequisites:
+      - harai_goshi # Koshi-guruma is often taught before harai_goshi, but the latter's kuzushi is a useful stepping stone.
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach 
+    ne_waza_followup_preferences:
+      - kesa_gatame
+    era_introduced: 1895
+
+  - technique_id: tsurikomi_goshi
+    name_japanese: Tsurikomi-goshi
+    name_english: Lift-Pull Hip Throw
+    family: koshi_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: forward_rotation_about_hip_axis
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 60
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1895
+
+  - technique_id: okuri_ashi_harai
+    name_japanese: Okuri-ashi-harai
+    name_english: Foot Sweep 
+    family: ashi_waza
+    subfamily: side_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: shallow
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - side_right
+      - side_left
+    couple_type: lateral_sweep
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 65
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1895
+
+  - technique_id: tai_otoshi
+    name_japanese: Tai-otoshi
+    name_english: Body Drop
+    family: te_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+      - right_lateral
+    couple_type: forward_rotation_about_extended_leg_axis
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 70
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1895

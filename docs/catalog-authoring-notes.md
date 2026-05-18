@@ -27,10 +27,15 @@ Fixture difficulty values were "minimally plausible" in HAJ-204, not authored. T
 
 (Add new findings below as authoring continues against the v1.2 schema.)
 
-For Osoto-gari, I might make minimum belt use for competition: white.
+- For Osoto-gari, I might make minimum belt use for competition: white.
 
-I then have to decide what other moves are going to be for White belt availbility in competition. The moves have to be at least three or four that are most likely always going to be taught to every incoming white belt so that they can learn how to compete and then eventually become yellow belts, but we need a list of throws that will work for white belts. 
-That will probably also be determined by the availability and perhaps the skill level of the senseis and their repertoire amongst those throws. 
-Another idea is that perhaps all moves with a base difficulty of, say, 35 or 40 and below are able to be taught to incoming white belts. 
+- I then have to decide what other moves are going to be for White belt availbility in competition. The moves have to be at least three or four that are most likely always going to be taught to every incoming white belt so that they can learn how to compete and then eventually become yellow belts, but we need a list of throws that will work for white belts. 
+- That will probably also be determined by the availability and perhaps the skill level of the senseis and their repertoire amongst those throws. 
 
-Is there any disqualifying grips for any throws?
+- Another idea is that perhaps all moves with a base difficulty of, say, 35 or 40 and below are able to be taught to incoming white belts. 
+
+- Is there any disqualifying grips for any throws?
+
+- Moving kosoto-gari to 60 base difficulty from 45. More timing skill required than osoto-gari.
+
+- There has to be a way to change the base difficulty of a move based on the the individual judoka based on their attributes. For example, if a judoka has a high attribute in timing, then the base difficulty of kosoto-gari should be reduced for that judoka. Same for different heights and weights. That would be a more dynamic way to calculate difficulty and would make it more personalized for each judoka.
