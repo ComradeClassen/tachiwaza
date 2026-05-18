@@ -112,9 +112,9 @@ def test_naming_overlay_round_trip_shape():
 # ---------------------------------------------------------------------------
 def test_load_sample_catalog_yaml():
     catalog = load_catalog(SAMPLE_CATALOG)
-    assert set(catalog.keys()) == {
-        "deashi_harai", "uchi_mata", "osoto_gari", "seoi_nage", "tomoe_nage"
-    }
+    # Subset assertion — the catalog grows under HAJ-205 authoring; this
+    # test pins behavior on the original fixtures, not the full inventory.
+    assert {"deashi_harai", "uchi_mata", "osoto_gari", "seoi_nage", "tomoe_nage"}.issubset(catalog.keys())
 
     uchi = catalog["uchi_mata"]
     # Identity
