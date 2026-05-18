@@ -406,11 +406,23 @@ def validate_catalog(catalog: dict[str, TechniqueDefinition]) -> ValidationRepor
 def validate_catalog_file(path: Union[str, Path]) -> ValidationReport:
     """Load and validate a catalog file. Loader failures surface as a
     fatal report (errors empty but `load_error` set) since downstream
-    checks can't run without a parsed catalog."""
+    checks can't run without a parsed catalog.
+
+    Catches `CatalogValidationError` (loader's schema/enum complaints)
+    and YAML/JSON parser errors (raw syntax bugs in the file). Other
+    exceptions (FileNotFoundError, PermissionError) propagate — those
+    are environment problems, not catalog content problems.
+    """
+    import json
+    import yaml
     try:
         catalog = load_catalog(path)
     except CatalogValidationError as exc:
         return ValidationReport(load_error=str(exc))
+    except (yaml.YAMLError, json.JSONDecodeError) as exc:
+        # Authoring issues like indentation errors get a clean message
+        # instead of a Python stack trace.
+        return ValidationReport(load_error=f"{type(exc).__name__}: {exc}")
     return validate_catalog(catalog)
 
 

@@ -384,6 +384,27 @@ def test_validate_catalog_file_surfaces_loader_failure(tmp_path):
     assert report.is_valid is False
 
 
+def test_validate_catalog_file_surfaces_yaml_parse_error(tmp_path):
+    # YAML syntax errors (indentation, unclosed lists, etc.) are the
+    # most common authoring failure mode — they must surface as a clean
+    # load_error, not propagate as an uncaught exception.
+    path = tmp_path / "malformed.yaml"
+    path.write_text(textwrap.dedent("""
+        techniques:
+          - technique_id: a
+            name_japanese: A
+            name_english: A
+            pedagogical_prerequisites:
+              - first_thing
+              indented_wrong: oops
+    """).strip(), encoding="utf-8")
+
+    report = validate_catalog_file(path)
+    assert report.load_error is not None
+    assert "ParserError" in report.load_error or "ScannerError" in report.load_error
+    assert report.is_valid is False
+
+
 # ---------------------------------------------------------------------------
 # Report formatting
 # ---------------------------------------------------------------------------
