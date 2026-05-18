@@ -111,58 +111,122 @@ def test_naming_overlay_round_trip_shape():
 # Loader against the hand-authored sample catalog
 # ---------------------------------------------------------------------------
 def test_load_sample_catalog_yaml():
+    # End-to-end sanity check: real catalog loads, schema shape is intact.
+    # Assertions pin schema/structure, not authoring content — content
+    # drifts under HAJ-205 authoring (renames, kuzushi additions, base
+    # difficulty recalibration) and shouldn't break this test.
     catalog = load_catalog(SAMPLE_CATALOG)
-    # Subset assertion — the catalog grows under HAJ-205 authoring; this
-    # test pins behavior on the original fixtures, not the full inventory.
     assert {"deashi_harai", "uchi_mata", "osoto_gari", "seoi_nage", "tomoe_nage"}.issubset(catalog.keys())
 
     uchi = catalog["uchi_mata"]
-    # Identity
+    # Identity — Japanese name is canonical, English is authoring-fluid
     assert uchi.name_japanese == "Uchi-mata"
-    assert uchi.name_english == "Inner Thigh Throw"
+    assert uchi.name_english        # any non-empty string
     # Classification
     assert uchi.family is TechniqueFamily.KOSHI_WAZA
     assert uchi.subfamily == "forward_throw"
     assert uchi.kodokan_status is KodokanStatus.GOKYO_NO_WAZA
-    # Stage 1 — grip signatures (list)
-    assert len(uchi.canonical_grip_signatures) == 1
+    # Stage 1 — grip signatures (list, populated)
+    assert len(uchi.canonical_grip_signatures) >= 1
     sig = uchi.canonical_grip_signatures[0]
     assert sig.mirror_eligible is True
-    assert len(sig.tori_required_grips) == 2
-    first_grip = sig.tori_required_grips[0]
-    assert first_grip.hand is GripHand.TORI_LEFT
-    assert first_grip.target_region is GripTargetRegion.UKE_SLEEVE_UPPER
-    assert first_grip.minimum_depth is GripDepth.CONTROLLED
-    assert len(sig.uke_disqualifying_grips) == 1
-    assert sig.uke_disqualifying_grips[0].minimum_depth is GripDepth.DEEP
+    assert len(sig.tori_required_grips) >= 2
     # Stage 2 — kinetic
-    assert uchi.admissible_kuzushi_vectors == ["forward_right_diagonal", "forward_pure"]
-    # primary omitted in YAML → defaults to admissible
-    assert uchi.primary_kuzushi_vectors == ["forward_right_diagonal", "forward_pure"]
+    assert "forward_right_diagonal" in uchi.admissible_kuzushi_vectors
+    assert uchi.primary_kuzushi_vectors        # populated (defaults to admissible)
     assert uchi.couple_type == "forward_rotation_about_hip_axis"
     assert uchi.posture_requirements is UkePostureRequirement.UPRIGHT_OR_FORWARD_COMPROMISED
-    # Difficulty & pedagogy
-    assert uchi.base_difficulty == 70
-    assert uchi.pedagogical_prerequisites == ["harai_goshi"]
-    assert uchi.minimum_belt_for_competition_use == "green"
-    # Ne-waza linkage
-    assert uchi.failed_throw_consequence is FailedThrowConsequence.UKE_LANDS_STOMACH
-    assert uchi.ne_waza_followup_preferences == ["kesa_gatame"]
+    # Difficulty & pedagogy — bounds-check rather than pin
+    assert 0 <= uchi.base_difficulty <= 100
     # Era
     assert uchi.era_introduced == 1895
     assert uchi.era_restricted is None
 
 
+def test_gokyo_kyo_parses_when_present(tmp_path):
+    path = tmp_path / "kyo.yaml"
+    path.write_text(textwrap.dedent("""
+        techniques:
+          - technique_id: a
+            name_japanese: A
+            name_english: A
+            family: te_waza
+            subfamily: forward_throw
+            kodokan_status: gokyo_no_waza
+            canonical_grip_signatures:
+              - tori_required_grips:
+                  - hand: tori_right
+                    target_region: uke_lapel_high
+                    minimum_depth: controlled
+            admissible_kuzushi_vectors: [forward_pure]
+            couple_type: placeholder
+            posture_requirements: any
+            base_difficulty: 40
+            gokyo_kyo: 2
+    """).strip(), encoding="utf-8")
+    catalog = load_catalog(path)
+    assert catalog["a"].gokyo_kyo == 2
+
+
+def test_gokyo_kyo_defaults_to_none(tmp_path):
+    path = tmp_path / "no_kyo.yaml"
+    path.write_text(textwrap.dedent("""
+        techniques:
+          - technique_id: a
+            name_japanese: A
+            name_english: A
+            family: te_waza
+            subfamily: forward_throw
+            kodokan_status: shinmeisho_no_waza
+            canonical_grip_signatures:
+              - tori_required_grips:
+                  - hand: tori_right
+                    target_region: uke_lapel_high
+                    minimum_depth: controlled
+            admissible_kuzushi_vectors: [forward_pure]
+            couple_type: placeholder
+            posture_requirements: any
+            base_difficulty: 40
+    """).strip(), encoding="utf-8")
+    catalog = load_catalog(path)
+    assert catalog["a"].gokyo_kyo is None
+
+
+def test_gokyo_kyo_out_of_range_is_rejected(tmp_path):
+    path = tmp_path / "bad_kyo.yaml"
+    path.write_text(textwrap.dedent("""
+        techniques:
+          - technique_id: a
+            name_japanese: A
+            name_english: A
+            family: te_waza
+            subfamily: forward_throw
+            kodokan_status: gokyo_no_waza
+            canonical_grip_signatures:
+              - tori_required_grips:
+                  - hand: tori_right
+                    target_region: uke_lapel_high
+                    minimum_depth: controlled
+            admissible_kuzushi_vectors: [forward_pure]
+            couple_type: placeholder
+            posture_requirements: any
+            base_difficulty: 40
+            gokyo_kyo: 6
+    """).strip(), encoding="utf-8")
+    with pytest.raises(CatalogValidationError, match="gokyo_kyo"):
+        load_catalog(path)
+
+
 def test_sample_catalog_deashi_uses_any_wildcard():
     # Deashi-harai is the canonical omnidirectional foot sweep — admissible
-    # is `any`, primary lists the forward-scoring directions.
+    # is `any`, primary lists the forward-scoring directions. Pin the
+    # wildcard semantics; let primary content drift under authoring.
     catalog = load_catalog(SAMPLE_CATALOG)
     deashi = catalog["deashi_harai"]
     assert deashi.admissible_kuzushi_vectors == [KUZUSHI_ANY_TOKEN]
     assert deashi.is_omnidirectional() is True
-    assert deashi.primary_kuzushi_vectors == [
-        "forward_right_diagonal", "forward_left_diagonal",
-    ]
+    assert "forward_right_diagonal" in deashi.primary_kuzushi_vectors
+    assert "forward_left_diagonal" in deashi.primary_kuzushi_vectors
 
 
 def test_load_sample_catalog_covers_each_family():

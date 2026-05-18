@@ -1,16 +1,15 @@
-# Technique catalog — HAJ-204 skeleton fixture, revised under HAJ-213.
+# Technique catalog — HAJ-205 authoring in progress against v1.2 schema.
 #
-# This file is a small hand-authored sample (5 techniques) used to exercise
-# the schema and loader. The full 40–60-technique catalog authored from
-# Kodokan Judo (Kano) and Judo Unleashed (Ohlenkamp) is HAJ-205. Entries
-# here are minimally plausible but should not be treated as competition-
-# accurate authoring — they exist to validate the loader path. Difficulty
-# values here are first-pass; recalibrate during HAJ-205 authoring.
+# HAJ-204 established the schema + loader; HAJ-213 revised it (multi-grip,
+# admissible-vs-primary kuzushi); HAJ-211 added the validator. HAJ-205 is
+# the 40–60-entry authoring pass against Kodokan Judo (Kano) and Judo
+# Unleashed (Ohlenkamp). Difficulty values are first-pass and will be
+# recalibrated as a ladder pass once all ~40 throws are in.
 #
 # Schema reference: design-notes/triage/technique-vocabulary-system.md v1.2
-# (Section 2). Loader: src/technique_catalog.py.
+# (Section 2). Loader: src/technique_catalog.py. Validator: src/catalog_validator.py.
 #
-# v1.2 schema notes for migration:
+# Schema notes:
 #   - canonical_grip_signatures is a LIST. Most entries have a single
 #     signature; multi-signature lists are for distinct grip variants of
 #     the same technique. Each signature has `mirror_eligible: true` by
@@ -21,6 +20,9 @@
 #   - primary_kuzushi_vectors is optional (defaults to admissible). Used
 #     for scoring quality and prose surfaces — the "primary scoring"
 #     subset of admissible directions.
+#   - gokyo_kyo (1–5) records which kyo group a Gokyo no Waza technique
+#     belongs to. Source-book ordering preserved for curriculum logic
+#     and in-game lore surfacing.
 
 techniques:
   - technique_id: deashi_harai
@@ -42,15 +44,16 @@ techniques:
     admissible_kuzushi_vectors: any
     # Forward sweeps score cleanest (the canonical "forward foot sweep").
     primary_kuzushi_vectors:
-      - forward_pure 
+      - forward_pure
       - forward_right_diagonal
       - forward_left_diagonal
     couple_type: forward_rotation_about_ankle_axis
     posture_requirements: upright_or_forward_compromised
     base_difficulty: 65
     pedagogical_prerequisites: []
-    minimum_belt_for_competition_use: yellow
+    minimum_belt_for_competition_use: white
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: uchi_mata
     name_japanese: Uchi-mata
@@ -83,6 +86,7 @@ techniques:
     ne_waza_followup_preferences:
       - kesa_gatame
     era_introduced: 1895
+    gokyo_kyo: 2
 
   - technique_id: osoto_gari
     name_japanese: Osoto-gari
@@ -104,9 +108,10 @@ techniques:
     couple_type: reverse_rotation_about_shoulder_axis
     posture_requirements: extended_backward
     base_difficulty: 40
-    minimum_belt_for_competition_use: yellow
+    minimum_belt_for_competition_use: white
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: seoi_nage
     name_japanese: Seoi-nage
@@ -133,6 +138,7 @@ techniques:
     minimum_belt_for_competition_use: yellow
     failed_throw_consequence: tori_to_knees
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: tomoe_nage
     name_japanese: Tomoe-nage
@@ -159,6 +165,7 @@ techniques:
     ne_waza_followup_preferences:
       - juji_gatame
     era_introduced: 1895
+    gokyo_kyo: 3
 
   - technique_id: hiza_guruma
     name_japanese: Hiza-guruma
@@ -182,9 +189,10 @@ techniques:
     base_difficulty: 50
     pedagogical_prerequisites:
       - deashi_harai
-    minimum_belt_for_competition_use: yellow
+    minimum_belt_for_competition_use: white
     failed_throw_consequence: uke_lands_stomach
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: sasae_tsurikomi_ashi
     name_japanese: Sasae-tsurikomi-ashi
@@ -211,6 +219,7 @@ techniques:
     minimum_belt_for_competition_use: yellow
     failed_throw_consequence: uke_lands_stomach
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: uki_goshi
     name_japanese: Uki-goshi
@@ -242,6 +251,7 @@ techniques:
     ne_waza_followup_preferences:
       - kesa_gatame
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: o_goshi
     name_japanese: O-goshi
@@ -266,11 +276,12 @@ techniques:
     base_difficulty: 55
     pedagogical_prerequisites:
       - harai_goshi # O-goshi is often taught before harai_goshi, but the latter's kuzushi is a useful stepping stone.
-    minimum_belt_for_competition_use: green
+    minimum_belt_for_competition_use: white
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
       - kesa_gatame
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: ouchi_gari
     name_japanese: Ouchi-gari
@@ -292,9 +303,10 @@ techniques:
     couple_type: reverse_rotation_about_shoulder_axis
     posture_requirements: extended_backward
     base_difficulty: 45
-    minimum_belt_for_competition_use: yellow
+    minimum_belt_for_competition_use: white
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1895
+    gokyo_kyo: 1
 
   - technique_id: harai_goshi
     name_japanese: Harai-goshi
@@ -321,6 +333,7 @@ techniques:
     minimum_belt_for_competition_use: yellow
     failed_throw_consequence: uke_lands_stomach
     era_introduced: 1895
+    gokyo_kyo: 2
 
   - technique_id: kosoto_gari
     name_japanese: Kosoto-gari
@@ -345,6 +358,7 @@ techniques:
     minimum_belt_for_competition_use: yellow
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1895
+    gokyo_kyo: 2
 
   - technique_id: kouchi_gari
     name_japanese: Kouchi-gari
@@ -369,6 +383,7 @@ techniques:
     minimum_belt_for_competition_use: yellow
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1895
+    gokyo_kyo: 2
 
   - technique_id: koshi_guruma
     name_japanese: Koshi-guruma
@@ -392,15 +407,16 @@ techniques:
       - forward_right_diagonal
       - forward_pure
     couple_type: forward_rotation_about_hip_axis
-    posture_requirements: upright_or_forward_compromised 
+    posture_requirements: upright_or_forward_compromised
     base_difficulty: 65
     pedagogical_prerequisites:
       - harai_goshi # Koshi-guruma is often taught before harai_goshi, but the latter's kuzushi is a useful stepping stone.
     minimum_belt_for_competition_use: green
-    failed_throw_consequence: uke_lands_stomach 
+    failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
       - kesa_gatame
     era_introduced: 1895
+    gokyo_kyo: 2
 
   - technique_id: tsurikomi_goshi
     name_japanese: Tsurikomi-goshi
@@ -428,10 +444,11 @@ techniques:
     minimum_belt_for_competition_use: yellow
     failed_throw_consequence: uke_lands_stomach
     era_introduced: 1895
+    gokyo_kyo: 2
 
   - technique_id: okuri_ashi_harai
     name_japanese: Okuri-ashi-harai
-    name_english: Foot Sweep 
+    name_english: Foot Sweep
     family: ashi_waza
     subfamily: side_throw
     kodokan_status: gokyo_no_waza
@@ -455,6 +472,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     era_introduced: 1895
+    gokyo_kyo: 2
 
   - technique_id: tai_otoshi
     name_japanese: Tai-otoshi
@@ -473,7 +491,7 @@ techniques:
         uke_disqualifying_grips: []
     admissible_kuzushi_vectors:
       - forward_right_diagonal
-      - right_lateral
+      - side_right
     couple_type: forward_rotation_about_extended_leg_axis
     posture_requirements: upright_or_forward_compromised
     base_difficulty: 70
@@ -482,3 +500,4 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     era_introduced: 1895
+    gokyo_kyo: 2

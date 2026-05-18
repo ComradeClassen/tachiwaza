@@ -85,6 +85,7 @@ The v1.2 decisions:
 - `base_difficulty` — a 0–100 value representing how hard the technique is to execute even with ideal conditions. Used by the resolver as a multiplier on proficiency. Uchi-mata might be 70 (hard to do well even when set up); osoto-otoshi might be 30 (forgiving).
 - `pedagogical_prerequisites` — list of `technique_id` values that a sensei is expected to teach *before* this technique. Not enforced — a sensei *can* teach uchi-mata to a white belt, it's just unusual. Used by the dojo curriculum UI and by the sensei's vocabulary-teaching logic.
 - `minimum_belt_for_competition_use` — informal rank threshold at which judoka typically deploy this technique in competition. Lower belts may know it but rarely attempt it. Soft signal for resolver weighting, not a hard gate.
+- `gokyo_kyo` (optional, integer 1–5) — for techniques in Gokyo no Waza, which of the five kyo groups the technique belongs to (dai-ikkyo, dai-nikyo, …, dai-gokyo). Source-book ordering preserved here so curriculum logic (sensei AI teaches dai-ikkyo before dai-nikyo) and in-game lore surfaces (the "read the book" view of a throw) can consume it without re-deriving from external lookups. Only meaningful when `kodokan_status == gokyo_no_waza`.
 
 ### Ne-waza linkage fields
 

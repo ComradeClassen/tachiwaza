@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Pre-commit hook — block commits that introduce catalog validation errors.
+#
+# Activate (one-time, per clone):
+#   git config core.hooksPath .githooks
+#
+# Only fires when a catalog-relevant file is staged for commit. Warnings and
+# infos are non-blocking; only validator errors abort the commit.
+
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# Slash-normalise (Windows git can emit backslashes) before matching.
+catalog_changed=$(echo "$staged" | tr '\\' '/' | grep -E '^(data/techniques\.yaml|src/catalog_validator\.py|src/technique_catalog\.py)$' || true)
+
+if [ -z "$catalog_changed" ]; then
+    exit 0
+fi
+
+echo "[pre-commit] running catalog validator..." >&2
+
+# Pass --no-warnings --no-infos so the hook output stays focused on what
+# actually blocks the commit. Run the full report manually if you want
+# the warnings/infos.
+if ! python src/catalog_validator.py data/techniques.yaml --no-warnings --no-infos >&2; then
+    echo "" >&2
+    echo "[pre-commit] catalog validation failed — fix the errors above before committing." >&2
+    echo "[pre-commit] full report: python src/catalog_validator.py data/techniques.yaml" >&2
+    exit 1
+fi

@@ -236,6 +236,12 @@ class TechniqueDefinition:
     era_introduced: Optional[int] = None
     era_restricted: Optional[int] = None
 
+    # Kodokan Gokyo no Waza kyo grouping (1–5). Only meaningful when
+    # kodokan_status == gokyo_no_waza; left unset for Shinmeisho /
+    # Habukareta / non-Kodokan techniques. Preserves source-book
+    # organisation for curriculum ordering and in-game lore surfacing.
+    gokyo_kyo: Optional[int] = None
+
     def is_omnidirectional(self) -> bool:
         """True if admissible_kuzushi_vectors uses the `any` wildcard."""
         return KUZUSHI_ANY_TOKEN in self.admissible_kuzushi_vectors
@@ -524,6 +530,15 @@ def _parse_definition(raw: Any) -> TechniqueDefinition:
             f"{ctx}: era_restricted ({era_restricted}) precedes era_introduced ({era_introduced})"
         )
 
+    gokyo_kyo_raw = raw.get("gokyo_kyo")
+    gokyo_kyo: Optional[int] = None
+    if gokyo_kyo_raw is not None:
+        if not isinstance(gokyo_kyo_raw, int) or not (1 <= gokyo_kyo_raw <= 5):
+            raise CatalogValidationError(
+                f"{ctx}: gokyo_kyo must be an integer in [1, 5], got {gokyo_kyo_raw!r}"
+            )
+        gokyo_kyo = gokyo_kyo_raw
+
     prereqs = raw.get("pedagogical_prerequisites") or []
     if not isinstance(prereqs, list) or any(not isinstance(p, str) for p in prereqs):
         raise CatalogValidationError(
@@ -574,6 +589,7 @@ def _parse_definition(raw: Any) -> TechniqueDefinition:
         ne_waza_followup_preferences=list(followups),
         era_introduced=era_introduced,
         era_restricted=era_restricted,
+        gokyo_kyo=gokyo_kyo,
     )
 
 
