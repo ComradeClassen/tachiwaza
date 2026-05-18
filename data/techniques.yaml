@@ -501,3 +501,198 @@ techniques:
     failed_throw_consequence: uke_lands_stomach
     era_introduced: 1895
     gokyo_kyo: 2
+
+  - technique_id: kosoto_gake
+    name_japanese: Kosoto-gake
+    name_english: Small Outer Hook
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: shallow
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+    couple_type: reverse_rotation_about_ankle_axis_with_hooking_action
+    posture_requirements: extended_backward
+    base_difficulty: 65
+    minimum_belt_for_competition_use: green
+    # High-consequence failure: a missed kosoto-gake leaves tori prone with
+    # uke in immediate scoring position — common waza-ari-against-tori
+    # outcome, ippon possible if uke converts cleanly.
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1895
+    gokyo_kyo: 3
+
+  - technique_id: tsuri_goshi
+    name_japanese: Tsuri-goshi
+    name_english: Lifting Hip Throw
+    family: koshi_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_belt
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_pure
+    couple_type: forward_rotation_about_hip_axis
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 60
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1895
+    gokyo_kyo: 3
+
+  - technique_id: yoko_otoshi
+    name_japanese: Yoko-otoshi
+    name_english: Side Drop
+    family: sutemi_waza
+    subfamily: side_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - side_right
+    couple_type: lever_inverted_commit
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 70
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1895
+    gokyo_kyo: 3
+
+  - technique_id: ashi_guruma
+    name_japanese: Ashi-guruma
+    name_english: Leg Wheel
+    family: ashi_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: forward_rotation_about_extended_leg_axis
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 65
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1895
+    gokyo_kyo: 3
+
+  - technique_id: hane_goshi
+    name_japanese: Hane-goshi
+    name_english: Hip Spring
+    family: koshi_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: forward_rotation_about_hip_axis_with_springing_action
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 70
+    pedagogical_prerequisites:
+      - harai_goshi # Hane-goshi is often taught before harai_goshi, but the latter's kuzushi is a useful stepping stone.
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    ne_waza_followup_preferences:
+      - kesa_gatame
+    era_introduced: 1895
+    gokyo_kyo: 3
+
+  - technique_id: harai_tsurikomi_ashi
+    name_japanese: Harai-tsurikomi-ashi
+    name_english: Lift-Pull Foot Sweep
+    family: ashi_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: shallow
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_left_diagonal
+    couple_type: forward_rotation_about_ankle_axis_with_lift_pull_action
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 65
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1895
+    gokyo_kyo: 3
+
+  - technique_id: kata_guruma
+    name_japanese: Kata-guruma
+    name_english: Shoulder Wheel
+    family: te_waza
+    subfamily: forward_throw
+    kodokan_status: gokyo_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: forward_rotation_about_shoulder_axis_with_lifting_action
+    posture_requirements: bent_forward
+    base_difficulty: 70
+    pedagogical_prerequisites:
+      - seoi_nage # Kata-guruma is often taught before seoi-nage, but the latter's kuzushi is a useful stepping stone.
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_to_knees
+    era_introduced: 1895
+    gokyo_kyo: 3

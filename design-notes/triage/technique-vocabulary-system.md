@@ -89,7 +89,12 @@ The v1.2 decisions:
 
 ### Ne-waza linkage fields
 
-- `failed_throw_consequence` — what happens if the throw fails or is countered. Options: `tori_falls_to_back` (defensive disadvantage), `tori_to_knees` (neutral transition), `uke_lands_stomach` (ne-waza opportunity for tori), `tori_thrown` (counter-throw opportunity for uke). Drives the post-throw ne-waza branch.
+- `failed_throw_consequence` — what happens if the throw fails or is countered. Drives the post-throw branch — and crucially, drives *scoring against tori* on high-stakes failures. The resolver must distinguish neutral failures from failures that hand uke an immediate scoring opportunity. Options:
+  - `tori_falls_to_back` — **high-stakes failure.** Tori has overcommitted and lands prone. Uke is in immediate scoring position: this is a common waza-ari-against-tori outcome, and ippon-against-tori is possible if uke converts cleanly (e.g., follows up with a pin or completes the toppling motion). The resolver should *not* treat this as "throw didn't work, neutral reset" — it's "uke gets a free shot at scoring." Throws with this consequence (kosoto-gake, the small reaps when miscommitted, hane-goshi when shrugged off) are high-risk-high-reward by their nature.
+  - `tori_to_knees` — **low-stakes failure.** Tori drops to knees but stays facing uke. Engagement resets to neutral, or to a low-stakes ne-waza entry from a kneeling base. No score against tori. Typical of seoi-nage and similar forward-spin throws where tori's commitment doesn't carry them past uke.
+  - `uke_lands_stomach` — **ne-waza opportunity for tori.** Uke ends up face-down (turtle / prone). No score for either side, but tori has access to ne-waza attacks against a turtled opponent. Typical of throws where uke's defense involves giving up the throw but presenting a hard-to-attack defensive shape.
+  - `tori_thrown` — **catastrophic failure.** Uke has executed a counter-throw against tori. Score against tori is the *expected* outcome — waza-ari if the counter is shallow, ippon if it's clean. Reserved for throws whose committed motion is specifically exploitable by a named counter (e.g. uchi-mata sukashi against uchi-mata, te-guruma against poorly-loaded harai).
+  - Field can be omitted entirely when the failure mode is genuinely undefined or unremarkable — but for throws where failure has stakes, populate this honestly. Authoring it as `[]` or empty is wrong; the field is an optional single value, not a list.
 - `ne_waza_followup_preferences` — list of `technique_id` values (ne-waza techniques) that naturally chain from this technique's failure or partial success. Authoring data, used by the ne-waza substrate.
 
 ### Era fields

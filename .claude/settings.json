@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python src/main.py *)",
+      "Bash(python src/catalog_validator.py *)",
+      "Bash(python -m pytest *)",
+      "mcp__claude_ai_Linear__get_issue",
+      "mcp__claude_ai_Linear__list_issues",
+      "mcp__claude_ai_Linear__list_milestones",
+      "mcp__claude_ai_Linear__get_document"
+    ]
+  }
+}

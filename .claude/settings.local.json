@@ -87,7 +87,9 @@
       "Bash(python -m pytest tests --co -q -p no:cacheprovider)",
       "Bash(python -m pytest tests --capture=no -p no:cacheprovider)",
       "Bash(python -m pytest tests --capture=no -p no:cacheprovider --tb=line)",
-      "Bash(python -m pytest tests/test_score_announcements.py --capture=no -p no:cacheprovider)"
+      "Bash(python -m pytest tests/test_score_announcements.py --capture=no -p no:cacheprovider)",
+      "Bash(python -m pytest tests/ --co -q)",
+      "Bash(python src/catalog_validator.py:*)"
     ]
   }
 }
