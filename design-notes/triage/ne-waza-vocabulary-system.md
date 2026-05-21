@@ -100,7 +100,7 @@ The rule-of-thumb from tachiwaza holds: facts that don't change match-to-match g
     - arm_extraction
   
   score_mechanism: pin_time_accumulation      # pin_time_accumulation | immediate_submission
-  pin_time_to_ippon: 20                       # seconds — only when score_mechanism is pin_time_accumulation
+                                              # waza-ari laddering and era-variable pin times handled by the rule-set layer, not the catalog
   
   joint_target: null                          # only for joint_lock subfamily
   fulcrum_body_part: null                     # only for joint_lock subfamily
@@ -139,7 +139,7 @@ The two fields are not mutually exclusive but typically only one is populated. A
 
 **`applicable_defensive_struts` is the Stage 2 input.** References strut_ids from `data/defensive_struts.yaml`. The order matters in one specific sense: list the *primary* defense first (the one Kodokan teaches as the canonical escape). Validator allows arbitrary length; authors should stay under five entries per technique unless the source material genuinely names more.
 
-**`score_mechanism` determines the resolution loop.** `pin_time_accumulation` requires `pin_time_to_ippon` populated (IJF rules: 20 seconds for ippon, 10 for waza-ari; era-variable per HAJ-214-class concerns). `immediate_submission` requires `pin_time_to_ippon: null` and may have `tap_resistance_curve` (deferred to v0.2 — see open questions).
+**`score_mechanism` determines the resolution loop.** Two values: `pin_time_accumulation` (osaekomi-waza, accumulates against the OsaekomiClock) and `immediate_submission` (shime/kansetsu, fires a tap-check loop). The waza-ari/ippon laddering — 10 seconds to waza-ari, 10 more to ippon if already holding waza-ari, era-variable per pre-2017 rules — lives in the rule-set layer, not in the catalog. The catalog declares only which resolution loop applies; the loop itself handles laddering. No per-technique pin-time field is needed because every osaekomi accumulates against the same shared clock.
 
 **`joint_target` and `fulcrum_body_part` are joint_lock-only.** `joint_target` is one of: `elbow_extension`, `elbow_rotation`, `shoulder_rotation`, `wrist`, `knee`, `ankle`. `fulcrum_body_part` is the X in `ude-hishigi-X-gatame` — for juji-gatame, this is `hips_and_thighs`; for hiza-gatame, `knee`; for waki-gatame, `armpit`; for hara-gatame, `stomach`; for ashi-gatame, `leg`; for te-gatame, `hand`. The naming convention is sourced; the validator can lock it down to an enum once the catalog is authored.
 
@@ -152,20 +152,17 @@ The validator should enforce subfamily-specific field requirements:
 **`subfamily: pin`** requires:
 - `parent_position` (non-null) OR `fires_from_position` (non-null) — at least one
 - `score_mechanism: pin_time_accumulation`
-- `pin_time_to_ippon` (positive integer)
 - `joint_target` is null
 - `fulcrum_body_part` is null
 
 **`subfamily: strangle`** requires:
 - `score_mechanism: immediate_submission`
-- `pin_time_to_ippon` is null
 - `joint_target` is null
 - `fulcrum_body_part` is null
 - `parent_position` and `fires_from_position` may both be null (position-agnostic)
 
 **`subfamily: joint_lock`** requires:
 - `score_mechanism: immediate_submission`
-- `pin_time_to_ippon` is null
 - `joint_target` (non-null, from the enum)
 - `fulcrum_body_part` (non-null, snake_case body part)
 - `parent_position` and `fires_from_position` may both be null (position-agnostic)
@@ -194,6 +191,20 @@ The existing position state machine declares broad position states (`SIDE_CONTRO
 The dominant-position catalog adds a layer *between* the broad state machine and the technique catalog: configurations that satisfy the substrate Part 5 pattern of "single position offering 2+ distinct terminal states with induced transitions between them." A dominant position is a substrate object the engine can ask: *given this active connection set, am I in a recognized dominant position?* If yes, the position's terminal-technique list becomes the candidate menu; if no, fall back to the broad state's catalog techniques.
 
 Most pins are not dominant positions. Kesa-gatame is a single terminal state — uke can defend, but tori isn't choosing between multiple finishes from the same configuration. Sankaku is. Back-control-with-hooks is (Cranford's `BACK_TURTLE_WITH_HOOKS`).
+
+### 3.2.1 Three position categories the engine handles
+
+Worth being explicit because the spec touches all three:
+
+1. **Broad position states** — the existing position state machine enum. SIDE_CONTROL, MOUNTED, GUARD_TOP, GUARD_BOTTOM, NORTH_SOUTH, TURTLE_TOP, BACK_CONTROL_TOP, SCRAMBLE, NEWAZA_TRANSITION. Engine-level state. Not catalog data. Extended only by adding new enum values when the engine needs new states.
+
+2. **Dominant positions with terminal graphs** — this catalog. Configurations offering 2+ named finishes with induced transitions. Sankaku, back-turtle-with-hooks. First-class data with their own file.
+
+3. **Transitional / neutral positions** — engine-level state, no terminal techniques, gate the pin clock or define a sub-loop. The clearest example is **half guard**: when uke's `leg_recapture` strut succeeds against a pin, the position transitions from (e.g.) SIDE_CONTROL_RIGHT → HALF_GUARD_BOTTOM. The OsaekomiClock suspends. Tori then runs a half-guard-pass sub-loop attempting to re-establish a pin position; if too much stalled time passes, the referee module triggers Matte (referee-personality-dependent — see section 4.5).
+
+Half guard does *not* get a dominant-position catalog entry because it has no terminal finishes that fire from it. It's a neutral position en route to or away from pin states. Position state machine adds `HALF_GUARD_TOP` and `HALF_GUARD_BOTTOM` as enum values; OsaekomiClock logic stops accumulation when the state machine is in either; engine handles the rest via existing transition machinery.
+
+Same logic applies to other transitional/neutral states the engine may need: scramble exit configurations, butterfly guard, deep half guard, x-guard, etc. None are dominant positions in the substrate sense; all are engine-level state. The catalog does not enumerate them.
 
 ### 3.3 Schema fields
 
@@ -348,7 +359,9 @@ The phase determines which window the strut consumes. Pre-position struts run du
 
 **`effectiveness_axis` captures direction-specificity.** Bridge-and-roll-to-the-right is mechanically different from bridge-and-roll-over-the-head — same family, different axis. The axis field lets the per-technique `applicable_defensive_struts` reference the right variant. Some struts have a single axis (sleeve-pull-and-slip is always rearward); others are parameterizable (bridge-and-roll has at least three named directions).
 
-**`referee_summons` is the strut-triggers-Matte flag** per substrate Part 4.5. When uke's strut redirects tori's commit toward an illegal target (e.g., a leg-grab in IJF era), the referee module triggers a Matte after the configured delay. v0.1 defaults this to false for all struts; specific cases get flagged during authoring.
+**`referee_summons` is a hint to the referee module, not a deterministic trigger.** When `true`, the strut declares that its activation *has the potential* to trigger a Matte under the right conditions — typically because it transitions the position to a stalled or neutral state, or because uke's defensive scramble may inadvertently put tori in an illegal configuration (e.g., do-jime trunk-lock in shiai, finger-locking in kansetsu, or — in tachiwaza — a leg-grab pre-2010-IJF rules). The actual call is made by the referee module, which consumes the flag plus referee-personality stats (strict / neutral / generous) plus rule-set context to decide whether to call Matte and how quickly.
+
+Concretely: when uke's `leg_recapture` strut transitions a pin to half-guard, the flag fires *that* a summons is potentially warranted, but no immediate Matte — there's still active engagement. If tori sits in half guard without progressing toward a re-pass, the referee personality determines the stall threshold: strict referee at 8–10 seconds, neutral at 15–20, generous at 25–30. Same architecture handles stalled turtle, no-engagement-on-the-ground, etc. v0.1 defaults `referee_summons: false` for all struts; specific cases get flagged during authoring as the referee-personality system specifies its consumption logic.
 
 ### 4.5 v0.1 strut catalog
 
@@ -450,11 +463,24 @@ Plus the same naming overlay scheme: judoka may know `hon_kesa_gatame` colloquia
 
 ## 8. Belt threshold logic for ne-waza
 
-Open question: do ne-waza belt requirements merge with tachiwaza in HAJ-210's ladder, or live in a parallel ladder?
+Ne-waza belt requirements merge into the HAJ-210 tachiwaza ladder rather than maintaining a parallel ladder. Single judoka, single belt, single curriculum — a green belt should know foundational pins and submissions the same way they know foundational throws. The HAJ-210 ladder gets a `minimum_belt_for_competition_use` field on ne-waza entries the same as tachiwaza entries; the curriculum logic merges them when computing what each sensei teaches at each belt.
 
-**Recommendation: merge.** Judo belts certify overall practitioner level, not stand-up-only or ground-only. A green belt should know foundational pins (hon-kesa-gatame, yoko-shiho) and basic submissions (juji-gatame, hadaka-jime) the same way they know foundational throws (osoto-gari, o-goshi). The HAJ-210 ladder gets a `minimum_belt_for_competition_use` field on ne-waza entries the same as tachiwaza entries; the curriculum logic merges them when computing what each sensei teaches at each belt.
+### 8.1 Catalog field vs. procgen judoka knowledge
 
-White-belt ne-waza minimum: hon-kesa-gatame, yoko-shiho-gatame, ude-hishigi-juji-gatame, hadaka-jime — foundational pin (kesa), foundational side-pin (yoko), foundational armlock (juji), foundational rear choke (hadaka). Authoring fills in the rest of the ladder.
+The `minimum_belt_for_competition_use` field declares the *judo-curriculum-track* minimum — the canonical "at this belt, this technique is taught in the standard ladder." It is **not** a biographical claim about every individual judoka.
+
+Procgen judoka can enter the simulation with prior-art knowledge from BJJ, sambo, wrestling, or other grappling traditions where the ne-waza vocabulary is learned at different stages. A BJJ blue belt converting to judo may have full juji-gatame and rear-naked-choke proficiency at judo white belt; a wrestler converting may have advanced pin proficiency but no submission knowledge. The procgen layer overrides the curriculum default with prior-art knowledge during judoka instantiation. Same architecture as tachiwaza — the field is curriculum data, not biography data.
+
+### 8.2 White-belt ne-waza minimum (judo curriculum track)
+
+Sourced from actual Cranford JKC instructional practice:
+
+- `hon_kesa_gatame` — foundational pin
+- `yoko_shiho_gatame` — foundational side-pin
+- `kami_shiho_gatame` — north-south pin (Comrade's note: kita-shiho in colloquial usage)
+- `ude_hishigi_juji_gatame` — foundational armlock
+
+Notably **not** in the white-belt minimum: rear chokes (hadaka-jime, okuri-eri-jime, kata-ha-jime). Chokes appear later in the curriculum — likely yellow or orange belt. This matches the actual Cranford progression and is more conservative than the spec's earlier draft. Authoring fills in the full ladder.
 
 ---
 
@@ -462,7 +488,7 @@ White-belt ne-waza minimum: hon-kesa-gatame, yoko-shiho-gatame, ude-hishigi-juji
 
 Documented now so they don't surprise the authoring session:
 
-**9.1 Pin time variance by era and rule set.** Current IJF: 20 seconds for ippon, 10 for waza-ari. Pre-2017: 25/20/15 for ippon/waza-ari/yuko. The catalog's `pin_time_to_ippon` is a single integer; the rule-set evolution mechanism (HAJ-214's companion `data/rule_set_changes.yaml`) consumes it at match time per era. Schema doesn't change; authoring uses a canonical default and the rule-set layer handles era-modifiers.
+**9.1 Pin time variance handled entirely by rule-set layer.** Current IJF: 20 seconds for ippon, 10 for waza-ari, 10 more for ippon if already holding waza-ari. Pre-2017: 25/20/15 for ippon/waza-ari/yuko. None of this is per-technique data — every osaekomi accumulates against the same shared OsaekomiClock with the same ladder. The catalog declares only `score_mechanism: pin_time_accumulation`; the rule-set layer (HAJ-214's companion `data/rule_set_changes.yaml`) owns era-variable thresholds and the waza-ari ladder logic. Schema needs no per-technique pin-time field; earlier drafts of this spec had one and it was redundant.
 
 **9.2 Tap resistance curves.** Submission techniques resolve via tap-or-pass-out per the substrate, but the current spec doesn't parameterize how long uke holds out. A `tap_resistance_curve` field (deferred to v0.2) would encode this per-technique — choke timings differ from joint-lock timings; arm-bar tap is faster than choke pass-out. v0.1 uses an engine-level default; v0.2 makes it per-technique.
 
