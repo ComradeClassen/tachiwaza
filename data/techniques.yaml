@@ -1516,7 +1516,7 @@ techniques:
             target_region: uke_sleeve_upper
             minimum_depth: controlled
           - hand: tori_right
-            target_region: uke_collar
+            target_region: uke_lapel_high
             minimum_depth: controlled
         uke_disqualifying_grips: []
     admissible_kuzushi_vectors:
