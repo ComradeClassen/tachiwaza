@@ -1,0 +1,32 @@
+name: catalog-validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "data/techniques.yaml"
+      - "src/technique_catalog.py"
+      - "src/catalog_validator.py"
+      - "tests/test_technique_catalog.py"
+      - "tests/test_catalog_validator.py"
+      - ".github/workflows/catalog-validation.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip install pyyaml pytest
+
+      - name: Validate catalog (errors-only, same flags as pre-commit hook)
+        run: python src/catalog_validator.py data/techniques.yaml --no-warnings --no-infos
+
+      - name: Run catalog tests
+        run: python -m pytest tests/test_technique_catalog.py tests/test_catalog_validator.py -q

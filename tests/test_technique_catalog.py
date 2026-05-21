@@ -362,6 +362,42 @@ def test_multi_signature_list_is_parsed(tmp_path):
     assert sigs[1].tori_required_grips[0].target_region is GripTargetRegion.UKE_BELT
 
 
+def test_leg_grab_target_regions_load(tmp_path):
+    # Hand-on-limb regions added for Shinmeisho leg-grab throws. Exercises
+    # all three new enum values via a synthetic morote-gari-shaped entry.
+    path = tmp_path / "leg_grab.yaml"
+    path.write_text(textwrap.dedent("""
+        techniques:
+          - technique_id: leg_grab_probe
+            name_japanese: L
+            name_english: L
+            family: te_waza
+            subfamily: rear_throw
+            kodokan_status: shinmeisho_no_waza
+            canonical_grip_signatures:
+              - tori_required_grips:
+                  - hand: tori_left
+                    target_region: uke_leg_outer
+                    minimum_depth: controlled
+                  - hand: tori_right
+                    target_region: uke_leg_inner
+                    minimum_depth: controlled
+              - tori_required_grips:
+                  - hand: tori_right
+                    target_region: uke_heel
+                    minimum_depth: controlled
+            admissible_kuzushi_vectors: [rear_pure]
+            couple_type: placeholder
+            posture_requirements: any
+            base_difficulty: 50
+    """).strip(), encoding="utf-8")
+
+    sigs = load_catalog(path)["leg_grab_probe"].canonical_grip_signatures
+    assert sigs[0].tori_required_grips[0].target_region is GripTargetRegion.UKE_LEG_OUTER
+    assert sigs[0].tori_required_grips[1].target_region is GripTargetRegion.UKE_LEG_INNER
+    assert sigs[1].tori_required_grips[0].target_region is GripTargetRegion.UKE_HEEL
+
+
 def test_primary_kuzushi_can_be_explicit_subset(tmp_path):
     path = tmp_path / "primary.yaml"
     path.write_text(textwrap.dedent("""

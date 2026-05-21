@@ -65,6 +65,13 @@ class GripTargetRegion(Enum):
     UKE_SLEEVE_LOWER = "uke_sleeve_lower"
     UKE_BACK         = "uke_back"
     UKE_BELT         = "uke_belt"
+    # Hand-on-limb regions (Shinmeisho no Waza leg-grab throws — morote-gari,
+    # kuchiki-taoshi, kibisu-gaeshi). minimum_depth is less semantically loaded
+    # for these (no gi to grasp shallow-vs-deep), but the schema shape stays
+    # uniform; authors should pick `controlled` as the neutral default.
+    UKE_LEG_OUTER    = "uke_leg_outer"    # outside of thigh/calf
+    UKE_LEG_INNER    = "uke_leg_inner"    # inside of thigh/calf
+    UKE_HEEL         = "uke_heel"         # heel / ankle (kibisu-gaeshi)
 
 
 class GripDepth(Enum):

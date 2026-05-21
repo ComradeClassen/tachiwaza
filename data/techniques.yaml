@@ -24,6 +24,8 @@
 #     belongs to. Source-book ordering preserved for curriculum logic
 #     and in-game lore surfacing.
 
+# Gokyo no Waza techniques, in order of appearance in the 1895 Gokyo. 
+
 techniques:
   - technique_id: deashi_harai
     name_japanese: Deashi-harai
@@ -1161,3 +1163,461 @@ techniques:
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1895
     gokyo_kyo: 5
+
+    # Shinmeisho No Waza techniques below. Added in 1920, after the original gokyo was developed, and thus not assigned a gokyo kyo number.
+
+  - technique_id: morote_gari
+    name_japanese: Morote-gari
+    name_english: Two-Hand Reap
+    family: te_waza
+    subfamily: forward_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_leg_outer
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_leg_outer
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_pure
+    couple_type: forward_rotation_about_ankle_axis_with_lift_and_reap_action
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 60
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1920
+
+  - technique_id: kuchiki_taoshi
+    name_japanese: Kuchiki-taoshi
+    name_english: One-Hand Drop
+    family: te_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    # Book p.100 #347: "Quickly grab his right leg, either from the inside
+    # with your right hand or from the outside with your left." Two distinct
+    # grip configurations, not mirrors of each other — both valid in
+    # right-stance and authored separately per HAJ-213.
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_leg_outer
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_pure
+    couple_type: reverse_rotation_about_ankle_axis_with_leg_lift_action
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 50
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: tori_to_knees
+    era_introduced: 1920
+
+  - technique_id: kibisu_gaeshi
+    name_japanese: Kibisu-gaeshi
+    name_english: Heel Trip
+    family: te_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    # Book p.101 #354-57: heel reap "with your right or left hand as in
+    # kouchi-gari or kosoto-gari." Two grip variants (which hand reaps);
+    # body positioning is identical between them.
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_right
+            target_region: uke_heel
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+    couple_type: reverse_rotation_about_ankle_axis_with_heel_reap_action
+    posture_requirements: extended_backward
+    base_difficulty: 55
+    pedagogical_prerequisites:
+      - kouchi_gari
+      - kosoto_gari
+    minimum_belt_for_competition_use: yellow
+    failed_throw_consequence: tori_to_knees
+    era_introduced: 1920
+
+  - technique_id: uchi_mata_sukashi # Counter to right uchi-mata
+    name_japanese: Uchi-mata-sukashi
+    name_english: Inner Thigh Reaping Throw Slip
+    family: ashi_waza
+    subfamily: forward_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: forward_rotation_about_ankle_axis_with_slipping_action
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 65
+    pedagogical_prerequisites:
+      - deashi_harai
+      - uchi_mata
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1920
+
+  - technique_id: tsubame_gaeshi # Counter to right deashi-harai
+    name_japanese: Tsubame-gaeshi
+    name_english: Swallow Counter
+    family: ashi_waza
+    subfamily: forward_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: forward_rotation_about_ankle_axis_with_slipping_action
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 65
+    pedagogical_prerequisites:
+      - deashi_harai
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    era_introduced: 1920
+
+  - technique_id: dakiage # Technique is not permitted in randori or tournament competition due to high risk of injury, but is still officially recognized by the Kodokan as a legitimate throw, and thus included in this database for completeness.
+    name_japanese: Dakiage
+    name_english: High Lift
+    family: koshi_waza
+    subfamily: forward_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_leg_outer
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_leg_outer
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - forward_pure
+    couple_type: forward_rotation_about_hip_axis_with_lifting_action
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 80
+    era_introduced: 1920
+
+  - technique_id: osoto_gaeshi # Counter to right osoto-gari
+    name_japanese: Osoto-gaeshi
+    name_english: Large Outer Reaping Throw Counter
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: reverse_rotation_about_shoulder_axis_with_wheeling_action_from_rear_position
+    posture_requirements: extended_backward
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - osoto_gari 
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
+
+  - technique_id: ouchi_gaeshi # Counter to right ouchi-gari
+    name_japanese: Ouchi-gaeshi
+    name_english: Large Inner Reaping Throw Counter
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: reverse_rotation_about_shoulder_axis_with_wheeling_action_from_rear_position
+    posture_requirements: extended_backward
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - ouchi_gari
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
+
+  - technique_id: hane_goshi_gaeshi # Counter to right hane-goshi
+    name_japanese: Hane-goshi-gaeshi
+    name_english: Hip Spring Counter
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: forward_rotation_about_hip_axis_with_springing_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - hane_goshi 
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    ne_waza_followup_preferences:
+      - juji_gatame
+    era_introduced: 1920
+
+  - technique_id: harai_goshi_gaeshi # Counter to right harai-goshi
+    name_japanese: Harai-goshi-gaeshi
+    name_english: Hip Sweep Counter
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: forward_rotation_about_hip_axis_with_sweeping_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - harai_goshi
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    ne_waza_followup_preferences:
+      - juji_gatame
+    era_introduced: 1920
+
+  - technique_id: uchi_mata_gaeshi # Counter to right uchi-mata
+    name_japanese: Uchi-mata-gaeshi
+    name_english: Inner Thigh Reaping Throw Counter
+    family: ashi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: forward_rotation_about_ankle_axis_with_slipping_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - uchi_mata
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: uke_lands_stomach
+    ne_waza_followup_preferences:
+      - juji_gatame
+    era_introduced: 1920
+
+  - technique_id: kani_basami # Banned in competition due to high risk of injury, but still officially recognized by the Kodokan as a legitimate throw, and thus included in this database for completeness.
+    name_japanese: Kani-basami
+    name_english: Scissors Throw
+    family: ashi_waza
+    subfamily: side_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_pure 
+    couple_type: lever_inverted_commit_with_scissoring_action_from_side_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 80
+    era_introduced: 1920
+
+  - technique_id: kawazu_gake # Banned in competition due to high risk of injury, but still officially recognized by the Kodokan as a legitimate throw, and thus included in this database for completeness.
+    name_japanese: Kawazu-gake
+    name_english: One-Leg Entanglement
+    family: ashi_waza
+    subfamily: side_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_collar
+            minimum_depth: controlled
+        uke_disqualifying_grips: []
+    admissible_kuzushi_vectors:
+      - rear_pure
+    couple_type: lever_inverted_commit_with_entangling_action_from_side_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 80
+    era_introduced: 1920
+
+  - technique_id: osoto_makikomi # From tori attempting osoto-gari, release grip and pivot to tori's left to wrap around uke and throw — counter to right osoto-gari, but can also be executed proactively as a regular attack.
+    name_japanese: Osoto-makikomi
+    name_english: Large Outside Wraparound Throw
+    family: sutemi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - osoto_gari 
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
+
+  - technique_id: uchi_mata_makikomi # From tori attempting right uchi-mata, release grip and pivot to tori's left to wrap around uke and throw — counter to right uchi-mata, but can also be executed proactively as a regular attack.
+    name_japanese: Uchi-mata-makikomi
+    name_english: Inner Thigh Wraparound Throw
+    family: sutemi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - uchi_mata 
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
+
+  - technique_id: harai_makikomi # From tori attempting right harai-goshi, release grip and pivot to tori's left to wrap around uke and throw — counter to right harai-goshi, but can also be executed proactively as a regular attack.
+    name_japanese: Harai-makikomi
+    name_english: Hip Sweep Wraparound Throw
+    family: sutemi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - rear_right_diagonal
+      - rear_pure
+      - forward_right_diagonal
+      - forward_pure
+    couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - harai_goshi 
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
