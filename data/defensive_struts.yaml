@@ -1,17 +1,379 @@
-# Defensive strut catalog — HAJ-205 authoring (ne-waza phase) will populate.
+# Defensive strut catalog — HAJ-205 ne-waza authoring (v0.1, 2026-05-21).
 #
 # Schema reference: design-notes/triage/ne-waza-vocabulary-system.md v0.1
-# (Section 4.3). Loader: src/ne_waza_catalog.py.
+# (Section 4.3). Loader: src/ne_waza_catalog.py. Validator:
+# src/ne_waza_catalog_validator.py.
 #
-# Struts are reusable defensive primitives that defend across many
-# techniques (spec §4.2). The same bridge_and_roll_right strut defends
-# kesa, kata-gatame, kami-shiho, etc. with different parameters; embedding
-# defenses inside technique entries would duplicate strut definitions.
-#
-# v0.1 scope per spec §4.5: ~15-17 entries spanning the seven
-# mechanism_family values (rotational_displacement, linear_extraction,
-# limb_recapture, pre_grip_seizure, joint_protection, postural_denial,
-# counter_attack). Author this catalog FIRST per spec §12 — every other
-# ne-waza file references strut_ids from here.
+# Authored first per spec §12 — every other ne-waza file references
+# strut_ids from here. Set covers the seventeen primitives surfaced by
+# corpus analysis (spec §4.5 table) spanning all seven mechanism families.
+# Directional bridge-and-roll variants kept split (spec §9.6); consolidation
+# to parameters is deferred to v0.2 if the catalog grows unwieldy.
 
-struts: []
+struts:
+  # -----------------------------------------------------------------------
+  # rotational_displacement — bridge-and-roll family + analogues
+  # -----------------------------------------------------------------------
+  - strut_id: bridge_and_roll_right
+    name_descriptive: Bridge-and-roll to tori's right
+    name_japanese: null
+    mechanism_family: rotational_displacement
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - BODY_PRESSURE
+      - ANATOMICAL_WRAP
+    body_motion: |
+      Arch the back to create space between bodies. Push tori upward with
+      hands or by gripping tori's far leg with the opposite hand. Twist
+      hips to the right while inserting knee(s) into the gap, then roll
+      tori over to the right side.
+    required_uke_attributes:
+      - bridge_strength
+      - hip_mobility
+    effectiveness_axis: rotation_clockwise_from_uke_supine
+    referee_summons: false
+    era_introduced: 1900
+    notes: |
+      The universal pin-escape primitive applied to a right-side pin.
+      Kodokan teaches the over-the-head and left-side variants as separate
+      defenses; this catalog keeps them as sibling strut_ids per spec §9.6.
+
+  - strut_id: bridge_and_roll_left
+    name_descriptive: Bridge-and-roll to tori's left
+    name_japanese: null
+    mechanism_family: rotational_displacement
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - BODY_PRESSURE
+      - ANATOMICAL_WRAP
+    body_motion: |
+      Mirror of bridge_and_roll_right — same arch-bridge-twist sequence
+      but rotating to the left side.
+    required_uke_attributes:
+      - bridge_strength
+      - hip_mobility
+    effectiveness_axis: rotation_counterclockwise_from_uke_supine
+    era_introduced: 1900
+
+  - strut_id: bridge_and_roll_over_head
+    name_descriptive: Bridge-and-roll over tori's head
+    name_japanese: null
+    mechanism_family: rotational_displacement
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - BODY_PRESSURE
+      - ANATOMICAL_WRAP
+    body_motion: |
+      With tori pinning from the head-end (kami-shiho family), bridge
+      vertically and tuck the chin, walking uke's weight over the head
+      and re-establishing guard or a turtle.
+    required_uke_attributes:
+      - bridge_strength
+      - neck_strength
+    effectiveness_axis: rotation_about_uke_axial
+    era_introduced: 1900
+    notes: |
+      Primary defense against kami-shiho-gatame and kuzure-kami-shiho.
+
+  - strut_id: sleeve_pull_and_slip
+    name_descriptive: Sleeve pull-and-slip
+    name_japanese: null
+    mechanism_family: rotational_displacement
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - FOREARM_BAR
+      - GARMENT_GRIP_NEWAZA
+    body_motion: |
+      Grip tori's choking sleeve at the wrist, pull it downward and across
+      the body to peel the choke off, then slip the chin under the strangle
+      arm and rotate the head out of the loop.
+    required_uke_attributes:
+      - grip_strength
+      - neck_mobility
+    effectiveness_axis: chin_tuck_then_rotate_away
+    era_introduced: 1900
+    notes: |
+      Canonical defense against rear chokes (hadaka-jime, okuri-eri-jime,
+      sode-guruma-jime). Pre-2017 Kodokan corpus describes the
+      sequence in unnamed prose; coined here as a strut_id (spec §9.8).
+
+  - strut_id: elbow_push_and_roll
+    name_descriptive: Elbow push then rotate out
+    name_japanese: null
+    mechanism_family: rotational_displacement
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - LAPEL_CROSS
+      - FOREARM_BAR
+    body_motion: |
+      With tori's crossed-grip choke locked on, push one of tori's elbows
+      with the same-side hand to break the wringing pressure, then rotate
+      shoulders to misalign the cross and slip the chin under.
+    required_uke_attributes:
+      - upper_body_strength
+      - core_rotation
+    effectiveness_axis: lateral_shoulder_rotation
+    era_introduced: 1900
+    notes: |
+      Primary defense against the juji-jime family (nami, gyaku, kata) once
+      committed.
+
+  # -----------------------------------------------------------------------
+  # linear_extraction — frame-and-shrimp family
+  # -----------------------------------------------------------------------
+  - strut_id: frame_and_shrimp
+    name_descriptive: Frame and shrimp out laterally
+    name_japanese: null
+    mechanism_family: linear_extraction
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - BODY_PRESSURE
+      - POSITIONAL_BASE
+    body_motion: |
+      Place forearm frame across tori's hip or shoulder to create
+      distance; pivot on the upper shoulder and drive hips away in a
+      shrimp motion, opening space for the lower knee to enter and
+      restoring guard or turtle.
+    required_uke_attributes:
+      - core_strength
+      - hip_mobility
+    effectiveness_axis: hip_displacement_lateral
+    era_introduced: 1900
+    notes: |
+      Bedrock escape; combines with leg_recapture in series against
+      yoko-shiho, kuzure-kesa, tate-shiho.
+
+  # -----------------------------------------------------------------------
+  # limb_recapture
+  # -----------------------------------------------------------------------
+  - strut_id: leg_recapture
+    name_descriptive: Recapture trapped leg into half-guard
+    name_japanese: null
+    mechanism_family: limb_recapture
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - BODY_PRESSURE
+      - POSITIONAL_BASE
+    body_motion: |
+      With hips already partially displaced by a frame-and-shrimp, swing
+      the bottom knee under tori's near leg and triangle the legs to
+      trap it. Pin transitions to half-guard; OsaekomiClock suspends per
+      spec §3.2.1.
+    required_uke_attributes:
+      - leg_dexterity
+      - hip_mobility
+    era_introduced: 1900
+    notes: |
+      Triggers position-machine HALF_GUARD_BOTTOM transition. Referee
+      module may eventually summons Matte if the resulting half-guard
+      stalls, but the strut itself does not.
+
+  - strut_id: arm_extraction
+    name_descriptive: Extract the trapped arm from tori's armpit
+    name_japanese: null
+    mechanism_family: limb_recapture
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - ANATOMICAL_TRAP
+    body_motion: |
+      Walk the fingers up tori's back to thread the trapped arm out of
+      the armpit clamp; once the arm is free, the kesa/kata anchor
+      degrades to a generic side hold and the OsaekomiClock can be
+      reset by the referee module.
+    required_uke_attributes:
+      - shoulder_mobility
+      - grip_strength
+    era_introduced: 1900
+    notes: |
+      Specific to kesa-gatame, kata-gatame, and the kuzure variants
+      where uke's arm is pinned in tori's armpit.
+
+  # -----------------------------------------------------------------------
+  # pre_grip_seizure
+  # -----------------------------------------------------------------------
+  - strut_id: grip_strip_to_loose
+    name_descriptive: Strip the lapel grip before the choke locks
+    name_japanese: null
+    mechanism_family: pre_grip_seizure
+    defense_phase: pre_commit
+    applicable_against_connection_types:
+      - LAPEL_CROSS
+      - GARMENT_GRIP_NEWAZA
+    body_motion: |
+      As tori threads the first grip toward a cross-collar choke, peel
+      the gripping hand off the lapel with a two-on-one grip before the
+      cross is completed. Disrupts the connection_quality tuning loop
+      per substrate Part 2.
+    required_uke_attributes:
+      - grip_strength
+      - reaction_speed
+    era_introduced: 1900
+
+  - strut_id: wrist_pre_grip
+    name_descriptive: Wrist pre-grip to deny lock setup
+    name_japanese: null
+    mechanism_family: pre_grip_seizure
+    defense_phase: pre_commit
+    applicable_against_connection_types:
+      - WRIST_GRIP
+      - LIMB_ISOLATION
+    body_motion: |
+      Seize tori's wrist preemptively as tori reaches for the controlling
+      grip on uke's wrist. Denies the input load-point a hyperextension
+      armlock requires.
+    required_uke_attributes:
+      - hand_speed
+      - grip_strength
+    era_introduced: 1900
+    notes: |
+      Pre-commit defense against the juji-gatame family; consumed
+      before tori achieves wrist control.
+
+  # -----------------------------------------------------------------------
+  # joint_protection
+  # -----------------------------------------------------------------------
+  - strut_id: elbow_bend_and_clasp
+    name_descriptive: Bend the elbow and clasp hands
+    name_japanese: null
+    mechanism_family: joint_protection
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - LIMB_ISOLATION
+      - WRIST_GRIP
+    body_motion: |
+      With the lock applied, bend the threatened elbow and clasp the
+      opposite hand or own gi to convert the straightening lever into a
+      compression that the elbow joint tolerates. Buys time for a
+      positional escape.
+    required_uke_attributes:
+      - bicep_strength
+      - grip_strength
+    era_introduced: 1900
+    notes: |
+      Universal joint-protection against extension-class armlocks
+      (juji-gatame, ude-gatame).
+
+  - strut_id: elbow_rotate_and_bend
+    name_descriptive: Rotate the elbow and bend out of the figure-four
+    name_japanese: null
+    mechanism_family: joint_protection
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - LIMB_ISOLATION
+    body_motion: |
+      Against an entangled-arm rotation lock (ude-garami), rotate the
+      forearm through tori's figure-four to neutralize the wringing
+      axis, then bend the elbow tight to deny the shoulder rotation.
+    required_uke_attributes:
+      - forearm_strength
+      - shoulder_mobility
+    era_introduced: 1900
+
+  # -----------------------------------------------------------------------
+  # postural_denial
+  # -----------------------------------------------------------------------
+  - strut_id: preemptive_face_turn
+    name_descriptive: Turn the face away to refuse the pin entry
+    name_japanese: null
+    mechanism_family: postural_denial
+    defense_phase: pre_position
+    applicable_against_connection_types:
+      - BODY_PRESSURE
+      - ANATOMICAL_WRAP
+    body_motion: |
+      As tori transitions to a side pin, turn the face into the mat
+      and tuck the near shoulder under, refusing the supine alignment
+      the pin requires.
+    required_uke_attributes:
+      - neck_mobility
+      - core_strength
+    era_introduced: 1900
+    notes: |
+      Refuses yoko-shiho-gatame and kata-gatame entries before the pin
+      establishes; consumed during the position-machine transition.
+
+  - strut_id: posture_up_and_base
+    name_descriptive: Posture up and base out against the rear attack
+    name_japanese: null
+    mechanism_family: postural_denial
+    defense_phase: pre_position
+    applicable_against_connection_types:
+      - LAPEL_CROSS
+      - FOREARM_BAR
+    body_motion: |
+      With tori climbing the back from turtle, drive the hips down and
+      walk the hands wide to a base, denying the seatbelt grip and the
+      hook insertion that rear chokes (kata-ha-jime in particular)
+      require.
+    required_uke_attributes:
+      - core_strength
+      - posture_control
+    era_introduced: 1900
+
+  - strut_id: head_pivot_out
+    name_descriptive: Pivot the head out of the wrap
+    name_japanese: null
+    mechanism_family: postural_denial
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - ANATOMICAL_WRAP
+      - LIMB_TRIANGLE
+    body_motion: |
+      Tuck chin to chest, rotate the head along its long axis, and
+      thread it out of the encircling arm or leg triangle before the
+      wrap completes its mechanical loop.
+    required_uke_attributes:
+      - neck_mobility
+      - timing
+    era_introduced: 1900
+    notes: |
+      Active against sankaku, kata-gatame, and the over-the-head bridge
+      sequences. Per spec §3, also serves as the strut that triggers a
+      pivot from sankaku-jime threat to ude-hishigi-sankaku-gatame
+      threat (the choke releases, the trapped arm comes under attack).
+
+  - strut_id: stand_up_from_lock
+    name_descriptive: Stand up out of the low-position lock
+    name_japanese: null
+    mechanism_family: postural_denial
+    defense_phase: pre_position
+    applicable_against_connection_types:
+      - LIMB_ISOLATION
+      - WRIST_GRIP
+    body_motion: |
+      Before the lock applies, drive the legs to base and stand up
+      out of the trapped configuration, taking the engagement back
+      to a standing scramble.
+    required_uke_attributes:
+      - leg_strength
+      - posture_control
+    era_introduced: 1900
+    notes: |
+      Counters the v1 ude-garami where tori has not yet pinned uke
+      to the mat.
+
+  # -----------------------------------------------------------------------
+  # counter_attack
+  # -----------------------------------------------------------------------
+  - strut_id: armlock_counter
+    name_descriptive: Counter the side pin with an armlock on tori's exposed arm
+    name_japanese: Ude-hishigi-gaeshi
+    mechanism_family: counter_attack
+    defense_phase: post_commit
+    applicable_against_connection_types:
+      - BODY_PRESSURE
+      - ANATOMICAL_TRAP
+    body_motion: |
+      With tori posted on an extended arm during a yoko-shiho or
+      kuzure-yoko-shiho pin, trap the post arm against uke's chest
+      and rotate hips to apply an armlock on the exposed elbow,
+      converting the pin into a submission scramble.
+    required_uke_attributes:
+      - timing
+      - grip_strength
+    era_introduced: 1900
+    notes: |
+      The single Kodokan-named pin counter — see Kodokan Judo Chapter 7
+      yoko-shiho-gatame variation diagrams. Other counter-attacks exist
+      in modern practice (Cranford corpus references granby roll, etc.)
+      but are deferred to v0.2 per spec §9.7.

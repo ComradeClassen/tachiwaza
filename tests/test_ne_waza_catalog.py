@@ -169,15 +169,34 @@ def test_load_empty_scaffold_files(tmp_path):
     assert catalog.struts == {}
 
 
-def test_load_real_scaffold_files_from_repo():
-    """The committed empty data files must always load cleanly — that's
-    what makes the loader exercisable before authoring starts."""
+def test_load_real_repo_catalog_files():
+    """The committed catalog files must always load cleanly and pass
+    every validator check — this is the catalog the engine consumes."""
     catalog = load_ne_waza_catalog(
         REPO_ROOT / "data" / "ne_waza_techniques.yaml",
         REPO_ROOT / "data" / "ne_waza_positions.yaml",
         REPO_ROOT / "data" / "defensive_struts.yaml",
     )
-    assert catalog.techniques == {}
+    # Every technique declared in the spec §2.5 / §3.5 scope must load.
+    # Hard-coding white-belt minimum (spec §8.2) so regressions to those
+    # foundational entries fail loud.
+    for required_id in (
+        "hon_kesa_gatame",
+        "yoko_shiho_gatame",
+        "kami_shiho_gatame",
+        "ude_hishigi_juji_gatame",
+    ):
+        assert required_id in catalog.techniques, f"missing white-belt entry {required_id!r}"
+    # Dominant positions and their three sankaku terminals from spec §3.5
+    assert "sankaku_position" in catalog.positions
+    assert set(catalog.positions["sankaku_position"].terminal_techniques) == {
+        "sankaku_jime", "ude_hishigi_sankaku_gatame", "sankaku_gatame",
+    }
+    # Validator clean (no errors, no warnings — full catalog is authored).
+    report = validate_catalog(catalog)
+    assert report.is_valid
+    assert report.errors == []
+    assert report.warnings == []
 
 
 def test_validator_on_empty_scaffold_is_clean():

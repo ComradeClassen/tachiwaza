@@ -1,4 +1,4 @@
-# Ne-waza dominant-position catalog — HAJ-205 authoring (ne-waza phase) will populate.
+# Ne-waza dominant-position catalog — HAJ-205 ne-waza authoring (v0.1, 2026-05-21).
 #
 # Schema reference: design-notes/triage/ne-waza-vocabulary-system.md v0.1
 # (Section 3.3). Loader: src/ne_waza_catalog.py.
@@ -8,8 +8,108 @@
 # positions (single-finish terminals like kesa-gatame) are NOT entered
 # here — they live as parent_position references on the technique entry.
 #
-# v0.1 scope per spec §3.5: ~3 entries (sankaku_position,
-# back_turtle_with_hooks, and possibly head_and_arm_isolated if not
-# folded into sankaku_position).
+# v0.1 scope per spec §3.5: two entries. head_and_arm_isolated is folded
+# into sankaku_position per spec §9.4 reconciliation (Kodokan name wins).
 
-positions: []
+positions:
+  - position_id: sankaku_position
+    description: |
+      Triangle configuration — tori's legs form a closed loop around uke's
+      head-and-arm. Diagonal sankaku geometry per Kodokan Judo p.124.
+      Three terminal finishes available; tori chooses between them based
+      on uke's defensive response. The clearest substrate-vs-state-machine
+      fork in v0.1.
+    required_connections:
+      - type: LIMB_TRIANGLE
+        tori_part: legs
+        target: uke_head_and_one_arm
+        minimum_quality: 0.6
+        orientation: diagonal
+      - type: LIMB_ISOLATION
+        tori_part: legs_loop
+        target: uke_right_arm
+        minimum_quality: 0.5
+    parent_position: any
+    terminal_techniques:
+      - sankaku_jime
+      - ude_hishigi_sankaku_gatame
+      - sankaku_gatame
+    induced_transitions:
+      - if_uke_strut_activates: head_pivot_out
+        tori_can_pivot_to: ude_hishigi_sankaku_gatame
+        transition_cost: 1
+        narrative: |
+          Uke fights the choke threat by tucking and rotating the head
+          out of the loop; tori releases the squeeze and attacks the
+          trapped arm instead.
+      - if_uke_strut_activates: arm_extraction
+        tori_can_pivot_to: sankaku_jime
+        transition_cost: 1
+        narrative: |
+          Uke fights the armlock threat by walking the trapped arm
+          free; tori releases the elbow pressure and finishes the
+          carotid choke as the head is now exposed.
+      - if_uke_strut_activates: frame_and_shrimp
+        tori_can_pivot_to: sankaku_gatame
+        transition_cost: 2
+        narrative: |
+          Uke frames and shrimps to create distance from both threats;
+          tori abandons the submission attempt and settles into the
+          pin variant, accumulating osaekomi time.
+    applicable_defensive_struts:
+      - head_pivot_out
+      - bridge_and_roll_right
+      - posture_up_and_base
+    era_introduced: 1900
+    notes: |
+      Kodokan-named position. Cranford's `HEAD_AND_ARM_ISOLATED` is the
+      same configuration; folded here per spec §9.4 with Kodokan
+      vocabulary winning.
+
+  - position_id: back_turtle_with_hooks
+    description: |
+      Tori rides uke's back from turtle with hooks inserted (legs
+      threaded inside uke's thighs). Cranford-identified per substrate
+      Part 5.2. Three rear-attack terminals available; tori selects
+      based on which lapel grip is achieved.
+    required_connections:
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_back
+        minimum_quality: 0.6
+      - type: ANATOMICAL_WRAP
+        tori_part: legs
+        target: uke_inner_thighs
+        minimum_quality: 0.5
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: hands
+        target: uke_lapel_and_shoulder
+        minimum_quality: 0.4
+    parent_position: BACK_CONTROL
+    terminal_techniques:
+      - hadaka_jime
+      - okuri_eri_jime
+      - sode_guruma_jime
+    induced_transitions:
+      - if_uke_strut_activates: grip_strip_to_loose
+        tori_can_pivot_to: hadaka_jime
+        transition_cost: 1
+        narrative: |
+          Uke strips the lapel grip before the collar choke locks; tori
+          abandons the eri attempt and bare-arms the throat for hadaka.
+      - if_uke_strut_activates: sleeve_pull_and_slip
+        tori_can_pivot_to: sode_guruma_jime
+        transition_cost: 2
+        narrative: |
+          Uke peels the strangle arm down toward escape; tori uses uke's
+          own sleeve as the wrapping leverage and converts to a sleeve-
+          wheel choke.
+    applicable_defensive_struts:
+      - posture_up_and_base
+      - sleeve_pull_and_slip
+    era_introduced: 1900
+    notes: |
+      Spec §3.5 deferred specific induced transitions to authoring;
+      the two captured here are plausible Kodokan-corpus transitions
+      and will be revised when Cranford uke-perspective video material
+      is added in a future authoring pass.

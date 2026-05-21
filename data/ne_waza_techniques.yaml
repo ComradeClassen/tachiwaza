@@ -1,13 +1,935 @@
-# Ne-waza technique catalog — HAJ-205 authoring (ne-waza phase) will populate.
+# Ne-waza technique catalog — HAJ-205 ne-waza authoring (v0.1, 2026-05-21).
 #
 # Schema reference: design-notes/triage/ne-waza-vocabulary-system.md v0.1
 # (Section 2.2). Loader: src/ne_waza_catalog.py. Validator:
 # src/ne_waza_catalog_validator.py.
 #
-# Sibling to data/techniques.yaml (tachiwaza) — NOT an extension. The two
-# catalogs are loaded separately and share no entries.
+# Source corpus: Kodokan Judo (Kano) Chapter 7 — osaekomi, shime, and
+# kansetsu sections. Twenty-eight Kodokan-canonical entries spanning the
+# three subfamilies. Belt assignments follow spec §8.2 white-belt
+# minimum; chokes ladder in at yellow/orange/green per the Cranford JKC
+# progression.
 #
-# Authoring scope per spec §2.5: ~28 katame-waza entries (7-8 pins, ~12
-# shime, ~9 kansetsu). Recommended authoring order is in spec §12.
+# Authoring order from spec §12:
+#   pins → position-agnostic submissions → joint locks → sankaku cluster.
 
-techniques: []
+techniques:
+  # =======================================================================
+  # OSAEKOMI-WAZA (PINS) — spec §2.5: 7-8 entries.
+  # All pin_time_accumulation; OsaekomiClock and waza-ari ladder live in
+  # the rule-set layer per spec §9.1.
+  # =======================================================================
+  - technique_id: hon_kesa_gatame
+    name_japanese: Hon-kesa-gatame
+    name_english: Scarf Hold
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: SIDE_CONTROL_RIGHT
+    required_connections:
+      - type: ANATOMICAL_WRAP
+        tori_part: right_arm
+        target: uke_neck
+        minimum_quality: 0.7
+      - type: ANATOMICAL_TRAP
+        tori_part: left_armpit
+        target: uke_right_arm
+        minimum_quality: 0.8
+      - type: BODY_PRESSURE
+        tori_part: right_hip_and_chest
+        target: uke_right_armpit_and_chest
+        minimum_quality: 0.6
+      - type: POSITIONAL_BASE
+        tori_part: left_leg
+        target: mat_extended_rear
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - bridge_and_roll_right
+      - bridge_and_roll_over_head
+      - arm_extraction
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 30
+    minimum_belt_for_competition_use: white
+    mechanical_class: lever_pin
+    ne_waza_followup_preferences:
+      - ude_hishigi_juji_gatame
+      - kata_gatame
+    era_introduced: 1900
+    notes: |
+      Foundational pin. The arm trap in tori's left armpit gates uke's
+      arm_extraction strut — without it, the pin degrades to a generic
+      side hold.
+
+  - technique_id: kuzure_kesa_gatame
+    name_japanese: Kuzure-kesa-gatame
+    name_english: Broken Scarf Hold
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: SIDE_CONTROL_RIGHT
+    required_connections:
+      - type: ANATOMICAL_WRAP
+        tori_part: right_arm
+        target: uke_far_shoulder
+        minimum_quality: 0.6
+      - type: ANATOMICAL_TRAP
+        tori_part: left_armpit
+        target: uke_right_arm
+        minimum_quality: 0.7
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_chest
+        minimum_quality: 0.6
+    applicable_defensive_struts:
+      - bridge_and_roll_right
+      - arm_extraction
+      - frame_and_shrimp
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 30
+    minimum_belt_for_competition_use: yellow
+    pedagogical_prerequisites:
+      - hon_kesa_gatame
+    mechanical_class: lever_pin
+    era_introduced: 1900
+    notes: |
+      Variant of hon-kesa where the scarf arm wraps the far shoulder
+      instead of the neck — easier to maintain, harder to choke from.
+
+  - technique_id: kata_gatame
+    name_japanese: Kata-gatame
+    name_english: Shoulder Hold
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: SIDE_CONTROL_RIGHT
+    required_connections:
+      - type: ANATOMICAL_WRAP
+        tori_part: right_arm_and_head
+        target: uke_head_and_far_arm
+        minimum_quality: 0.7
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_chest
+        minimum_quality: 0.7
+      - type: POSITIONAL_BASE
+        tori_part: knees
+        target: mat_wide
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - bridge_and_roll_right
+      - head_pivot_out
+      - preemptive_face_turn
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 35
+    minimum_belt_for_competition_use: yellow
+    pedagogical_prerequisites:
+      - hon_kesa_gatame
+    mechanical_class: lever_pin
+    era_introduced: 1900
+    notes: |
+      Head-and-arm clasp pin. Trapped against tori's own head, uke's far
+      arm cannot punch out and the carotid pressure can convert this to
+      an opportunistic choke.
+
+  - technique_id: kami_shiho_gatame
+    name_japanese: Kami-shiho-gatame
+    name_english: Upper Four-Quarter Hold
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: NORTH_SOUTH
+    required_connections:
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_chest
+        minimum_quality: 0.7
+      - type: ANATOMICAL_WRAP
+        tori_part: arms
+        target: uke_both_arms_pinned_to_sides
+        minimum_quality: 0.6
+      - type: POSITIONAL_BASE
+        tori_part: legs_and_toes
+        target: mat_north_of_uke
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - bridge_and_roll_over_head
+      - frame_and_shrimp
+      - leg_recapture
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 30
+    minimum_belt_for_competition_use: white
+    mechanical_class: couple_pin
+    ne_waza_followup_preferences:
+      - kuzure_kami_shiho_gatame
+    era_introduced: 1900
+    notes: |
+      North-south pin. Colloquial name in Cranford JKC is kita-shiho;
+      Kodokan-canonical form is kami-shiho-gatame.
+
+  - technique_id: kuzure_kami_shiho_gatame
+    name_japanese: Kuzure-kami-shiho-gatame
+    name_english: Broken Upper Four-Quarter Hold
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: NORTH_SOUTH
+    required_connections:
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_chest_and_one_shoulder
+        minimum_quality: 0.6
+      - type: ANATOMICAL_TRAP
+        tori_part: right_armpit
+        target: uke_left_arm
+        minimum_quality: 0.7
+      - type: POSITIONAL_BASE
+        tori_part: legs
+        target: mat
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - bridge_and_roll_over_head
+      - arm_extraction
+      - leg_recapture
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 30
+    minimum_belt_for_competition_use: yellow
+    pedagogical_prerequisites:
+      - kami_shiho_gatame
+    mechanical_class: couple_pin
+    era_introduced: 1900
+
+  - technique_id: yoko_shiho_gatame
+    name_japanese: Yoko-shiho-gatame
+    name_english: Side Four-Quarter Hold
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: SIDE_CONTROL_RIGHT
+    required_connections:
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_chest
+        minimum_quality: 0.7
+      - type: ANATOMICAL_WRAP
+        tori_part: left_arm
+        target: uke_far_thigh
+        minimum_quality: 0.6
+      - type: ANATOMICAL_WRAP
+        tori_part: right_arm
+        target: uke_near_armpit_and_neck
+        minimum_quality: 0.6
+      - type: POSITIONAL_BASE
+        tori_part: legs
+        target: mat_wide_base
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - bridge_and_roll_right
+      - frame_and_shrimp
+      - leg_recapture
+      - preemptive_face_turn
+      - armlock_counter
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 30
+    minimum_belt_for_competition_use: white
+    mechanical_class: lever_pin
+    ne_waza_followup_preferences:
+      - kuzure_yoko_shiho_gatame
+      - kata_gatame
+    era_introduced: 1900
+    notes: |
+      The most-used pin in shiai. Kodokan-named armlock_counter is
+      specific to this pin — when tori posts on an extended arm, uke
+      can rotate into ude-hishigi-gaeshi.
+
+  - technique_id: kuzure_yoko_shiho_gatame
+    name_japanese: Kuzure-yoko-shiho-gatame
+    name_english: Broken Side Four-Quarter Hold
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: SIDE_CONTROL_RIGHT
+    required_connections:
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_chest_diagonal
+        minimum_quality: 0.6
+      - type: ANATOMICAL_TRAP
+        tori_part: left_armpit
+        target: uke_right_arm
+        minimum_quality: 0.6
+      - type: POSITIONAL_BASE
+        tori_part: legs
+        target: mat
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - bridge_and_roll_right
+      - frame_and_shrimp
+      - arm_extraction
+      - armlock_counter
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 30
+    minimum_belt_for_competition_use: yellow
+    pedagogical_prerequisites:
+      - yoko_shiho_gatame
+    mechanical_class: lever_pin
+    era_introduced: 1900
+
+  - technique_id: tate_shiho_gatame
+    name_japanese: Tate-shiho-gatame
+    name_english: Lengthwise Four-Quarter Hold (Mount)
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: katame_no_kata
+    parent_position: MOUNT
+    required_connections:
+      - type: BODY_PRESSURE
+        tori_part: hips_and_chest
+        target: uke_chest
+        minimum_quality: 0.7
+      - type: ANATOMICAL_WRAP
+        tori_part: legs
+        target: uke_torso
+        minimum_quality: 0.5
+      - type: ANATOMICAL_WRAP
+        tori_part: arms
+        target: uke_head_or_arms
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - bridge_and_roll_right
+      - bridge_and_roll_left
+      - frame_and_shrimp
+      - leg_recapture
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 35
+    minimum_belt_for_competition_use: yellow
+    pedagogical_prerequisites:
+      - yoko_shiho_gatame
+    mechanical_class: couple_pin
+    ne_waza_followup_preferences:
+      - nami_juji_jime
+      - ude_hishigi_juji_gatame
+    era_introduced: 1900
+    notes: |
+      The mount. Direct path to nami-juji-jime if uke pushes the chest
+      with extended arms, or ude-hishigi-juji-gatame if a single arm
+      isolates.
+
+  # =======================================================================
+  # SHIME-WAZA (STRANGLES) — spec §2.5: ~12 entries.
+  # All immediate_submission; tap-or-pass-out resolution loop handled
+  # engine-side. Most are position-agnostic per spec §2.3 corpus quotes
+  # (Kodokan explicitly notes "can be applied from above, from the sides...").
+  # =======================================================================
+  - technique_id: nami_juji_jime
+    name_japanese: Nami-juji-jime
+    name_english: Normal Cross Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    required_connections:
+      - type: LAPEL_CROSS
+        tori_part: hands_crossed_palms_up
+        target: uke_lapels_high
+        minimum_quality: 0.7
+        cross_orientation: regular
+    applicable_defensive_struts:
+      - elbow_push_and_roll
+      - grip_strip_to_loose
+    score_mechanism: immediate_submission
+    base_difficulty: 40
+    minimum_belt_for_competition_use: orange
+    mechanical_class: couple_choke
+    era_introduced: 1900
+    notes: |
+      Position-agnostic per Kodokan p.118. Both palms up, regular cross.
+
+  - technique_id: gyaku_juji_jime
+    name_japanese: Gyaku-juji-jime
+    name_english: Reverse Cross Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    required_connections:
+      - type: LAPEL_CROSS
+        tori_part: hands_crossed_palms_down
+        target: uke_lapels_high
+        minimum_quality: 0.7
+        cross_orientation: reverse
+    applicable_defensive_struts:
+      - elbow_push_and_roll
+      - grip_strip_to_loose
+    score_mechanism: immediate_submission
+    base_difficulty: 40
+    minimum_belt_for_competition_use: orange
+    mechanical_class: couple_choke
+    era_introduced: 1900
+    notes: |
+      Both palms down. Stronger wringing action than nami-juji but
+      slower to set up.
+
+  - technique_id: kata_juji_jime
+    name_japanese: Kata-juji-jime
+    name_english: Half Cross Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    required_connections:
+      - type: LAPEL_CROSS
+        tori_part: hands_one_palm_up_one_down
+        target: uke_lapels_high
+        minimum_quality: 0.7
+        cross_orientation: half
+    applicable_defensive_struts:
+      - elbow_push_and_roll
+      - grip_strip_to_loose
+    score_mechanism: immediate_submission
+    base_difficulty: 40
+    minimum_belt_for_competition_use: orange
+    mechanical_class: couple_choke
+    era_introduced: 1900
+    notes: |
+      Mixed palm orientation. Hybrid wringing-and-pressing pressure.
+
+  - technique_id: hadaka_jime
+    name_japanese: Hadaka-jime
+    name_english: Naked Strangle (Rear Naked Choke)
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    fires_from_position: back_turtle_with_hooks
+    required_connections:
+      - type: FOREARM_BAR
+        tori_part: right_forearm
+        target: uke_throat
+        minimum_quality: 0.7
+      - type: SELF_ANCHOR
+        tori_part: left_hand
+        target: tori_right_bicep
+        minimum_quality: 0.6
+    applicable_defensive_struts:
+      - sleeve_pull_and_slip
+      - posture_up_and_base
+    score_mechanism: immediate_submission
+    base_difficulty: 45
+    minimum_belt_for_competition_use: yellow
+    mechanical_class: lever_choke
+    era_introduced: 1900
+    notes: |
+      No-gi choke per Kodokan p.120 — "can also be applied to an
+      opponent who is standing." Self-anchored figure-four locks the
+      strangle arm against grip-strip.
+
+  - technique_id: okuri_eri_jime
+    name_japanese: Okuri-eri-jime
+    name_english: Sliding Collar Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    fires_from_position: back_turtle_with_hooks
+    required_connections:
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: right_hand
+        target: uke_far_lapel_deep
+        minimum_quality: 0.7
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: left_hand
+        target: uke_near_lapel
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - grip_strip_to_loose
+      - sleeve_pull_and_slip
+      - posture_up_and_base
+    score_mechanism: immediate_submission
+    base_difficulty: 45
+    minimum_belt_for_competition_use: green
+    mechanical_class: couple_choke
+    era_introduced: 1900
+    notes: |
+      The deep-lapel grip is what makes this choke; the near-side hand
+      pulls the slack to drive the carotid pressure.
+
+  - technique_id: kata_ha_jime
+    name_japanese: Kata-ha-jime
+    name_english: Single Wing Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    parent_position: BACK_CONTROL
+    required_connections:
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: right_hand
+        target: uke_far_lapel_deep
+        minimum_quality: 0.7
+      - type: ANATOMICAL_WRAP
+        tori_part: left_arm
+        target: uke_left_arm_threaded_up
+        minimum_quality: 0.6
+    applicable_defensive_struts:
+      - posture_up_and_base
+      - grip_strip_to_loose
+    score_mechanism: immediate_submission
+    base_difficulty: 50
+    minimum_belt_for_competition_use: green
+    mechanical_class: couple_choke
+    era_introduced: 1900
+    notes: |
+      The wing — tori threads one arm up under uke's same-side arm
+      to lift the shoulder, exposing the carotid for the deep lapel
+      grip. Slow setup, hard to escape once committed.
+
+  - technique_id: katate_jime
+    name_japanese: Katate-jime
+    name_english: One-Hand Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    required_connections:
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: right_hand
+        target: uke_lapel_high_thumb_in
+        minimum_quality: 0.7
+      - type: BODY_PRESSURE
+        tori_part: shoulder_or_chest
+        target: uke_other_carotid
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - grip_strip_to_loose
+      - head_pivot_out
+    score_mechanism: immediate_submission
+    base_difficulty: 50
+    minimum_belt_for_competition_use: green
+    mechanical_class: lever_choke
+    era_introduced: 1900
+    notes: |
+      One hand on the lapel, the other hand free for posture or grip
+      control. Carotid pressure comes from tori's shoulder driving into
+      the opposite side of uke's neck.
+
+  - technique_id: ryote_jime
+    name_japanese: Ryote-jime
+    name_english: Two-Hand Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    required_connections:
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: both_hands
+        target: uke_both_lapels_thumbs_in
+        minimum_quality: 0.7
+    applicable_defensive_struts:
+      - grip_strip_to_loose
+      - elbow_push_and_roll
+    score_mechanism: immediate_submission
+    base_difficulty: 45
+    minimum_belt_for_competition_use: green
+    mechanical_class: couple_choke
+    era_introduced: 1900
+    notes: |
+      Both hands on the lapels, knuckles into the carotids. Simpler
+      setup than juji variants but easier to grip-strip.
+
+  - technique_id: sode_guruma_jime
+    name_japanese: Sode-guruma-jime
+    name_english: Sleeve Wheel Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    fires_from_position: back_turtle_with_hooks
+    required_connections:
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: right_hand
+        target: uke_own_sleeve_or_lapel_far
+        minimum_quality: 0.6
+      - type: ANATOMICAL_WRAP
+        tori_part: right_arm
+        target: uke_neck
+        minimum_quality: 0.7
+    applicable_defensive_struts:
+      - sleeve_pull_and_slip
+      - grip_strip_to_loose
+    score_mechanism: immediate_submission
+    base_difficulty: 50
+    minimum_belt_for_competition_use: green
+    mechanical_class: lever_choke
+    era_introduced: 1900
+    notes: |
+      Uses uke's own sleeve as the wrapping element. Kodokan p.123 —
+      "can also be applied from the rear." Hybrid of garment and
+      forearm-bar mechanics.
+
+  - technique_id: tsukkomi_jime
+    name_japanese: Tsukkomi-jime
+    name_english: Thrust Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    required_connections:
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: left_hand
+        target: uke_lapel_low_pulled_taut
+        minimum_quality: 0.7
+      - type: GARMENT_GRIP_NEWAZA
+        tori_part: right_hand
+        target: uke_lapel_thrust_into_throat
+        minimum_quality: 0.6
+    applicable_defensive_struts:
+      - grip_strip_to_loose
+      - head_pivot_out
+    score_mechanism: immediate_submission
+    base_difficulty: 50
+    minimum_belt_for_competition_use: green
+    mechanical_class: lever_choke
+    era_introduced: 1900
+    notes: |
+      One hand pulls the lapel taut from below; the other thrusts the
+      knuckle into the windpipe. Less carotid, more tracheal — sometimes
+      classified by modern instructors as an air choke variant.
+
+  - technique_id: sankaku_jime
+    name_japanese: Sankaku-jime
+    name_english: Triangle Strangle
+    family: ne_waza
+    subfamily: strangle
+    kodokan_status: katame_no_kata
+    fires_from_position: sankaku_position
+    required_connections:
+      - type: LIMB_TRIANGLE
+        tori_part: legs
+        target: uke_head_and_one_arm
+        minimum_quality: 0.7
+        orientation: diagonal
+    applicable_defensive_struts:
+      - head_pivot_out
+      - elbow_push_and_roll
+      - posture_up_and_base
+    score_mechanism: immediate_submission
+    base_difficulty: 50
+    minimum_belt_for_competition_use: blue
+    mechanical_class: couple_choke
+    era_introduced: 1900
+    notes: |
+      Kodokan p.124 — fires from the sankaku_position. Pressure is
+      asymmetric: tori's calf compresses one carotid while uke's own
+      trapped shoulder compresses the other.
+
+  # =======================================================================
+  # KANSETSU-WAZA (JOINT LOCKS) — spec §2.5: ~9 entries.
+  # All immediate_submission; joint_target + fulcrum_body_part required.
+  # The eight ude-hishigi-X-gatame variants per spec §9.3 — kept as
+  # separate entries (Kodokan-naming-aligned).
+  # =======================================================================
+  - technique_id: ude_garami
+    name_japanese: Ude-garami
+    name_english: Entangled Arm Lock (Figure-Four)
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: shoulder_rotation
+    fulcrum_body_part: arm
+    required_connections:
+      - type: WRIST_GRIP
+        tori_part: left_hand
+        target: uke_right_wrist
+        minimum_quality: 0.7
+        rotational_lock_axis: rotation
+      - type: LIMB_ISOLATION
+        tori_part: right_arm_threaded
+        target: uke_right_upper_arm
+        minimum_quality: 0.6
+      - type: BODY_PRESSURE
+        tori_part: chest
+        target: uke_chest
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - elbow_rotate_and_bend
+      - stand_up_from_lock
+      - bridge_and_roll_right
+    score_mechanism: immediate_submission
+    base_difficulty: 45
+    minimum_belt_for_competition_use: yellow
+    mechanical_class: lever_rotation
+    era_introduced: 1900
+    notes: |
+      Figure-four entanglement. Twists the shoulder rather than
+      hyperextending the elbow — works in any direction the forearm
+      can rotate.
+
+  - technique_id: ude_hishigi_juji_gatame
+    name_japanese: Ude-hishigi-juji-gatame
+    name_english: Cross Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: elbow_extension
+    fulcrum_body_part: hips_and_thighs
+    required_connections:
+      - type: LIMB_ISOLATION
+        tori_part: legs_and_hips
+        target: uke_right_arm
+        minimum_quality: 0.7
+      - type: WRIST_GRIP
+        tori_part: both_hands
+        target: uke_right_wrist
+        minimum_quality: 0.7
+        rotational_lock_axis: extension
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - wrist_pre_grip
+    score_mechanism: immediate_submission
+    base_difficulty: 45
+    minimum_belt_for_competition_use: white
+    mechanical_class: lever_extension
+    era_introduced: 1900
+    notes: |
+      The foundational armlock. Hips as fulcrum, arm extended over the
+      hip line. White-belt curriculum entry per spec §8.2.
+
+  - technique_id: ude_hishigi_ude_gatame
+    name_japanese: Ude-hishigi-ude-gatame
+    name_english: Arm-Against-Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: elbow_extension
+    fulcrum_body_part: arm
+    required_connections:
+      - type: LIMB_ISOLATION
+        tori_part: chest_and_shoulder
+        target: uke_right_arm_extended
+        minimum_quality: 0.7
+      - type: WRIST_GRIP
+        tori_part: both_hands
+        target: uke_right_wrist
+        minimum_quality: 0.6
+        rotational_lock_axis: extension
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - wrist_pre_grip
+    score_mechanism: immediate_submission
+    base_difficulty: 50
+    minimum_belt_for_competition_use: yellow
+    mechanical_class: lever_extension
+    era_introduced: 1900
+    notes: |
+      Fulcrum is tori's own forearm pressed against uke's elbow joint.
+      Commonly applied as a standing transition out of a failed lapel
+      grip.
+
+  - technique_id: ude_hishigi_hiza_gatame
+    name_japanese: Ude-hishigi-hiza-gatame
+    name_english: Knee Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: elbow_extension
+    fulcrum_body_part: knee
+    required_connections:
+      - type: LIMB_ISOLATION
+        tori_part: armpit
+        target: uke_right_arm
+        minimum_quality: 0.6
+      - type: WRIST_GRIP
+        tori_part: right_hand
+        target: uke_right_wrist
+        minimum_quality: 0.6
+        rotational_lock_axis: extension
+      - type: BODY_PRESSURE
+        tori_part: left_knee
+        target: uke_right_elbow_joint
+        minimum_quality: 0.7
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - wrist_pre_grip
+    score_mechanism: immediate_submission
+    base_difficulty: 50
+    minimum_belt_for_competition_use: yellow
+    mechanical_class: lever_extension
+    era_introduced: 1900
+    notes: |
+      Knee against the elbow joint. Common from guard-bottom scrambles.
+
+  - technique_id: ude_hishigi_waki_gatame
+    name_japanese: Ude-hishigi-waki-gatame
+    name_english: Armpit Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: elbow_extension
+    fulcrum_body_part: armpit
+    required_connections:
+      - type: LIMB_ISOLATION
+        tori_part: armpit
+        target: uke_right_arm_extended_overhead
+        minimum_quality: 0.7
+      - type: WRIST_GRIP
+        tori_part: right_hand
+        target: uke_right_wrist
+        minimum_quality: 0.6
+        rotational_lock_axis: extension
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - wrist_pre_grip
+      - stand_up_from_lock
+    score_mechanism: immediate_submission
+    base_difficulty: 55
+    minimum_belt_for_competition_use: blue
+    mechanical_class: lever_extension
+    era_introduced: 1900
+    notes: |
+      Fulcrum is tori's armpit clamped on uke's upper arm. Standing
+      variant is a common counter to an over-reaching lapel grip.
+
+  - technique_id: ude_hishigi_hara_gatame
+    name_japanese: Ude-hishigi-hara-gatame
+    name_english: Stomach Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: elbow_extension
+    fulcrum_body_part: stomach
+    required_connections:
+      - type: LIMB_ISOLATION
+        tori_part: hands_and_torso
+        target: uke_right_arm
+        minimum_quality: 0.7
+      - type: BODY_PRESSURE
+        tori_part: stomach
+        target: uke_right_elbow_joint
+        minimum_quality: 0.7
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - wrist_pre_grip
+    score_mechanism: immediate_submission
+    base_difficulty: 55
+    minimum_belt_for_competition_use: blue
+    mechanical_class: lever_extension
+    era_introduced: 1900
+
+  - technique_id: ude_hishigi_ashi_gatame
+    name_japanese: Ude-hishigi-ashi-gatame
+    name_english: Leg Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: elbow_extension
+    fulcrum_body_part: leg
+    required_connections:
+      - type: LIMB_ISOLATION
+        tori_part: hands
+        target: uke_right_arm_extended
+        minimum_quality: 0.6
+      - type: BODY_PRESSURE
+        tori_part: leg_shin
+        target: uke_right_elbow_joint
+        minimum_quality: 0.7
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - wrist_pre_grip
+    score_mechanism: immediate_submission
+    base_difficulty: 55
+    minimum_belt_for_competition_use: blue
+    mechanical_class: lever_extension
+    era_introduced: 1900
+    notes: |
+      Tori's leg as the fulcrum; commonly entered from a scramble where
+      uke's posting arm is exposed below tori's hip.
+
+  - technique_id: ude_hishigi_te_gatame
+    name_japanese: Ude-hishigi-te-gatame
+    name_english: Hand Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    joint_target: elbow_extension
+    fulcrum_body_part: hand
+    required_connections:
+      - type: LIMB_ISOLATION
+        tori_part: hand_palm
+        target: uke_right_elbow_joint
+        minimum_quality: 0.7
+      - type: WRIST_GRIP
+        tori_part: opposite_hand
+        target: uke_right_wrist
+        minimum_quality: 0.6
+        rotational_lock_axis: extension
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - wrist_pre_grip
+    score_mechanism: immediate_submission
+    base_difficulty: 60
+    minimum_belt_for_competition_use: brown
+    mechanical_class: lever_extension
+    era_introduced: 1900
+    notes: |
+      Hand as fulcrum. Rare in shiai — requires uke's elbow to be
+      perfectly aligned and a strong wrist control to drive against.
+
+  - technique_id: ude_hishigi_sankaku_gatame
+    name_japanese: Ude-hishigi-sankaku-gatame
+    name_english: Triangle Arm Lock
+    family: ne_waza
+    subfamily: joint_lock
+    kodokan_status: katame_no_kata
+    fires_from_position: sankaku_position
+    joint_target: elbow_extension
+    fulcrum_body_part: legs
+    required_connections:
+      - type: LIMB_TRIANGLE
+        tori_part: legs
+        target: uke_head_and_one_arm
+        minimum_quality: 0.6
+        orientation: diagonal
+      - type: WRIST_GRIP
+        tori_part: both_hands
+        target: uke_trapped_arm_wrist
+        minimum_quality: 0.6
+        rotational_lock_axis: extension
+    applicable_defensive_struts:
+      - elbow_bend_and_clasp
+      - head_pivot_out
+      - wrist_pre_grip
+    score_mechanism: immediate_submission
+    base_difficulty: 55
+    minimum_belt_for_competition_use: blue
+    mechanical_class: lever_compression
+    era_introduced: 1900
+    notes: |
+      The armlock terminal of the sankaku cluster. Mechanical class is
+      lever_compression per spec §6 — the legs squeeze rather than the
+      hips extend. Per Kodokan p.130, can be applied from front, side,
+      or rear approaches into the sankaku.
+
+  # =======================================================================
+  # SANKAKU PIN — the third sankaku terminal (Cranford-identified pin).
+  # Treated as a separate technique_id from the strangle and armlock.
+  # =======================================================================
+  - technique_id: sankaku_gatame
+    name_japanese: Sankaku-gatame
+    name_english: Triangle Hold (Pin)
+    family: ne_waza
+    subfamily: pin
+    kodokan_status: shinmeisho
+    fires_from_position: sankaku_position
+    required_connections:
+      - type: LIMB_TRIANGLE
+        tori_part: legs
+        target: uke_head_and_one_arm
+        minimum_quality: 0.6
+        orientation: diagonal
+      - type: BODY_PRESSURE
+        tori_part: hips
+        target: uke_torso
+        minimum_quality: 0.5
+    applicable_defensive_struts:
+      - head_pivot_out
+      - frame_and_shrimp
+      - bridge_and_roll_right
+    score_mechanism: pin_time_accumulation
+    base_difficulty: 50
+    minimum_belt_for_competition_use: brown
+    mechanical_class: couple_pin
+    era_introduced: 1980
+    notes: |
+      Cranford-identified terminal per substrate Part 5.2 — the triangle
+      held for time rather than driven as a submission. Classified
+      shinmeisho since it does not appear in Katame-no-kata.
