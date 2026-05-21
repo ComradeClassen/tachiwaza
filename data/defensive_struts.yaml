@@ -1,0 +1,17 @@
+# Defensive strut catalog — HAJ-205 authoring (ne-waza phase) will populate.
+#
+# Schema reference: design-notes/triage/ne-waza-vocabulary-system.md v0.1
+# (Section 4.3). Loader: src/ne_waza_catalog.py.
+#
+# Struts are reusable defensive primitives that defend across many
+# techniques (spec §4.2). The same bridge_and_roll_right strut defends
+# kesa, kata-gatame, kami-shiho, etc. with different parameters; embedding
+# defenses inside technique entries would duplicate strut definitions.
+#
+# v0.1 scope per spec §4.5: ~15-17 entries spanning the seven
+# mechanism_family values (rotational_displacement, linear_extraction,
+# limb_recapture, pre_grip_seizure, joint_protection, postural_denial,
+# counter_attack). Author this catalog FIRST per spec §12 — every other
+# ne-waza file references strut_ids from here.
+
+struts: []

@@ -6,10 +6,16 @@ on:
   pull_request:
     paths:
       - "data/techniques.yaml"
+      - "data/ne_waza_techniques.yaml"
+      - "data/ne_waza_positions.yaml"
+      - "data/defensive_struts.yaml"
       - "src/technique_catalog.py"
       - "src/catalog_validator.py"
+      - "src/ne_waza_catalog.py"
+      - "src/ne_waza_catalog_validator.py"
       - "tests/test_technique_catalog.py"
       - "tests/test_catalog_validator.py"
+      - "tests/test_ne_waza_catalog.py"
       - ".github/workflows/catalog-validation.yml"
 
 jobs:
@@ -25,8 +31,16 @@ jobs:
       - name: Install dependencies
         run: pip install pyyaml pytest
 
-      - name: Validate catalog (errors-only, same flags as pre-commit hook)
+      - name: Validate tachiwaza catalog (errors-only, same flags as pre-commit hook)
         run: python src/catalog_validator.py data/techniques.yaml --no-warnings --no-infos
 
+      - name: Validate ne-waza catalog (errors-only, same flags as pre-commit hook)
+        run: python src/ne_waza_catalog_validator.py --no-warnings --no-infos
+
       - name: Run catalog tests
-        run: python -m pytest tests/test_technique_catalog.py tests/test_catalog_validator.py -q
+        run: |
+          python -m pytest \
+            tests/test_technique_catalog.py \
+            tests/test_catalog_validator.py \
+            tests/test_ne_waza_catalog.py \
+            -q

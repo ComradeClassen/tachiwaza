@@ -1,0 +1,15 @@
+# Ne-waza dominant-position catalog — HAJ-205 authoring (ne-waza phase) will populate.
+#
+# Schema reference: design-notes/triage/ne-waza-vocabulary-system.md v0.1
+# (Section 3.3). Loader: src/ne_waza_catalog.py.
+#
+# A dominant position is a configuration offering 2+ named terminals
+# with induced transitions between them (spec §3.2). Non-dominant
+# positions (single-finish terminals like kesa-gatame) are NOT entered
+# here — they live as parent_position references on the technique entry.
+#
+# v0.1 scope per spec §3.5: ~3 entries (sankaku_position,
+# back_turtle_with_hooks, and possibly head_and_arm_isolated if not
+# folded into sankaku_position).
+
+positions: []

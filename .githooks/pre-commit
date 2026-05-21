@@ -6,26 +6,44 @@
 #
 # Only fires when a catalog-relevant file is staged for commit. Warnings and
 # infos are non-blocking; only validator errors abort the commit.
+#
+# Runs BOTH catalog validators (tachiwaza + ne-waza) when any catalog file
+# is staged. The two catalogs share the minimum_belt_for_competition_use
+# field that feeds the unified HAJ-210 belt ladder, so cross-catalog
+# integrity issues may surface from a change to either side.
 
 set -e
 
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 
 # Slash-normalise (Windows git can emit backslashes) before matching.
-catalog_changed=$(echo "$staged" | tr '\\' '/' | grep -E '^(data/techniques\.yaml|src/catalog_validator\.py|src/technique_catalog\.py)$' || true)
+normalized=$(echo "$staged" | tr '\\' '/')
 
-if [ -z "$catalog_changed" ]; then
+tachiwaza_changed=$(echo "$normalized" | grep -E '^(data/techniques\.yaml|src/catalog_validator\.py|src/technique_catalog\.py)$' || true)
+newaza_changed=$(echo "$normalized" | grep -E '^(data/ne_waza_techniques\.yaml|data/ne_waza_positions\.yaml|data/defensive_struts\.yaml|src/ne_waza_catalog\.py|src/ne_waza_catalog_validator\.py)$' || true)
+
+if [ -z "$tachiwaza_changed" ] && [ -z "$newaza_changed" ]; then
     exit 0
 fi
 
-echo "[pre-commit] running catalog validator..." >&2
+failed=0
 
-# Pass --no-warnings --no-infos so the hook output stays focused on what
-# actually blocks the commit. Run the full report manually if you want
-# the warnings/infos.
-if ! python src/catalog_validator.py data/techniques.yaml --no-warnings --no-infos >&2; then
-    echo "" >&2
-    echo "[pre-commit] catalog validation failed — fix the errors above before committing." >&2
-    echo "[pre-commit] full report: python src/catalog_validator.py data/techniques.yaml" >&2
+if [ -n "$tachiwaza_changed" ] || [ -n "$newaza_changed" ]; then
+    echo "[pre-commit] running tachiwaza catalog validator..." >&2
+    if ! python src/catalog_validator.py data/techniques.yaml --no-warnings --no-infos >&2; then
+        echo "[pre-commit] tachiwaza validation failed — fix errors above." >&2
+        echo "[pre-commit] full report: python src/catalog_validator.py data/techniques.yaml" >&2
+        failed=1
+    fi
+
+    echo "[pre-commit] running ne-waza catalog validator..." >&2
+    if ! python src/ne_waza_catalog_validator.py --no-warnings --no-infos >&2; then
+        echo "[pre-commit] ne-waza validation failed — fix errors above." >&2
+        echo "[pre-commit] full report: python src/ne_waza_catalog_validator.py" >&2
+        failed=1
+    fi
+fi
+
+if [ "$failed" -ne 0 ]; then
     exit 1
 fi

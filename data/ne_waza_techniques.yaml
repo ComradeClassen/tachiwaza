@@ -1,0 +1,13 @@
+# Ne-waza technique catalog — HAJ-205 authoring (ne-waza phase) will populate.
+#
+# Schema reference: design-notes/triage/ne-waza-vocabulary-system.md v0.1
+# (Section 2.2). Loader: src/ne_waza_catalog.py. Validator:
+# src/ne_waza_catalog_validator.py.
+#
+# Sibling to data/techniques.yaml (tachiwaza) — NOT an extension. The two
+# catalogs are loaded separately and share no entries.
+#
+# Authoring scope per spec §2.5: ~28 katame-waza entries (7-8 pins, ~12
+# shime, ~9 kansetsu). Recommended authoring order is in spec §12.
+
+techniques: []
