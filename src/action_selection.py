@@ -31,10 +31,15 @@ from throws import THROW_DEFS, ThrowID
 from grip_presence_gate import evaluate_gate, GateResult, REASON_OK
 from compromised_state import is_desperation_state
 from commit_motivation import CommitMotivation
+from availability import (
+    THROW_TO_TECHNIQUE_ID, stage1_available_techniques,
+    stage2_select_technique,
+)
 
 if TYPE_CHECKING:
     from judoka import Judoka
     from grip_graph import GripGraph, GripEdge
+    from technique_catalog import TechniqueDefinition
 
 
 # Tuning constants (calibration stubs).
@@ -167,6 +172,7 @@ def select_actions(
     current_tick: int = 0,
     position: Optional[Position] = None,
     golden_score: bool = False,
+    catalog: Optional[dict[str, "TechniqueDefinition"]] = None,
 ) -> list[Action]:
     """Return the judoka's chosen actions for this tick.
 
@@ -191,6 +197,15 @@ def select_actions(
     (aggressive / technical facets, fight_iq, positional_style) so
     the closing trajectory varies match-to-match instead of always
     being a head-on car crash.
+
+    HAJ-207 — when `catalog` is supplied, the commit rung consults
+    `stage1_available_techniques` against the catalog's per-technique
+    grip signatures before firing a throw. The Stage 1 set replaces
+    the priority-laddered grip-presence checks: an empty available
+    set means no throw fires this tick regardless of perceived
+    signature, which is the gating mechanism that resolves HAJ-199
+    (heavy opponent grip configurations producing inappropriate
+    commits). When `catalog` is None the legacy gate path is used.
     """
     # HAJ-141 — closing-phase short-circuit. During STANDING_DISTANT the
     # only legal action is to reach for engagement; the commit / drive /
@@ -216,6 +231,7 @@ def select_actions(
         desperation_jitter=desperation_jitter,
         current_tick=current_tick,
         golden_score=golden_score,
+        catalog=catalog,
     )
     # HAJ-128 — locomotion is additive, never replaces grip work. Skip
     # when a commit is in flight (commits are exclusive in the ladder)
@@ -331,6 +347,7 @@ def _select_grip_actions(
     desperation_jitter: Optional[dict] = None,
     current_tick: int = 0,
     golden_score: bool = False,
+    catalog: Optional[dict[str, "TechniqueDefinition"]] = None,
 ) -> list[Action]:
     """The grip / commit / probe priority ladder. Pre-HAJ-128 this was
     the body of select_actions; locomotion now wraps it.
@@ -383,6 +400,7 @@ def _select_grip_actions(
         opponent_kumi_kata_clock=opponent_kumi_kata_clock,
         current_tick=current_tick,
         golden_score=golden_score,
+        catalog=catalog,
     )
     if commit is not None:
         return [commit]
@@ -930,6 +948,7 @@ def _try_commit(
     opponent_kumi_kata_clock: int = 0,
     current_tick: int = 0,
     golden_score: bool = False,
+    catalog: Optional[dict[str, "TechniqueDefinition"]] = None,
 ) -> Optional[Action]:
     """If there's a throw whose *perceived* signature clears the commit
     threshold AND the formal grip-presence gate allows it (or is bypassed
@@ -952,6 +971,20 @@ def _try_commit(
     The returned Action carries the motivation label so Match can surface
     it on the commit log line and the failure-outcome router can route to
     TACTICAL_DROP_RESET (HAJ-50).
+
+    HAJ-207 — when `catalog` is supplied, the path becomes:
+      a. Compute stage1_available_techniques against the catalog.
+      b. If the available set is empty, no scoring commit fires this
+         tick (regardless of perceived signature). Non-scoring
+         motivations are still considered for the false-attack path.
+      c. Otherwise rank candidates by perceived signature as before
+         and additionally filter by Stage 1 membership.
+      d. Among Stage-1 survivors above COMMIT_THRESHOLD, Stage 2
+         picks one via kuzushi-vector match + proficiency weighting +
+         a fight-IQ / cardio stochastic gate.
+    Desperation flags keep their grip-presence gate bypass — the
+    catalog filter is suppressed in that case so a cornered fighter
+    can still attempt a low-signature drop variant.
     """
     from perception import actual_signature_match, perceive
 
@@ -960,6 +993,31 @@ def _try_commit(
     for t in judoka.capability.throw_vocabulary:
         if t not in candidates:
             candidates.append(t)
+
+    # HAJ-207 — Stage 1 availability. Catalog gating only applies when a
+    # catalog is supplied AND we aren't in a desperation bypass. With no
+    # catalog, behavior is the legacy grip-presence-gate path.
+    catalog_active = catalog is not None and not (
+        offensive_desperation or defensive_desperation
+    )
+    available_techniques: set[str] = set()
+    if catalog_active:
+        available_techniques = stage1_available_techniques(
+            graph, judoka, opponent, catalog,
+        )
+        if not available_techniques:
+            # No throw can fire this tick. Skip directly to non-scoring
+            # motivations (false-attack pathways are not gated by the
+            # catalog because they're tactical fakes, not scoring commits).
+            return _try_false_attack_commit(
+                judoka, opponent, graph, rng,
+                offensive_desperation=offensive_desperation,
+                defensive_desperation=defensive_desperation,
+                kumi_kata_clock=kumi_kata_clock,
+                opponent_kumi_kata_clock=opponent_kumi_kata_clock,
+                perceived_by_throw={},
+                golden_score=golden_score,
+            )
 
     # Rank candidates by perceived signature; we'll walk in descending order
     # and pick the first that clears both the threshold AND the grip gate.
@@ -981,27 +1039,68 @@ def _try_commit(
         ranked.append((perceived, tid))
     ranked.sort(key=lambda pair: pair[0], reverse=True)
 
-    for perceived, tid in ranked:
-        if perceived < COMMIT_THRESHOLD:
-            break   # ranked descending; nothing below will clear either
-        td = THROW_DEFS[tid]
-        gate = evaluate_gate(
-            judoka, td, graph,
-            offensive_desperation=offensive_desperation,
-            defensive_desperation=defensive_desperation,
+    if catalog_active:
+        chosen = _stage2_commit_from_ranked(
+            judoka, opponent, ranked, available_techniques,
+            catalog, rng, current_tick,
         )
-        if not gate.allowed:
-            continue   # try the next throw
-        return commit_throw(
-            tid,
-            offensive_desperation=offensive_desperation,
-            defensive_desperation=defensive_desperation,
-            gate_bypass_reason=gate.reason if gate.bypassed else None,
-            gate_bypass_kind=gate.bypass_kind,
-        )
+        if chosen is not None:
+            tid, _gate = chosen
+            return commit_throw(
+                tid,
+                offensive_desperation=offensive_desperation,
+                defensive_desperation=defensive_desperation,
+                gate_bypass_reason=None,
+                gate_bypass_kind=None,
+            )
+    else:
+        for perceived, tid in ranked:
+            if perceived < COMMIT_THRESHOLD:
+                break   # ranked descending; nothing below will clear either
+            td = THROW_DEFS[tid]
+            gate = evaluate_gate(
+                judoka, td, graph,
+                offensive_desperation=offensive_desperation,
+                defensive_desperation=defensive_desperation,
+            )
+            if not gate.allowed:
+                continue   # try the next throw
+            return commit_throw(
+                tid,
+                offensive_desperation=offensive_desperation,
+                defensive_desperation=defensive_desperation,
+                gate_bypass_reason=gate.reason if gate.bypassed else None,
+                gate_bypass_kind=gate.bypass_kind,
+            )
 
-    # HAJ-67 — non-scoring motivation dispatch. Skipped when either
-    # desperation flag is already firing; those have higher precedence.
+    return _try_false_attack_commit(
+        judoka, opponent, graph, rng,
+        offensive_desperation=offensive_desperation,
+        defensive_desperation=defensive_desperation,
+        kumi_kata_clock=kumi_kata_clock,
+        opponent_kumi_kata_clock=opponent_kumi_kata_clock,
+        perceived_by_throw=perceived_by_throw,
+        golden_score=golden_score,
+    )
+
+
+def _try_false_attack_commit(
+    judoka: "Judoka",
+    opponent: "Judoka",
+    graph: "GripGraph",
+    rng: random.Random,
+    *,
+    offensive_desperation: bool,
+    defensive_desperation: bool,
+    kumi_kata_clock: int,
+    opponent_kumi_kata_clock: int,
+    perceived_by_throw: dict[ThrowID, float],
+    golden_score: bool,
+) -> Optional[Action]:
+    """HAJ-67 non-scoring motivation dispatch, factored out so the
+    HAJ-207 Stage-1-empty path can reach it without re-ranking
+    candidates. Skipped when either desperation flag is already firing
+    (those have higher precedence)."""
     if offensive_desperation or defensive_desperation:
         return None
 
@@ -1024,6 +1123,55 @@ def _try_commit(
         gate_bypass_reason=REASON_INTENTIONAL_FALSE_ATTACK,
         gate_bypass_kind="false_attack",
     )
+
+
+def _stage2_commit_from_ranked(
+    judoka: "Judoka",
+    opponent: "Judoka",
+    ranked: list[tuple[float, ThrowID]],
+    available_techniques: set[str],
+    catalog: dict[str, "TechniqueDefinition"],
+    rng: random.Random,
+    current_tick: int,
+) -> Optional[tuple[ThrowID, None]]:
+    """HAJ-207 Stage 2: pick one technique from Stage-1 survivors that
+    also clear COMMIT_THRESHOLD on perceived signature.
+
+    Returns (throw_id, None) on a fire, or None to skip. The trailing
+    `None` mirrors the `gate` element the legacy path returns so the
+    caller's tuple-unpack stays symmetric (future wiring may surface
+    Stage 2 telemetry there).
+    """
+    from kuzushi import compromised_state
+
+    perceived_by_tech: dict[str, float] = {}
+    throw_by_tech: dict[str, ThrowID] = {}
+    for perceived, tid in ranked:
+        if perceived < COMMIT_THRESHOLD:
+            break
+        technique_id = THROW_TO_TECHNIQUE_ID.get(tid)
+        if technique_id is None or technique_id not in available_techniques:
+            continue
+        # First entry per technique_id wins (ranked is descending).
+        if technique_id not in perceived_by_tech:
+            perceived_by_tech[technique_id] = perceived
+            throw_by_tech[technique_id] = tid
+    if not throw_by_tech:
+        return None
+
+    cs = compromised_state(opponent.kuzushi_events, current_tick)
+    chosen_tech = stage2_select_technique(
+        available=set(throw_by_tech.keys()),
+        catalog=catalog,
+        tori=judoka,
+        kuzushi_vector=cs.vector,
+        uke_facing=opponent.state.body_state.facing,
+        perceived_signature=perceived_by_tech,
+        rng=rng,
+    )
+    if chosen_tech is None:
+        return None
+    return throw_by_tech[chosen_tech], None
 
 
 # ---------------------------------------------------------------------------

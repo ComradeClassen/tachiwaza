@@ -99,6 +99,37 @@ from defense_decision import (
 # many matches.
 # ---------------------------------------------------------------------------
 
+# HAJ-207 — canonical technique catalog cache. Loaded lazily on the
+# first Match construction so unit tests that don't touch select_actions
+# don't pay the YAML parse cost; subsequent matches share the cached
+# dict. Passing an explicit `technique_catalog=` to Match() bypasses the
+# cache (used by tests to inject narrow synthetic catalogs).
+_CACHED_TECHNIQUE_CATALOG: Optional[dict] = None
+
+
+def _load_default_technique_catalog() -> dict:
+    """Lazy-load and cache the canonical catalog (data/techniques.yaml)."""
+    global _CACHED_TECHNIQUE_CATALOG
+    if _CACHED_TECHNIQUE_CATALOG is not None:
+        return _CACHED_TECHNIQUE_CATALOG
+    from pathlib import Path
+    from technique_catalog import load_catalog
+    # src/match.py → project root → data/techniques.yaml
+    repo_root = Path(__file__).resolve().parent.parent
+    catalog_path = repo_root / "data" / "techniques.yaml"
+    if not catalog_path.exists():
+        # Defensive: tests / partial checkouts without the data dir get an
+        # empty catalog, which behaves as "Stage 1 always empty" — and the
+        # legacy grip-presence gate is bypassed by the catalog_active flag
+        # only when a non-None catalog is passed, so callers that rely on
+        # legacy behavior should pass technique_catalog={} (or accept the
+        # empty stage-1 set, which produces no commits).
+        _CACHED_TECHNIQUE_CATALOG = {}
+    else:
+        _CACHED_TECHNIQUE_CATALOG = load_catalog(catalog_path)
+    return _CACHED_TECHNIQUE_CATALOG
+
+
 # Engagement (Part 2.7): baseline floor; actual duration is max of
 # reach_ticks_for(a) and reach_ticks_for(b), enforced from the graph.
 #
@@ -853,6 +884,7 @@ class Match:
         stream: str = "both",
         renderer: Optional["Renderer"] = None,
         regulation_ticks: Optional[int] = None,
+        technique_catalog: Optional[dict] = None,
     ) -> None:
         if stream not in VALID_STREAMS:
             raise ValueError(
@@ -876,6 +908,14 @@ class Match:
         self._renderer = renderer
         if self._debug is not None:
             self._debug.bind_match(self)
+
+        # HAJ-207 — technique catalog. When supplied (non-None), the
+        # action selector consults stage1_available_techniques against
+        # the catalog before committing throws. Default is None so
+        # existing tests preserve the legacy grip-presence-gate commit
+        # path; production entry points (run_match.py, main.py) opt in
+        # by loading data/techniques.yaml and passing it through.
+        self.technique_catalog = technique_catalog
 
         # Match-level state
         self.grip_graph   = GripGraph()
@@ -1388,6 +1428,7 @@ class Match:
             current_tick=tick,
             position=self.position,
             golden_score=self.golden_score,
+            catalog=self.technique_catalog,
         )
         actions_b = select_actions(
             self.fighter_b, self.fighter_a, self.grip_graph,
@@ -1405,6 +1446,7 @@ class Match:
             current_tick=tick,
             position=self.position,
             golden_score=self.golden_score,
+            catalog=self.technique_catalog,
         )
         # A fighter mid-attempt must not re-commit — strip any COMMIT_THROW
         # the ladder re-proposes this tick.
