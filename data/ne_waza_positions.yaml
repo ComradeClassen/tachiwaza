@@ -91,12 +91,6 @@ positions:
       - okuri_eri_jime
       - sode_guruma_jime
     induced_transitions:
-      - if_uke_strut_activates: grip_strip_to_loose
-        tori_can_pivot_to: hadaka_jime
-        transition_cost: 1
-        narrative: |
-          Uke strips the lapel grip before the collar choke locks; tori
-          abandons the eri attempt and bare-arms the throat for hadaka.
       - if_uke_strut_activates: sleeve_pull_and_slip
         tori_can_pivot_to: sode_guruma_jime
         transition_cost: 2

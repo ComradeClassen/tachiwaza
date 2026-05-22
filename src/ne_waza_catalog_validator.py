@@ -11,7 +11,8 @@
 #   - Warnings: joint_lock missing mechanical_class, dead struts (not
 #     referenced by any technique or position), single-terminal positions
 #     (per spec §3 dominant positions should have 2+ terminals), techniques
-#     authored with no applicable_defensive_struts.
+#     authored with no applicable_defensive_struts, induced transitions
+#     pointing at non-post-commit struts (addendum §6.5.2 / §6.5.7).
 #
 # Loader-level findings (enum membership, missing required fields, etc.)
 # surface as a single fatal load_error rather than being re-checked here.
@@ -42,6 +43,7 @@ if str(_REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 from ne_waza_catalog import (  # noqa: E402
+    DefensePhase,
     NeWazaCatalog,
     NeWazaCatalogError,
     NeWazaSubfamily,
@@ -260,6 +262,41 @@ def _check_dead_struts(catalog: NeWazaCatalog) -> list[ValidationIssue]:
     return issues
 
 
+def _check_induced_transition_strut_phases(
+    catalog: NeWazaCatalog,
+) -> list[ValidationIssue]:
+    """Induced transitions can only fire on post-commit struts (addendum
+    §6.5.2 / §6.5.7). Pre-commit and pre-position struts operate before
+    tori has committed to the technique, so there is no danger zone to
+    pivot from — naming such a strut in `if_uke_strut_activates` is a
+    schema error.
+
+    Warning, not error — author may want to flag deliberate cross-phase
+    entries before clearing them, and dangling references are already
+    caught by the cross-ref check.
+    """
+    issues: list[ValidationIssue] = []
+    for pid, pos in catalog.positions.items():
+        for i, trans in enumerate(pos.induced_transitions):
+            strut = catalog.struts.get(trans.if_uke_strut_activates)
+            if strut is None:
+                continue   # already reported by cross-ref check
+            if strut.defense_phase is not DefensePhase.POST_COMMIT:
+                issues.append(ValidationIssue(
+                    severity=Severity.WARNING,
+                    code="induced_transition_non_post_commit_strut",
+                    entity_id=pid,
+                    field=f"induced_transitions[{i}].if_uke_strut_activates",
+                    message=(
+                        f"strut '{trans.if_uke_strut_activates}' has "
+                        f"defense_phase '{strut.defense_phase.value}'; only "
+                        "post_commit struts can trigger induced transitions "
+                        "(addendum §6.5.2)"
+                    ),
+                ))
+    return issues
+
+
 def _check_single_terminal_positions(catalog: NeWazaCatalog) -> list[ValidationIssue]:
     """Per spec §3.2 / §3.4, dominant positions exist precisely because
     they offer 2+ named terminals. A single-terminal position belongs as
@@ -306,6 +343,7 @@ def validate_catalog(catalog: NeWazaCatalog) -> ValidationReport:
 
     issues.extend(_check_dead_struts(catalog))
     issues.extend(_check_single_terminal_positions(catalog))
+    issues.extend(_check_induced_transition_strut_phases(catalog))
 
     return ValidationReport(
         issues=issues,

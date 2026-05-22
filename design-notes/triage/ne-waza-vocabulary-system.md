@@ -6,6 +6,8 @@
 
 *This is a v0.1 spec, not finished. The corpus is bounded — Kodokan-canonical techniques only, primary-finish defenses only, no positional defenses or scrambles. The substrate is designed to extend cleanly. The v0.1 commitments are what the current corpus supports.*
 
+*v0.1 addendum: consumption semantics specified in `ne-waza-vocabulary-system-addendum-consumption-semantics.md` (HAJ-216).*
+
 ---
 
 ## Why this exists

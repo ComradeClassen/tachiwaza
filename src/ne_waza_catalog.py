@@ -115,6 +115,32 @@ class DefensePhase(Enum):
     POST_COMMIT  = "post_commit"
 
 
+class BodyPart(Enum):
+    """Body parts a defensive strut loads. Required field on every strut
+    (addendum §6.5.3) — supports the injury-system query that picks a
+    safer defense when a body part is injured. Enum locked at 20 values."""
+    LEFT_SHOULDER  = "left_shoulder"
+    RIGHT_SHOULDER = "right_shoulder"
+    BOTH_SHOULDERS = "both_shoulders"
+    NECK           = "neck"
+    UPPER_BACK     = "upper_back"
+    LOWER_BACK     = "lower_back"
+    HIPS           = "hips"
+    ABDOMEN        = "abdomen"
+    LEFT_KNEE      = "left_knee"
+    RIGHT_KNEE     = "right_knee"
+    BOTH_KNEES     = "both_knees"
+    LEFT_ANKLE     = "left_ankle"
+    RIGHT_ANKLE    = "right_ankle"
+    BOTH_ANKLES    = "both_ankles"
+    LEFT_ELBOW     = "left_elbow"
+    RIGHT_ELBOW    = "right_elbow"
+    BOTH_ELBOWS    = "both_elbows"
+    LEFT_WRIST     = "left_wrist"
+    RIGHT_WRIST    = "right_wrist"
+    BOTH_WRISTS    = "both_wrists"
+
+
 # ===========================================================================
 # CONNECTION REQUIREMENTS — referenced from techniques and positions
 # ===========================================================================
@@ -230,7 +256,12 @@ class NeWazaPositionDefinition:
 
 @dataclass
 class DefensiveStrutDefinition:
-    """One defensive primitive. Field order matches spec §4.3."""
+    """One defensive primitive. Field order matches spec §4.3.
+
+    `involves_body_parts` added per addendum §6.5.3 — required field
+    supporting the injury-system query that modulates strut effectiveness
+    when uke has an injury on a loaded body part.
+    """
     strut_id: str
     name_descriptive: str
 
@@ -238,6 +269,7 @@ class DefensiveStrutDefinition:
     defense_phase: DefensePhase
 
     applicable_against_connection_types: list[ConnectionType]
+    involves_body_parts: list[BodyPart]
 
     body_motion: str = ""
     required_uke_attributes: list[str] = field(default_factory=list)
@@ -617,6 +649,17 @@ def _parse_strut(raw: Any) -> DefensiveStrutDefinition:
         for i, v in enumerate(against_raw)
     ]
 
+    # involves_body_parts — required, non-empty list per addendum §6.5.3
+    body_parts_raw = _require_field(raw, "involves_body_parts", ctx)
+    if not isinstance(body_parts_raw, list) or not body_parts_raw:
+        raise NeWazaCatalogError(
+            f"{ctx}.involves_body_parts: must be a non-empty list of body-part values"
+        )
+    body_parts = [
+        _coerce_enum(BodyPart, v, context=f"{ctx}.involves_body_parts[{i}]")
+        for i, v in enumerate(body_parts_raw)
+    ]
+
     referee_raw = raw.get("referee_summons", False)
     if not isinstance(referee_raw, bool):
         raise NeWazaCatalogError(
@@ -640,6 +683,7 @@ def _parse_strut(raw: Any) -> DefensiveStrutDefinition:
             context=f"{ctx}.defense_phase",
         ),
         applicable_against_connection_types=against,
+        involves_body_parts=body_parts,
         body_motion=str(raw.get("body_motion", "") or ""),
         required_uke_attributes=_parse_str_list(
             raw.get("required_uke_attributes"), ctx, "required_uke_attributes"

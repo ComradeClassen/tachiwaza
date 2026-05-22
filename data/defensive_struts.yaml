@@ -22,6 +22,9 @@ struts:
     applicable_against_connection_types:
       - BODY_PRESSURE
       - ANATOMICAL_WRAP
+    involves_body_parts:
+      - hips
+      - lower_back
     body_motion: |
       Arch the back to create space between bodies. Push tori upward with
       hands or by gripping tori's far leg with the opposite hand. Twist
@@ -46,6 +49,9 @@ struts:
     applicable_against_connection_types:
       - BODY_PRESSURE
       - ANATOMICAL_WRAP
+    involves_body_parts:
+      - hips
+      - lower_back
     body_motion: |
       Mirror of bridge_and_roll_right — same arch-bridge-twist sequence
       but rotating to the left side.
@@ -63,6 +69,10 @@ struts:
     applicable_against_connection_types:
       - BODY_PRESSURE
       - ANATOMICAL_WRAP
+    involves_body_parts:
+      - both_shoulders
+      - neck
+      - upper_back
     body_motion: |
       With tori pinning from the head-end (kami-shiho family), bridge
       vertically and tuck the chin, walking uke's weight over the head
@@ -83,6 +93,9 @@ struts:
     applicable_against_connection_types:
       - FOREARM_BAR
       - GARMENT_GRIP_NEWAZA
+    involves_body_parts:
+      - both_shoulders
+      - neck
     body_motion: |
       Grip tori's choking sleeve at the wrist, pull it downward and across
       the body to peel the choke off, then slip the chin under the strangle
@@ -105,6 +118,9 @@ struts:
     applicable_against_connection_types:
       - LAPEL_CROSS
       - FOREARM_BAR
+    involves_body_parts:
+      - both_elbows
+      - hips
     body_motion: |
       With tori's crossed-grip choke locked on, push one of tori's elbows
       with the same-side hand to break the wringing pressure, then rotate
@@ -129,6 +145,9 @@ struts:
     applicable_against_connection_types:
       - BODY_PRESSURE
       - POSITIONAL_BASE
+    involves_body_parts:
+      - hips
+      - both_elbows
     body_motion: |
       Place forearm frame across tori's hip or shoulder to create
       distance; pivot on the upper shoulder and drive hips away in a
@@ -154,6 +173,9 @@ struts:
     applicable_against_connection_types:
       - BODY_PRESSURE
       - POSITIONAL_BASE
+    involves_body_parts:
+      - hips
+      - both_knees
     body_motion: |
       With hips already partially displaced by a frame-and-shrimp, swing
       the bottom knee under tori's near leg and triangle the legs to
@@ -175,6 +197,9 @@ struts:
     defense_phase: post_commit
     applicable_against_connection_types:
       - ANATOMICAL_TRAP
+    involves_body_parts:
+      - right_shoulder
+      - right_elbow
     body_motion: |
       Walk the fingers up tori's back to thread the trapped arm out of
       the armpit clamp; once the arm is free, the kesa/kata anchor
@@ -199,6 +224,9 @@ struts:
     applicable_against_connection_types:
       - LAPEL_CROSS
       - GARMENT_GRIP_NEWAZA
+    involves_body_parts:
+      - both_wrists
+      - both_elbows
     body_motion: |
       As tori threads the first grip toward a cross-collar choke, peel
       the gripping hand off the lapel with a two-on-one grip before the
@@ -217,6 +245,8 @@ struts:
     applicable_against_connection_types:
       - WRIST_GRIP
       - LIMB_ISOLATION
+    involves_body_parts:
+      - both_wrists
     body_motion: |
       Seize tori's wrist preemptively as tori reaches for the controlling
       grip on uke's wrist. Denies the input load-point a hyperextension
@@ -240,6 +270,8 @@ struts:
     applicable_against_connection_types:
       - LIMB_ISOLATION
       - WRIST_GRIP
+    involves_body_parts:
+      - both_elbows
     body_motion: |
       With the lock applied, bend the threatened elbow and clasp the
       opposite hand or own gi to convert the straightening lever into a
@@ -260,6 +292,9 @@ struts:
     defense_phase: post_commit
     applicable_against_connection_types:
       - LIMB_ISOLATION
+    involves_body_parts:
+      - both_elbows
+      - both_shoulders
     body_motion: |
       Against an entangled-arm rotation lock (ude-garami), rotate the
       forearm through tori's figure-four to neutralize the wringing
@@ -280,6 +315,9 @@ struts:
     applicable_against_connection_types:
       - BODY_PRESSURE
       - ANATOMICAL_WRAP
+    involves_body_parts:
+      - neck
+      - both_shoulders
     body_motion: |
       As tori transitions to a side pin, turn the face into the mat
       and tuck the near shoulder under, refusing the supine alignment
@@ -300,6 +338,9 @@ struts:
     applicable_against_connection_types:
       - LAPEL_CROSS
       - FOREARM_BAR
+    involves_body_parts:
+      - lower_back
+      - both_knees
     body_motion: |
       With tori climbing the back from turtle, drive the hips down and
       walk the hands wide to a base, denying the seatbelt grip and the
@@ -318,6 +359,9 @@ struts:
     applicable_against_connection_types:
       - ANATOMICAL_WRAP
       - LIMB_TRIANGLE
+    involves_body_parts:
+      - neck
+      - upper_back
     body_motion: |
       Tuck chin to chest, rotate the head along its long axis, and
       thread it out of the encircling arm or leg triangle before the
@@ -340,6 +384,9 @@ struts:
     applicable_against_connection_types:
       - LIMB_ISOLATION
       - WRIST_GRIP
+    involves_body_parts:
+      - both_knees
+      - hips
     body_motion: |
       Before the lock applies, drive the legs to base and stand up
       out of the trapped configuration, taking the engagement back
@@ -363,6 +410,9 @@ struts:
     applicable_against_connection_types:
       - BODY_PRESSURE
       - ANATOMICAL_TRAP
+    involves_body_parts:
+      - both_elbows
+      - right_wrist
     body_motion: |
       With tori posted on an extended arm during a yoko-shiho or
       kuzure-yoko-shiho pin, trap the post arm against uke's chest

@@ -28,6 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from ne_waza_catalog import (  # noqa: E402
+    BodyPart,
     ConnectionRequirement,
     ConnectionType,
     DefensePhase,
@@ -57,13 +58,17 @@ from ne_waza_catalog_validator import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Builders — Python-side construction so tests don't depend on YAML round-trip
 # ---------------------------------------------------------------------------
-def _strut(strut_id: str = "bridge_and_roll_right") -> DefensiveStrutDefinition:
+def _strut(
+    strut_id: str = "bridge_and_roll_right",
+    defense_phase: DefensePhase = DefensePhase.POST_COMMIT,
+) -> DefensiveStrutDefinition:
     return DefensiveStrutDefinition(
         strut_id=strut_id,
         name_descriptive="Bridge and roll",
         mechanism_family=MechanismFamily.ROTATIONAL_DISPLACEMENT,
-        defense_phase=DefensePhase.POST_COMMIT,
+        defense_phase=defense_phase,
         applicable_against_connection_types=[ConnectionType.BODY_PRESSURE],
+        involves_body_parts=[BodyPart.HIPS, BodyPart.LOWER_BACK],
     )
 
 
@@ -221,6 +226,9 @@ def test_load_minimal_valid_catalog_round_trip(tmp_path):
           defense_phase: post_commit
           applicable_against_connection_types:
             - BODY_PRESSURE
+          involves_body_parts:
+            - hips
+            - lower_back
     """)
     _write(tp, """
         techniques:
@@ -508,6 +516,7 @@ def test_invalid_strut_mechanism_family_raises(tmp_path):
           mechanism_family: not_a_family
           defense_phase: post_commit
           applicable_against_connection_types: [BODY_PRESSURE]
+          involves_body_parts: [hips]
     """)
     tp = tmp_path / "t.yaml"; _write(tp, "[]\n")
     pp = tmp_path / "p.yaml"; _write(pp, "[]\n")
@@ -523,6 +532,7 @@ def test_invalid_defense_phase_raises(tmp_path):
           mechanism_family: rotational_displacement
           defense_phase: mid_commit
           applicable_against_connection_types: [BODY_PRESSURE]
+          involves_body_parts: [hips]
     """)
     tp = tmp_path / "t.yaml"; _write(tp, "[]\n")
     pp = tmp_path / "p.yaml"; _write(pp, "[]\n")
@@ -802,6 +812,122 @@ def test_dead_strut_referenced_by_induced_transition_is_not_dead():
     report = validate_catalog(catalog)
     codes = {i.code for i in report.warnings}
     assert "dead_strut" not in codes
+
+
+def test_induced_transition_pre_commit_strut_warns():
+    """Addendum §6.5.7: only post-commit struts can trigger induced
+    transitions. Pre-commit / pre-position struts in if_uke_strut_activates
+    are schema errors caught as warnings."""
+    pre_commit_strut = _strut(
+        strut_id="strip_before_lock",
+        defense_phase=DefensePhase.PRE_COMMIT,
+    )
+    pos = NeWazaPositionDefinition(
+        position_id="p",
+        description="d",
+        required_connections=[],
+        terminal_techniques=["t1", "t2"],
+        induced_transitions=[
+            InducedTransition(
+                if_uke_strut_activates="strip_before_lock",
+                tori_can_pivot_to="t2",
+                transition_cost=1,
+            ),
+        ],
+    )
+    t1 = _strangle("t1"); t1.fires_from_position = "p"
+    t2 = _strangle("t2"); t2.fires_from_position = "p"
+    catalog = NeWazaCatalog(
+        techniques={"t1": t1, "t2": t2},
+        positions={"p": pos},
+        struts={"strip_before_lock": pre_commit_strut},
+    )
+    report = validate_catalog(catalog)
+    warns = [i for i in report.warnings
+             if i.code == "induced_transition_non_post_commit_strut"]
+    assert len(warns) == 1
+    assert "strip_before_lock" in warns[0].message
+    assert "pre_commit" in warns[0].message
+
+
+def test_induced_transition_post_commit_strut_no_warning():
+    """The same setup but with a post-commit strut should not warn."""
+    post_commit_strut = _strut(strut_id="bridge_and_roll_right")
+    pos = NeWazaPositionDefinition(
+        position_id="p",
+        description="d",
+        required_connections=[],
+        terminal_techniques=["t1", "t2"],
+        induced_transitions=[
+            InducedTransition(
+                if_uke_strut_activates="bridge_and_roll_right",
+                tori_can_pivot_to="t2",
+                transition_cost=1,
+            ),
+        ],
+    )
+    t1 = _strangle("t1"); t1.fires_from_position = "p"
+    t2 = _strangle("t2"); t2.fires_from_position = "p"
+    catalog = NeWazaCatalog(
+        techniques={"t1": t1, "t2": t2},
+        positions={"p": pos},
+        struts={"bridge_and_roll_right": post_commit_strut},
+    )
+    report = validate_catalog(catalog)
+    codes = {i.code for i in report.warnings}
+    assert "induced_transition_non_post_commit_strut" not in codes
+
+
+def test_strut_missing_involves_body_parts_raises(tmp_path):
+    """Addendum §6.5.3 makes involves_body_parts a required field on
+    every strut. Missing it is a loader-level error."""
+    sp = tmp_path / "s.yaml"
+    _write(sp, """
+        - strut_id: bare
+          name_descriptive: Bare
+          mechanism_family: rotational_displacement
+          defense_phase: post_commit
+          applicable_against_connection_types: [BODY_PRESSURE]
+    """)
+    tp = tmp_path / "t.yaml"; _write(tp, "[]\n")
+    pp = tmp_path / "p.yaml"; _write(pp, "[]\n")
+    with pytest.raises(NeWazaCatalogError, match="involves_body_parts"):
+        load_ne_waza_catalog(tp, pp, sp)
+
+
+def test_strut_empty_involves_body_parts_raises(tmp_path):
+    """Empty list is also rejected — a strut that loads no body parts
+    can't participate in the injury-system query."""
+    sp = tmp_path / "s.yaml"
+    _write(sp, """
+        - strut_id: bare
+          name_descriptive: Bare
+          mechanism_family: rotational_displacement
+          defense_phase: post_commit
+          applicable_against_connection_types: [BODY_PRESSURE]
+          involves_body_parts: []
+    """)
+    tp = tmp_path / "t.yaml"; _write(tp, "[]\n")
+    pp = tmp_path / "p.yaml"; _write(pp, "[]\n")
+    with pytest.raises(NeWazaCatalogError, match="involves_body_parts"):
+        load_ne_waza_catalog(tp, pp, sp)
+
+
+def test_strut_invalid_body_part_raises(tmp_path):
+    """BodyPart enum is locked per addendum §6.5.3."""
+    sp = tmp_path / "s.yaml"
+    _write(sp, """
+        - strut_id: bare
+          name_descriptive: Bare
+          mechanism_family: rotational_displacement
+          defense_phase: post_commit
+          applicable_against_connection_types: [BODY_PRESSURE]
+          involves_body_parts: [left_pinky]
+    """)
+    tp = tmp_path / "t.yaml"; _write(tp, "[]\n")
+    pp = tmp_path / "p.yaml"; _write(pp, "[]\n")
+    with pytest.raises(NeWazaCatalogError, match="BodyPart"):
+        load_ne_waza_catalog(tp, pp, sp)
 
 
 def test_single_terminal_position_warns():
