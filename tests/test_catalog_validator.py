@@ -187,18 +187,131 @@ def test_dangling_pedagogical_prereq_is_error():
     assert "ghost_throw" in err.message
 
 
-def test_dangling_ne_waza_followup_is_warning_not_error():
-    # Ne-waza catalog isn't authored yet (HAJ-212 design + downstream
-    # authoring), so dangling followups should not block validation.
+def test_ne_waza_followup_check_skipped_without_ne_waza_catalog():
+    """HAJ-217 default: without cross-catalog known_ids, the check is
+    skipped entirely. No per-reference warning is emitted — the caller
+    (CLI / file API) decides whether to add one summary warning for the
+    skipped state."""
     catalog = _make_balanced_catalog()
     catalog["te_waza_0"] = _make_definition(
         "te_waza_0",
-        ne_waza_followup_preferences=["kesa_gatame"],
+        ne_waza_followup_preferences=["hon_kesa_gatame"],
     )
     report = validate_catalog(catalog)
-    assert "dangling_ne_waza_followup" in _codes(report.warnings)
+    assert "dangling_ne_waza_followup" not in _codes(report.warnings)
     assert "dangling_ne_waza_followup" not in _codes(report.errors)
     assert report.is_valid is True
+
+
+def test_ne_waza_followup_resolves_against_ne_waza_catalog():
+    """A followup that exists only in the ne-waza catalog resolves
+    cleanly when cross-catalog ids are provided."""
+    catalog = _make_balanced_catalog()
+    catalog["te_waza_0"] = _make_definition(
+        "te_waza_0",
+        ne_waza_followup_preferences=["hon_kesa_gatame"],
+    )
+    report = validate_catalog(
+        catalog,
+        ne_waza_known_ids={"hon_kesa_gatame", "ude_hishigi_juji_gatame"},
+    )
+    assert "dangling_ne_waza_followup" not in _codes(report.errors)
+    assert "dangling_ne_waza_followup" not in _codes(report.warnings)
+    assert report.is_valid is True
+
+
+def test_ne_waza_followup_unresolved_in_either_catalog_is_error():
+    """When cross-catalog ids are provided, a followup that exists in
+    neither catalog is a real bug — promoted from warning to error."""
+    catalog = _make_balanced_catalog()
+    catalog["te_waza_0"] = _make_definition(
+        "te_waza_0",
+        ne_waza_followup_preferences=["ghost_pin"],
+    )
+    report = validate_catalog(
+        catalog,
+        ne_waza_known_ids={"hon_kesa_gatame", "ude_hishigi_juji_gatame"},
+    )
+    assert "dangling_ne_waza_followup" in _codes(report.errors)
+    err = next(i for i in report.errors if i.code == "dangling_ne_waza_followup")
+    assert "ghost_pin" in err.message
+    assert report.is_valid is False
+
+
+def test_ne_waza_followup_valid_in_tachiwaza_catalog_resolves():
+    """A followup id that happens to be a tachiwaza technique_id also
+    resolves (the ref is satisfied by the union of both catalogs).
+    Edge case but documented behaviour."""
+    catalog = _make_balanced_catalog()
+    # te_waza_1 is in the balanced catalog — a (contrived) ref to it
+    # from te_waza_0 should resolve in cross-catalog mode.
+    catalog["te_waza_0"] = _make_definition(
+        "te_waza_0",
+        ne_waza_followup_preferences=["te_waza_1"],
+    )
+    report = validate_catalog(catalog, ne_waza_known_ids=set())
+    assert "dangling_ne_waza_followup" not in _codes(report.errors)
+
+
+def test_validate_catalog_file_missing_ne_waza_path_emits_one_warning(tmp_path):
+    """HAJ-217 best-effort load: when the ne-waza file is missing, a
+    single ne_waza_catalog_skipped warning is emitted rather than one
+    per dangling reference.
+
+    Uses the real tachiwaza catalog (which has 11 followup references)
+    so the alternative — fabricating per-ref warnings — would be very
+    visible. Points at a nonexistent ne-waza path.
+    """
+    missing_path = tmp_path / "nonexistent_ne_waza.yaml"
+    report = validate_catalog_file(
+        REPO_ROOT / "data" / "techniques.yaml",
+        ne_waza_techniques_path=missing_path,
+    )
+    skipped = [i for i in report.warnings if i.code == "ne_waza_catalog_skipped"]
+    assert len(skipped) == 1, f"expected 1 skip warning, got {len(skipped)}: {skipped}"
+    # Critically: no per-reference dangling warnings or errors despite
+    # the catalog having 11 ne_waza_followup_preferences references.
+    assert "dangling_ne_waza_followup" not in _codes(report.errors)
+    assert "dangling_ne_waza_followup" not in _codes(report.warnings)
+
+
+def test_validate_catalog_file_explicit_none_skips_silently():
+    """Explicit opt-out: passing None as ne_waza_techniques_path skips
+    cross-catalog without emitting the skipped warning."""
+    report = validate_catalog_file(
+        REPO_ROOT / "data" / "techniques.yaml",
+        ne_waza_techniques_path=None,
+    )
+    assert "ne_waza_catalog_skipped" not in _codes(report.warnings)
+    assert "dangling_ne_waza_followup" not in _codes(report.errors)
+    assert "dangling_ne_waza_followup" not in _codes(report.warnings)
+
+
+def test_validate_catalog_file_loads_real_ne_waza_catalog_by_default():
+    """End-to-end: real tachiwaza catalog + real ne-waza catalog should
+    produce 0 errors and 0 ne-waza-followup warnings/errors.
+
+    Regression test for HAJ-217: the previous behaviour was 11 warnings
+    on this file; with cross-catalog resolution and the canonical-id
+    renames they should resolve cleanly.
+    """
+    report = validate_catalog_file(REPO_ROOT / "data" / "techniques.yaml")
+    assert report.load_error is None
+    assert "dangling_ne_waza_followup" not in _codes(report.errors)
+    assert "dangling_ne_waza_followup" not in _codes(report.warnings)
+    assert "ne_waza_catalog_skipped" not in _codes(report.warnings)
+
+
+def test_errors_only_format_suppresses_summary_and_non_errors():
+    """--errors-only behaviour at the report-format layer: warnings,
+    infos, and the count/family footer all suppressed. A clean report
+    produces empty output."""
+    report = validate_catalog(_make_balanced_catalog())
+    text = report.format_text(
+        include_warnings=False, include_infos=False, include_summary=False,
+    )
+    # Clean catalog → no errors → no output at all.
+    assert text == ""
 
 
 def test_prereq_cycle_is_error():

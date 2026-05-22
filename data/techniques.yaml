@@ -86,7 +86,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - kesa_gatame
+      - hon_kesa_gatame
     era_introduced: 1895
     gokyo_kyo: 2
 
@@ -165,7 +165,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: tori_falls_to_back
     ne_waza_followup_preferences:
-      - juji_gatame
+      - ude_hishigi_juji_gatame
     era_introduced: 1895
     gokyo_kyo: 3
 
@@ -251,7 +251,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - kesa_gatame
+      - hon_kesa_gatame
     era_introduced: 1895
     gokyo_kyo: 1
 
@@ -281,7 +281,7 @@ techniques:
     minimum_belt_for_competition_use: white
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - kesa_gatame
+      - hon_kesa_gatame
     era_introduced: 1895
     gokyo_kyo: 1
 
@@ -416,7 +416,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - kesa_gatame
+      - hon_kesa_gatame
     era_introduced: 1895
     gokyo_kyo: 2
 
@@ -641,7 +641,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - kesa_gatame
+      - hon_kesa_gatame
     era_introduced: 1895
     gokyo_kyo: 3
 
@@ -840,7 +840,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - juji_gatame
+      - ude_hishigi_juji_gatame
     era_introduced: 1895
     gokyo_kyo: 4
 
@@ -1071,7 +1071,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences: 
-      - juji_gatame
+      - ude_hishigi_juji_gatame
     era_introduced: 1895
     gokyo_kyo: 5
 
@@ -1418,7 +1418,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - juji_gatame
+      - ude_hishigi_juji_gatame
     era_introduced: 1920
 
   - technique_id: harai_goshi_gaeshi # Counter to right harai-goshi
@@ -1448,7 +1448,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - juji_gatame
+      - ude_hishigi_juji_gatame
     era_introduced: 1920
 
   - technique_id: uchi_mata_gaeshi # Counter to right uchi-mata
@@ -1479,7 +1479,7 @@ techniques:
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
-      - juji_gatame
+      - ude_hishigi_juji_gatame
     era_introduced: 1920
 
   - technique_id: kani_basami # Banned in competition due to high risk of injury, but still officially recognized by the Kodokan as a legitimate throw, and thus included in this database for completeness.

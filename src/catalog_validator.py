@@ -112,8 +112,19 @@ class ValidationReport:
         """True iff there are no error-severity findings and the loader succeeded."""
         return self.load_error is None and not self.errors
 
-    def format_text(self, *, include_warnings: bool = True, include_infos: bool = True) -> str:
-        """Human-readable multi-line report. The CLI prints this verbatim."""
+    def format_text(
+        self,
+        *,
+        include_warnings: bool = True,
+        include_infos: bool = True,
+        include_summary: bool = True,
+    ) -> str:
+        """Human-readable multi-line report. The CLI prints this verbatim.
+
+        `include_summary` controls the count/family-balance footer; when
+        False, only issue lines are printed. Useful for --errors-only
+        invocations where a clean catalog should produce no output.
+        """
         if self.load_error is not None:
             return f"[FATAL] catalog failed to load: {self.load_error}\n"
         lines: list[str] = []
@@ -126,19 +137,20 @@ class ValidationReport:
             for issue in self.infos:
                 lines.append(issue.format_line())
 
-        lines.append("")
-        lines.append(f"  techniques: {self.total_techniques}")
-        if self.family_counts:
-            lines.append("  by family:")
-            for family in TechniqueFamily:
-                count = self.family_counts.get(family, 0)
-                lines.append(f"    {family.value:<12} {count}")
-        lines.append(
-            f"  errors: {len(self.errors)}  "
-            f"warnings: {len(self.warnings)}  "
-            f"infos: {len(self.infos)}"
-        )
-        return "\n".join(lines) + "\n"
+        if include_summary:
+            lines.append("")
+            lines.append(f"  techniques: {self.total_techniques}")
+            if self.family_counts:
+                lines.append("  by family:")
+                for family in TechniqueFamily:
+                    count = self.family_counts.get(family, 0)
+                    lines.append(f"    {family.value:<12} {count}")
+            lines.append(
+                f"  errors: {len(self.errors)}  "
+                f"warnings: {len(self.warnings)}  "
+                f"infos: {len(self.infos)}"
+            )
+        return ("\n".join(lines) + "\n") if lines else ""
 
 
 # ===========================================================================
@@ -213,28 +225,38 @@ def _check_prereqs_resolve(
 def _check_ne_waza_followups_resolve(
     definition: TechniqueDefinition,
     known_ids: set[str],
+    ne_waza_known_ids: Optional[set[str]] = None,
 ) -> list[ValidationIssue]:
-    """ne_waza_followup_preferences must resolve to a real technique_id.
+    """ne_waza_followup_preferences must resolve to a real technique_id
+    in either the tachiwaza catalog or the ne-waza catalog.
 
-    Warning-level (not error) until the ne-waza catalog is authored
-    alongside tachiwaza. Reference: ne-waza vocabulary system is HAJ-212
-    design work; the actual ne-waza catalog entries are a downstream
-    authoring ticket. Until then, throws may legitimately reference
-    ne-waza followups that don't yet exist in the catalog.
+    Behaviour depends on whether `ne_waza_known_ids` was provided
+    (cross-catalog mode, HAJ-217):
+
+    - **None** (caller did not load a ne-waza catalog) — skip the check
+      entirely. The CLI/file API may add a single summary warning at
+      its own layer indicating that cross-catalog checks were skipped.
+      Per-reference false-positives are explicitly avoided.
+    - **set provided** — a followup resolves if it exists in either
+      catalog. Unresolved refs are errors (the catalog now exists, so
+      a dangling ref is a real bug, not an authoring-in-progress signal).
     """
+    if ne_waza_known_ids is None:
+        return []
     issues: list[ValidationIssue] = []
     for followup in definition.ne_waza_followup_preferences:
-        if followup not in known_ids:
-            issues.append(ValidationIssue(
-                severity=Severity.WARNING,
-                code="dangling_ne_waza_followup",
-                technique_id=definition.technique_id,
-                field="ne_waza_followup_preferences",
-                message=(
-                    f"ne-waza followup '{followup}' not found in catalog "
-                    "(expected until the ne-waza catalog is authored — HAJ-212)"
-                ),
-            ))
+        if followup in known_ids or followup in ne_waza_known_ids:
+            continue
+        issues.append(ValidationIssue(
+            severity=Severity.ERROR,
+            code="dangling_ne_waza_followup",
+            technique_id=definition.technique_id,
+            field="ne_waza_followup_preferences",
+            message=(
+                f"ne-waza followup '{followup}' not found in either the "
+                "tachiwaza catalog or the ne-waza catalog"
+            ),
+        ))
     return issues
 
 
@@ -374,12 +396,23 @@ def _compute_family_counts(
 # ===========================================================================
 # ENTRY POINTS
 # ===========================================================================
-def validate_catalog(catalog: dict[str, TechniqueDefinition]) -> ValidationReport:
+def validate_catalog(
+    catalog: dict[str, TechniqueDefinition],
+    *,
+    ne_waza_known_ids: Optional[set[str]] = None,
+) -> ValidationReport:
     """Run all validation checks against an already-loaded catalog.
 
     Useful when the caller has the catalog in memory (e.g., tests
     constructing TechniqueDefinition objects directly). For loading from
     disk plus validation, use `validate_catalog_file`.
+
+    `ne_waza_known_ids` enables cross-catalog resolution of
+    `ne_waza_followup_preferences` (HAJ-217). When provided, followup
+    refs that don't exist in either catalog are flagged as errors.
+    When None, the cross-catalog check is skipped entirely — the caller
+    (or the CLI) is responsible for deciding whether to emit a
+    skipped-catalog summary warning.
     """
     known_ids = set(catalog.keys())
     issues: list[ValidationIssue] = []
@@ -388,7 +421,9 @@ def validate_catalog(catalog: dict[str, TechniqueDefinition]) -> ValidationRepor
         issues.extend(_check_identity_strings(definition))
         issues.extend(_check_grip_signatures_nonempty(definition))
         issues.extend(_check_prereqs_resolve(definition, known_ids))
-        issues.extend(_check_ne_waza_followups_resolve(definition, known_ids))
+        issues.extend(_check_ne_waza_followups_resolve(
+            definition, known_ids, ne_waza_known_ids,
+        ))
         issues.extend(_check_habukareta_has_restricted(definition))
 
     issues.extend(_check_no_prereq_cycles(catalog))
@@ -403,7 +438,47 @@ def validate_catalog(catalog: dict[str, TechniqueDefinition]) -> ValidationRepor
     )
 
 
-def validate_catalog_file(path: Union[str, Path]) -> ValidationReport:
+def _try_load_ne_waza_known_ids(
+    path: Optional[Union[str, Path]],
+) -> tuple[Optional[set[str]], Optional[str]]:
+    """Best-effort load of ne-waza technique_ids for cross-catalog checks.
+
+    Returns (known_ids, skip_reason):
+      - (set, None) on successful load.
+      - (None, None) when `path` is None — caller explicitly opted out.
+      - (None, str) when `path` was given but loading failed; the string
+        is a short human-readable reason suitable for a skip warning.
+
+    The ne-waza catalog loader is imported lazily so this module stays
+    usable in environments where the ne-waza substrate isn't installed.
+    """
+    if path is None:
+        return None, None
+    p = Path(path)
+    if not p.exists():
+        return None, f"ne-waza techniques file not found at {p}"
+    try:
+        from ne_waza_catalog import _parse_techniques_file  # type: ignore
+        techniques = _parse_techniques_file(p)
+    except Exception as exc:
+        return None, f"failed to load ne-waza techniques from {p}: {type(exc).__name__}: {exc}"
+    return set(techniques.keys()), None
+
+
+# Default location used when the caller does not pass an explicit override.
+_DEFAULT_NE_WAZA_TECHNIQUES_PATH = Path("data/ne_waza_techniques.yaml")
+
+
+# Sentinel: distinguishes "caller passed None to opt out" from "caller
+# didn't pass anything — apply the module default".
+_UNSET = object()
+
+
+def validate_catalog_file(
+    path: Union[str, Path],
+    *,
+    ne_waza_techniques_path: object = _UNSET,
+) -> ValidationReport:
     """Load and validate a catalog file. Loader failures surface as a
     fatal report (errors empty but `load_error` set) since downstream
     checks can't run without a parsed catalog.
@@ -412,6 +487,14 @@ def validate_catalog_file(path: Union[str, Path]) -> ValidationReport:
     and YAML/JSON parser errors (raw syntax bugs in the file). Other
     exceptions (FileNotFoundError, PermissionError) propagate — those
     are environment problems, not catalog content problems.
+
+    `ne_waza_techniques_path` controls cross-catalog resolution of
+    `ne_waza_followup_preferences` (HAJ-217):
+      - omitted → use the repo-default ne-waza techniques path; if that
+        file doesn't exist or fails to load, emit ONE summary warning
+        and skip the cross-catalog check.
+      - explicit path → same best-effort behavior at the given path.
+      - explicit None → opt out; no cross-catalog check, no warning.
     """
     import json
     import yaml
@@ -423,7 +506,31 @@ def validate_catalog_file(path: Union[str, Path]) -> ValidationReport:
         # Authoring issues like indentation errors get a clean message
         # instead of a Python stack trace.
         return ValidationReport(load_error=f"{type(exc).__name__}: {exc}")
-    return validate_catalog(catalog)
+
+    if ne_waza_techniques_path is _UNSET:
+        effective_ne_waza_path: Optional[Path] = _DEFAULT_NE_WAZA_TECHNIQUES_PATH
+    else:
+        effective_ne_waza_path = (
+            Path(ne_waza_techniques_path)        # type: ignore[arg-type]
+            if ne_waza_techniques_path is not None
+            else None
+        )
+
+    ne_waza_known_ids, skip_reason = _try_load_ne_waza_known_ids(effective_ne_waza_path)
+    report = validate_catalog(catalog, ne_waza_known_ids=ne_waza_known_ids)
+    if skip_reason is not None:
+        # The caller wanted cross-catalog resolution but the ne-waza
+        # catalog couldn't be loaded. Emit ONE summary warning instead
+        # of fabricating per-reference false positives.
+        report.issues.append(ValidationIssue(
+            severity=Severity.WARNING,
+            code="ne_waza_catalog_skipped",
+            message=(
+                "cross-catalog ne_waza_followup_preferences check skipped — "
+                f"{skip_reason}"
+            ),
+        ))
+    return report
 
 
 # ===========================================================================
@@ -458,12 +565,40 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Suppress the report entirely; rely on exit code only",
     )
+    parser.add_argument(
+        "--errors-only",
+        action="store_true",
+        help=(
+            "Suppress warnings, infos, and the count summary footer. "
+            "A clean catalog produces no output."
+        ),
+    )
+    parser.add_argument(
+        "--ne-waza-techniques",
+        type=Path,
+        default=None,
+        help=(
+            "Path to ne-waza techniques YAML for cross-catalog resolution "
+            "of ne_waza_followup_preferences. Default: "
+            "data/ne_waza_techniques.yaml if present (otherwise skip "
+            "cross-catalog check with one summary warning)."
+        ),
+    )
     return parser
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = _build_arg_parser().parse_args(argv)
-    report = validate_catalog_file(args.catalog_file)
+
+    if args.ne_waza_techniques is not None:
+        report = validate_catalog_file(
+            args.catalog_file,
+            ne_waza_techniques_path=args.ne_waza_techniques,
+        )
+    else:
+        # Use the module default (which gracefully skips if absent).
+        report = validate_catalog_file(args.catalog_file)
+
     if not args.quiet:
         # Windows consoles default to cp1252 and mangle em-dashes / Japanese
         # romanization in the messages; force UTF-8 if the stream supports it.
@@ -473,9 +608,13 @@ def main(argv: Optional[list[str]] = None) -> int:
                 reconfigure(encoding="utf-8")
             except (OSError, ValueError):
                 pass        # non-tty streams (pipes, tests) may reject reconfigure
+        include_warnings = not (args.no_warnings or args.errors_only)
+        include_infos = not (args.no_infos or args.errors_only)
+        include_summary = not args.errors_only
         sys.stdout.write(report.format_text(
-            include_warnings=not args.no_warnings,
-            include_infos=not args.no_infos,
+            include_warnings=include_warnings,
+            include_infos=include_infos,
+            include_summary=include_summary,
         ))
     return 0 if report.is_valid else 1
 

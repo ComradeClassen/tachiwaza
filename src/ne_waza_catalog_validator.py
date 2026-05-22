@@ -105,7 +105,16 @@ class ValidationReport:
     def is_valid(self) -> bool:
         return self.load_error is None and not self.errors
 
-    def format_text(self, *, include_warnings: bool = True, include_infos: bool = True) -> str:
+    def format_text(
+        self,
+        *,
+        include_warnings: bool = True,
+        include_infos: bool = True,
+        include_summary: bool = True,
+    ) -> str:
+        """`include_summary` controls the count/by-subfamily footer; when
+        False, only issue lines are printed (matches tachiwaza validator
+        --errors-only semantics)."""
         if self.load_error is not None:
             return f"[FATAL] ne-waza catalog failed to load: {self.load_error}\n"
         lines: list[str] = []
@@ -118,21 +127,22 @@ class ValidationReport:
             for issue in self.infos:
                 lines.append(issue.format_line())
 
-        lines.append("")
-        lines.append(f"  techniques: {self.total_techniques}")
-        lines.append(f"  positions:  {self.total_positions}")
-        lines.append(f"  struts:     {self.total_struts}")
-        if self.subfamily_counts:
-            lines.append("  by subfamily:")
-            for sf in (s.value for s in NeWazaSubfamily):
-                count = self.subfamily_counts.get(sf, 0)
-                lines.append(f"    {sf:<12} {count}")
-        lines.append(
-            f"  errors: {len(self.errors)}  "
-            f"warnings: {len(self.warnings)}  "
-            f"infos: {len(self.infos)}"
-        )
-        return "\n".join(lines) + "\n"
+        if include_summary:
+            lines.append("")
+            lines.append(f"  techniques: {self.total_techniques}")
+            lines.append(f"  positions:  {self.total_positions}")
+            lines.append(f"  struts:     {self.total_struts}")
+            if self.subfamily_counts:
+                lines.append("  by subfamily:")
+                for sf in (s.value for s in NeWazaSubfamily):
+                    count = self.subfamily_counts.get(sf, 0)
+                    lines.append(f"    {sf:<12} {count}")
+            lines.append(
+                f"  errors: {len(self.errors)}  "
+                f"warnings: {len(self.warnings)}  "
+                f"infos: {len(self.infos)}"
+            )
+        return ("\n".join(lines) + "\n") if lines else ""
 
 
 # ===========================================================================
@@ -422,6 +432,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
                         help="Suppress info-level findings from the printed report")
     parser.add_argument("--quiet", action="store_true",
                         help="Suppress the report entirely; rely on exit code only")
+    parser.add_argument(
+        "--errors-only", action="store_true",
+        help=(
+            "Suppress warnings, infos, and the count summary footer. "
+            "A clean catalog produces no output."
+        ),
+    )
     return parser
 
 
@@ -437,9 +454,13 @@ def main(argv: Optional[list[str]] = None) -> int:
                 reconfigure(encoding="utf-8")
             except (OSError, ValueError):
                 pass
+        include_warnings = not (args.no_warnings or args.errors_only)
+        include_infos = not (args.no_infos or args.errors_only)
+        include_summary = not args.errors_only
         sys.stdout.write(report.format_text(
-            include_warnings=not args.no_warnings,
-            include_infos=not args.no_infos,
+            include_warnings=include_warnings,
+            include_infos=include_infos,
+            include_summary=include_summary,
         ))
     return 0 if report.is_valid else 1
 
