@@ -336,11 +336,24 @@ class Referee:
     # -----------------------------------------------------------------------
     # ANNOUNCEMENTS
     # -----------------------------------------------------------------------
+    # HAJ-221 — Hajime / Matte events carry a viewer-facing banner block
+    # so the renderer can gate banner display: each banner stays on screen
+    # for `banner_duration_ticks`, and the engine guarantees a Matte banner
+    # always clears before a follow-up Hajime banner runs (the
+    # `MATTE_TO_HAJIME_PAUSE_TICKS` window in match.py is what enforces the
+    # gap on the engine side; viewers can read these fields directly).
+    BANNER_DURATION_TICKS: int = 2
+
     def announce_hajime(self, tick: int = 0) -> Event:
         return Event(
             tick=tick,
             event_type="HAJIME_CALLED",
             description=f"[ref: {self.name}] Hajime!",
+            data={
+                "banner":                "hajime",
+                "banner_duration_ticks": self.BANNER_DURATION_TICKS,
+                "banner_blocking":       True,
+            },
         )
 
     def announce_matte(self, reason: MatteReason, tick: int = 0) -> Event:
@@ -356,7 +369,12 @@ class Referee:
             tick=tick,
             event_type="MATTE_CALLED",
             description=f"[ref: {self.name}] Matte! ({reason_text})",
-            data={"reason": reason.name},
+            data={
+                "reason":                reason.name,
+                "banner":                "matte",
+                "banner_duration_ticks": self.BANNER_DURATION_TICKS,
+                "banner_blocking":       True,
+            },
         )
 
     def announce_score(

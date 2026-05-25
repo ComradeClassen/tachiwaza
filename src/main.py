@@ -456,15 +456,18 @@ if __name__ == "__main__":
                              "`none`. Implies --debug. Available: "
                              + ", ".join(sorted(PAUSE_TRIGGERS))
                              + f". Default: {','.join(sorted(DEFAULT_PAUSE_ON))}.")
-    parser.add_argument("--stream", choices=["debug", "prose", "both"],
+    parser.add_argument("--stream", choices=["debug", "prose", "coach", "both"],
                         default="both",
-                        help="Which log stream to emit (HAJ-65). `debug` is "
-                             "tick-prefixed with physics, grip edges and "
-                             "handles; `prose` is reader-facing narrative "
-                             "with no tick prefix or eq= numerics; `both` "
-                             "(default) renders the two streams side-by-side "
-                             "— engineer/tick on the left, prose with a "
-                             "countdown match clock on the right.")
+                        help="Which log stream to emit (HAJ-65, HAJ-221). "
+                             "`debug` is tick-prefixed with physics, grip "
+                             "edges and handles; `coach` (a.k.a. legacy "
+                             "`prose`) is reader-facing narrative — narrative-"
+                             "first phrasing with technical terms in parens "
+                             "and body-part narration for throw phases, no "
+                             "tick prefix or eq= numerics; `both` (default) "
+                             "renders the two streams side-by-side — engineer/"
+                             "tick on the left, prose with a countdown match "
+                             "clock on the right.")
     parser.add_argument("--viewer", action="store_true",
                         help="HAJ-125: open the pygame top-down viewer "
                              "alongside the match. Dev-tool only — reads "

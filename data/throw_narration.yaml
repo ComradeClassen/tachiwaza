@@ -1,0 +1,23 @@
+# Throw narration data — HAJ-221 scaffold.
+#
+# Schema:
+#   <throw_id_lowered>:
+#     commit:          ["..."]                       # flat list
+#     reach_kuzushi:                                 # banded
+#       clean:    ["..."]
+#       standard: ["..."]
+#       sloppy:   ["..."]
+#     kuzushi:    {clean: [...], standard: [...], sloppy: [...]}
+#     tsukuri:    {clean: [...], standard: [...], sloppy: [...]}
+#     kake:       {clean: [...], standard: [...], sloppy: [...]}
+#     failures:
+#       SWEEP_BOUNCES_OFF: ["..."]                   # FailureOutcome enum
+#       forward_lean:      ["..."]                   # or lower-snake
+#
+# Phase lines use {tori} and {uke} placeholders so they're stable across
+# matchups. The loader gates by quality band (clean/standard/sloppy) and
+# picks a deterministic variant per (throw, phase, seed).
+#
+# This file ships intentionally empty under HAJ-221 — content authoring
+# for the 13 engine-implemented throws is HAJ-223. With no entries, the
+# coach stream falls back to a generic phase line per throw_narration.py.

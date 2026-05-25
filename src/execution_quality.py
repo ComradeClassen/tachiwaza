@@ -90,6 +90,41 @@ def band_for(eq: float) -> QualityBand:
 
 
 # ---------------------------------------------------------------------------
+# HAJ-221 — narration band names + thresholds.
+#
+# The referee-facing bands above (LOW/MED/HIGH) are tied to the scoring
+# thresholds (IPPON_MIN_EQ / WAZA_ARI_MIN_EQ) and shouldn't move just
+# because narration calibration shifts. HAJ-221 names the narration
+# bands separately — `clean` / `standard` / `sloppy` — with their own
+# tunable thresholds (the ticket calls for 0.75 / 0.40 as the starting
+# point). The throw_narration loader consumes these names directly when
+# selecting a variant for the coach stream.
+# ---------------------------------------------------------------------------
+NARRATION_CLEAN_MIN:    float = 0.75   # eq >= this → "clean"
+NARRATION_STANDARD_MIN: float = 0.40   # eq >= this (and < CLEAN) → "standard"
+# Anything below NARRATION_STANDARD_MIN → "sloppy".
+
+NARRATION_BAND_CLEAN:    str = "clean"
+NARRATION_BAND_STANDARD: str = "standard"
+NARRATION_BAND_SLOPPY:   str = "sloppy"
+
+
+def narration_band_for(eq: float) -> str:
+    """Map an execution_quality score to a coach-stream narration band.
+
+    HAJ-221: the three bands are named after the prose register the
+    player will see — clean / standard / sloppy — not after the engine
+    referee's IPPON / WAZA_ARI thresholds. Thresholds are tunable; the
+    starting cutoffs are 0.75 (clean) and 0.40 (standard).
+    """
+    if eq >= NARRATION_CLEAN_MIN:
+        return NARRATION_BAND_CLEAN
+    if eq >= NARRATION_STANDARD_MIN:
+        return NARRATION_BAND_STANDARD
+    return NARRATION_BAND_SLOPPY
+
+
+# ---------------------------------------------------------------------------
 # CONSUMER CURVES
 # ---------------------------------------------------------------------------
 def force_transfer_multiplier(eq: float) -> float:

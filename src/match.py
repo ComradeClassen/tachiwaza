@@ -282,6 +282,13 @@ SAFE_ZONE_M: float = 1.5    # outside this many meters of every boundary → cou
 # the pause expires. 3 ticks lets the matte beat breathe (and is the
 # slot where coach instructions will land in a future altitude reader)
 # before the dyad restarts.
+#
+# HAJ-221 banner gating invariant: this pause MUST be >= the referee's
+# `BANNER_DURATION_TICKS`. The viewer reads each banner event's
+# `banner_duration_ticks` field to know how long to hold the banner on
+# screen; the matte→hajime pause guarantees the matte banner finishes
+# displaying before the hajime banner runs, so the two never overlap.
+# If you lower this, lower BANNER_DURATION_TICKS in referee.py too.
 MATTE_TO_HAJIME_PAUSE_TICKS: int = 3
 
 # HAJ-151 / triage 2026-05-02 (Priority 3) — number of ticks between the
@@ -533,19 +540,31 @@ _FAILURE_TAGS, _COUNTER_NARRATIONS = _failure_display_tables()
 
 
 # ---------------------------------------------------------------------------
-# LOG STREAM SEPARATION (HAJ-65)
+# LOG STREAM SEPARATION (HAJ-65, HAJ-221)
 # Two named streams share the same underlying tick events:
 #   - "debug":  engineer-facing — tick numbers, physics variables, grip edge
 #               transitions, execution_quality, failed_dimension, handles
 #               (F#/G#/T#) from the debug inspector.
-#   - "prose":  reader-facing — throw lines, referee calls, compromised-state
-#               narration, score announcements. No tick prefix, no handles,
-#               and debug-only numerics like `(eq=…)` are stripped from
-#               descriptions.
+#   - "coach":  reader-facing, Neil-Adams-voice — narrative-first phrasing
+#               with the technical term in parentheses, body-part narration
+#               for throw resolution phases, no tick prefix, no debug
+#               handles, and debug-only numerics like `(eq=…)` stripped.
+#               Events may carry a `coach_prose` data field that overrides
+#               the engineer-facing description when this stream renders.
 # `_print_events` consults the active stream to decide what to emit.
+#
+# `"prose"` is kept as a legacy alias for `"coach"` so older test fixtures
+# and CLI invocations continue to work; both map to the same render path.
 # ---------------------------------------------------------------------------
 
-VALID_STREAMS: frozenset[str] = frozenset({"debug", "prose", "both"})
+VALID_STREAMS: frozenset[str] = frozenset({"debug", "prose", "coach", "both"})
+
+
+def _is_coach_stream(stream: str) -> bool:
+    """True for the reader-facing single-stream renders (HAJ-221).
+    `"prose"` is the legacy spelling; `"coach"` is the HAJ-221 preferred
+    name. Both produce the same output."""
+    return stream in ("prose", "coach")
 
 # Event types that belong only to the debug stream — grip edge churn, raw
 # physics beats, and skill-compression sub-events. The prose stream drops
@@ -579,6 +598,143 @@ def _render_prose(desc: str) -> str:
     (eq=...) parentheticals that mix numeric debug into otherwise readable
     sentences. Tick prefix and debug handles are handled by the caller."""
     return _EQ_PAREN_RE.sub("", desc)
+
+
+# ---------------------------------------------------------------------------
+# HAJ-221 — NARRATIVE-FIRST PROSE HELPERS
+# Catalogued in the ticket: counter cognition, grip-cascade response,
+# chase / defense decision, defensive-desperation entry. Each helper
+# returns a coach-stream string that leads with the narrative and parks
+# the engine-enum vocabulary in parentheses (sen-sen-no-sen, contest,
+# scramble, etc.). Used to populate `event.data["coach_prose"]` at
+# emission time; the engineer description stays in the original form
+# so the debug stream and downstream log-parsing tooling keep their
+# substrate hooks.
+# ---------------------------------------------------------------------------
+def _counter_coach_prose(
+    defender_name: str, window: "CounterWindow", counter_throw_name: str,
+) -> str:
+    """Counter cognition rendered as narrative + parenthesised term."""
+    from counter_windows import CounterWindow as _CW
+    if window is _CW.SEN_SEN_NO_SEN:
+        narrative = "sees the attack forming and strikes first"
+        tag = "sen-sen-no-sen"
+    elif window is _CW.SEN_NO_SEN:
+        narrative = "times the attack and meets it head-on"
+        tag = "sen-no-sen"
+    elif window is _CW.GO_NO_SEN:
+        narrative = "reacts to the attack and counters"
+        tag = "go-no-sen"
+    else:
+        # NONE / unknown — fall back to the engineer phrasing.
+        narrative = f"reads {window.name.lower()}"
+        tag = window.name.lower()
+    return (
+        f"[counter] {defender_name} {narrative} ({tag}) — "
+        f"{counter_throw_name}."
+    )
+
+
+_GRIP_CASCADE_COACH_PROSE: dict[str, str] = {
+    "MATCH":      "{follower} matches {leader}'s grip exchange ({kind}).",
+    "PURSUE_OWN": "{follower} ignores the grip war and reaches for "
+                  "their own grip ({kind}).",
+    "CONTEST":    "{follower} contests the grip ({kind}).",
+    "DEFENSIVE":  "{follower} fights defensively for the grip ({kind}).",
+    "DISENGAGE":  "{follower} backs off the grip exchange ({kind}).",
+}
+
+
+def _grip_cascade_coach_prose(
+    leader_name: str, follower_name: str, kind: str,
+) -> str:
+    template = _GRIP_CASCADE_COACH_PROSE.get(
+        kind, "{follower} responds to {leader}'s grip ({kind}).",
+    )
+    return template.format(
+        follower=follower_name, leader=leader_name, kind=kind,
+    )
+
+
+_CHASE_COACH_NARRATIVE: dict[str, str] = {
+    "CHASE":           "chases the score to the ground",
+    "DEFENSIVE_CHASE": "follows the throw down to defend on the bottom",
+    "STAND":           "stands off after the score",
+}
+
+
+def _chase_coach_prose(tori_name: str, decision_name: str) -> str:
+    narrative = _CHASE_COACH_NARRATIVE.get(
+        decision_name, f"chooses {decision_name.lower()}",
+    )
+    return f"{tori_name} {narrative} ({decision_name})."
+
+
+_DEFENSE_COACH_NARRATIVE: dict[str, str] = {
+    "SCRAMBLE": "scrambles to avoid the follow-up",
+    "TURTLE":   "rolls into turtle to deny the pin",
+    "FRAME":    "frames out to keep tori off",
+    "GUARD":    "drops into guard to break tori's posture",
+    "DEFENSIVE_CHASE": "follows the throw down to defend on the bottom",
+}
+
+
+def _defense_coach_prose(uke_name: str, decision_name: str) -> str:
+    narrative = _DEFENSE_COACH_NARRATIVE.get(
+        decision_name, f"chooses {decision_name.lower()}",
+    )
+    return f"{uke_name} {narrative} ({decision_name})."
+
+
+def _defensive_desperation_coach_prose(name: str) -> str:
+    """Narrative-first replacement for the [state] pressure dump.
+    Numeric breakdown stays in the engineer description and on
+    event.data for the debug stream and downstream tooling."""
+    return (
+        f"{name} is overwhelmed — backing onto his heels, reading every "
+        f"move (defensive desperation)."
+    )
+
+
+def _offensive_desperation_coach_prose(name: str) -> str:
+    return (
+        f"{name} is past the point of patience — composure broken, "
+        f"clock ticking (offensive desperation)."
+    )
+
+
+# HAJ-221 — coach-stream snapshot of one judoka's composure + cardio
+# state. Used by the post-Matte context line. Banded into a small set
+# of phrases so the reader sees the state at a glance rather than a
+# percentage. Calibration: composure fraction is relative to the ceiling
+# the fighter started with (Capability.composure_ceiling); cardio is
+# already in [0, 1] on the state.
+_COMPOSURE_FRESH_FRAC:    float = 0.85
+_COMPOSURE_WORKING_FRAC:  float = 0.55
+_CARDIO_FRESH:            float = 0.85
+_CARDIO_WORKING:          float = 0.55
+_CARDIO_BREATHING:        float = 0.30
+
+
+def _judoka_state_phrase(judoka: "Judoka") -> str:
+    """One-clause coach-stream summary of a judoka's composure + cardio.
+    Stays short so the matte context line reads as a single beat."""
+    ceiling = max(1.0, float(judoka.capability.composure_ceiling))
+    composure_frac = max(0.0, min(
+        1.0, judoka.state.composure_current / ceiling,
+    ))
+    cardio = max(0.0, min(1.0, float(judoka.state.cardio_current)))
+    if cardio < _CARDIO_BREATHING:
+        return "is gasping for air"
+    if composure_frac < 0.30:
+        return "looks rattled"
+    if cardio < _CARDIO_WORKING:
+        return "is breathing hard"
+    if composure_frac >= _COMPOSURE_FRESH_FRAC and cardio >= _CARDIO_FRESH:
+        return "looks fresh"
+    if composure_frac >= _COMPOSURE_WORKING_FRAC and cardio >= _CARDIO_WORKING:
+        return "looks composed"
+    return "is working"
 
 
 # ---------------------------------------------------------------------------
@@ -1682,6 +1838,13 @@ class Match:
             if matte_reason:
                 matte_event = self.referee.announce_matte(matte_reason, tick)
                 events.append(matte_event)
+                # HAJ-221 — emit a one-line state snapshot of both judoka
+                # right after the matte announcement. The composure /
+                # stamina state at the reset gives the player a sense of
+                # who's tiring without forcing them to track tick-by-tick.
+                # This is coach-stream prose only; the engineering [ref]
+                # MATTE_CALLED line above carries the substrate data.
+                events.append(self._build_matte_context_event(tick))
                 self._handle_matte(tick)
 
         # HAJ-93 — regulation-end gate. Once the match clock has run out
@@ -2350,14 +2513,22 @@ class Match:
         }
         self._grip_cascade_log.append(log_entry)
 
-        # Surface as engineering event.
+        # Surface as engineering event. HAJ-221 — debug stream keeps the
+        # `[grip_cascade] follower → KIND vs leader` form; coach stream
+        # gets a narrative-first rendering via coach_prose.
         events.append(Event(
             tick=tick, event_type="GRIP_CASCADE_RESPONSE",
             description=(
                 f"[grip_cascade] {follower.identity.name} → {choice.kind} "
                 f"vs {leader.identity.name}"
             ),
-            data={**log_entry, "prose_silent": True},
+            data={
+                **log_entry,
+                "prose_silent": True,
+                "coach_prose": _grip_cascade_coach_prose(
+                    leader.identity.name, follower.identity.name, choice.kind,
+                ),
+            },
         ))
 
         # Apply outcome.
@@ -3209,10 +3380,16 @@ class Match:
                 source="COMMIT",
             ))
 
-        # Emit tick-0 sub-events.
+        # Emit tick-0 sub-events. HAJ-221 — thread throw_id + defender +
+        # quality straight through so the coach-stream narration lookup
+        # works even though `_throws_in_progress[attacker]` is set BELOW
+        # (the tip hasn't landed yet on this first emit path).
         events.extend(self._emit_sub_events(
             attacker, throw_name, schedule.get(0, []), tick,
             silent=collapse_n1,
+            throw_id=throw_id,
+            defender=defender,
+            commit_execution_quality=eq,
         ))
 
         if n <= 1:
@@ -3441,6 +3618,10 @@ class Match:
         self, attacker: Judoka, throw_name: str,
         sub_events: list[SubEvent], tick: int,
         silent: bool = False,
+        *,
+        throw_id: Optional[ThrowID] = None,
+        defender: Optional[Judoka] = None,
+        commit_execution_quality: Optional[float] = None,
     ) -> list[Event]:
         # HAJ-144 acceptance #7 — sub-event lines no longer carry the
         # technique name by default. The reader stops seeing
@@ -3449,16 +3630,55 @@ class Match:
         # already conveys what tori is doing, and the name (when earned
         # by recognition) lands at score time. The throw_name is retained
         # in Event.data for downstream debug / inspector use.
+        #
+        # HAJ-221 — coach stream attaches a body-part narration line per
+        # sub-event drawn from data/throw_narration.yaml. The debug
+        # stream keeps the existing `[throw] tori — phase.` form for
+        # internal calibration work. The look-up reads the in-progress
+        # tip for throw_id + quality band; both are stable across all
+        # ticks of an attempt. The coach_prose rides on the SUB_*
+        # event's data so the coach-stream gate in _print_events
+        # promotes the line even though SUB_* is otherwise debug-only.
+        #
+        # The optional `throw_id`, `defender`, `commit_execution_quality`
+        # kwargs let callers that emit tick-0 sub-events BEFORE the tip is
+        # stashed in `_throws_in_progress` (e.g. `_resolve_commit_throw`'s
+        # initial call) thread the resolved values straight through so
+        # the narration fallback doesn't see a missing tip and render a
+        # literal "uke" placeholder.
+        import throw_narration as _tn
         events: list[Event] = []
+        tip = self._throws_in_progress.get(attacker.identity.name)
+        if throw_id is None and tip is not None:
+            throw_id = tip.throw_id
+        if defender is None and tip is not None:
+            defender = self._fighter_by_name(tip.defender_name)
+        if commit_execution_quality is None and tip is not None:
+            commit_execution_quality = tip.commit_execution_quality
+        narration_data = (
+            _tn.get_default_data() if not silent else {}
+        )
         for sub in sub_events:
             label = SUB_EVENT_LABELS.get(sub, sub.name.lower())
+            coach_prose = self._coach_prose_for_sub_event(
+                sub, attacker, defender, tick,
+                throw_id=throw_id,
+                quality=commit_execution_quality,
+                start_tick=(tip.start_tick if tip is not None else tick),
+                data=narration_data,
+            ) if not silent else None
+            data: dict = {
+                "sub_event": sub.name, "throw_name": throw_name,
+                "silent": silent,
+            }
+            if coach_prose:
+                data["coach_prose"] = coach_prose
             events.append(Event(
                 tick=tick, event_type=f"SUB_{sub.name}",
                 description=(
                     f"[throw] {attacker.identity.name} — {label}."
                 ),
-                data={"sub_event": sub.name, "throw_name": throw_name,
-                      "silent": silent},
+                data=data,
             ))
         # Part 6.2 region classification reads the most recent sub-event.
         if sub_events:
@@ -3466,6 +3686,54 @@ class Match:
             if tip is not None:
                 tip.last_sub_event = sub_events[-1]
         return events
+
+    def _coach_prose_for_sub_event(
+        self, sub: SubEvent,
+        attacker: Judoka,
+        defender: Optional[Judoka],
+        tick: int,
+        *,
+        throw_id: Optional[ThrowID],
+        quality: Optional[float],
+        start_tick: int,
+        data,
+    ) -> Optional[str]:
+        """Pick the coach-stream body-part line for a single sub-event.
+        Returns None when the throw has no narration data and no generic
+        fallback fires (callers gracefully drop the line in that case)."""
+        from skill_compression import SubEvent as _SE
+        import throw_narration as _tn
+        _PHASE_BY_SUB: dict = {
+            _SE.REACH_KUZUSHI:    _tn.PHASE_REACH_KUZUSHI,
+            _SE.KUZUSHI_ACHIEVED: _tn.PHASE_KUZUSHI,
+            _SE.TSUKURI:          _tn.PHASE_TSUKURI,
+            _SE.KAKE_COMMIT:      _tn.PHASE_KAKE,
+        }
+        phase = _PHASE_BY_SUB.get(sub)
+        if phase is None:
+            return None
+        seed_token = f"{self.seed}:{attacker.identity.name}:{start_tick}"
+        if throw_id is not None:
+            line = _tn.select_phase_line(
+                data, throw_id, phase,
+                quality=quality, seed=seed_token,
+            )
+            if line:
+                return line
+        # Generic fallback so an unauthored throw still produces a
+        # coach line per HAJ-221 AC. The {tori}/{uke} substitution uses
+        # the actual fighter names whenever they're resolvable.
+        uke_name = (
+            defender.identity.name if defender is not None
+            else (
+                self.fighter_b.identity.name
+                if attacker is self.fighter_a
+                else self.fighter_a.identity.name
+            )
+        )
+        return _tn.generic_phase_line(
+            phase, tori=attacker.identity.name, uke=uke_name,
+        )
 
     def _resolve_kake(
         self, attacker: Judoka, defender: Judoka, throw_id: ThrowID,
@@ -4110,6 +4378,9 @@ class Match:
                 "probability": chase_result.probability,
                 "factors":     dict(chase_result.factors),
                 "prose_silent": True,
+                "coach_prose": _chase_coach_prose(
+                    tori.identity.name, chase_result.decision.name,
+                ),
             },
         ))
 
@@ -4140,6 +4411,9 @@ class Match:
                 "decision": defense_result.decision.name,
                 "factors":  dict(defense_result.factors),
                 "prose_silent": True,
+                "coach_prose": _defense_coach_prose(
+                    uke.identity.name, defense_result.decision.name,
+                ),
             },
         ))
 
@@ -4230,6 +4504,9 @@ class Match:
         events.append(self.referee.announce_matte(
             MatteReason.POST_SCORE_FOLLOW_UP_END, tick,
         ))
+        # HAJ-221 — matte context line fires after every matte
+        # announcement, including the post-score follow-up matte.
+        events.append(self._build_matte_context_event(tick))
         reason = (
             self._post_score_follow_up.get("reason", "post-score reset")
             if self._post_score_follow_up is not None
@@ -4409,11 +4686,19 @@ class Match:
             return None
 
         # Counter fires.
+        #
+        # HAJ-221 — the engineer description keeps the bare enum read
+        # (`reads SEN_SEN_NO_SEN`) so the debug stream remains a clean
+        # substrate dump. The coach stream gets a narrative-first
+        # rendering of the same counter cognition, with the technical
+        # term parenthesised so the player can map prose to vocabulary
+        # over time. `_counter_coach_prose` owns the per-window phrasing.
+        counter_throw_name = THROW_REGISTRY[counter_id].name
         counter_event = Event(
             tick=tick, event_type="COUNTER_COMMIT",
             description=(
                 f"[counter] {defender.identity.name} reads {perceived.name} — "
-                f"fires {THROW_REGISTRY[counter_id].name} against "
+                f"fires {counter_throw_name} against "
                 f"{attacker.identity.name}."
             ),
             data={
@@ -4423,6 +4708,9 @@ class Match:
                 "attacker_throw":  effective_throw_id.name,
                 "attacker":        attacker.identity.name,
                 "defender":        defender.identity.name,
+                "coach_prose":     _counter_coach_prose(
+                    defender.identity.name, perceived, counter_throw_name,
+                ),
             },
         )
         # HAJ-145 — body-part decomposition of the counter commit. Routed
@@ -4490,6 +4778,9 @@ class Match:
                     f"in {br['window_ticks']} ticks)."
                 ))(tracker.breakdown(tick)),
                 "data": tracker.breakdown(tick),
+                # HAJ-221 — narrative-first coach line; numbers stay in
+                # data + the engineer description for the debug stream.
+                "coach_prose": _defensive_desperation_coach_prose(name),
                 "exit_description": f"[state] {name} exits defensive desperation.",
                 "enter_event_type": "DEFENSIVE_DESPERATION_ENTER",
                 "exit_event_type":  "DEFENSIVE_DESPERATION_EXIT",
@@ -4517,6 +4808,8 @@ class Match:
                     f"kumi-kata clock {self.kumi_kata_clock.get(name, 0)})."
                 ),
                 "data": None,
+                # HAJ-221 — narrative-first coach line.
+                "coach_prose": _offensive_desperation_coach_prose(name),
                 "exit_description": f"[state] {name} exits offensive desperation.",
                 "enter_event_type": "OFFENSIVE_DESPERATION_ENTER",
                 "exit_event_type":  "OFFENSIVE_DESPERATION_EXIT",
@@ -4569,8 +4862,15 @@ class Match:
                     event_type=p["enter_event_type"],
                     description=p["description"],
                 )
-                if p["data"] is not None:
-                    ev_kwargs["data"] = p["data"]
+                data = p.get("data") or {}
+                # HAJ-221 — thread the coach narration onto event.data so
+                # _print_events can surface it on the coach stream while
+                # the debug stream keeps the numeric description.
+                if p.get("coach_prose"):
+                    data = dict(data)
+                    data["coach_prose"] = p["coach_prose"]
+                if data:
+                    ev_kwargs["data"] = data
                 events.append(Event(**ev_kwargs))
                 self._desp_enter_announced[name][kind] = True
 
@@ -5254,6 +5554,39 @@ class Match:
         return events
 
     # -----------------------------------------------------------------------
+    # HAJ-221 — MATTE CONTEXT LINE
+    # One-line state snapshot of both judoka right after a Matte call.
+    # The composure/stamina state at the reset gives the player a sense of
+    # who's tiring without having to track tick-by-tick numerics. Coach
+    # stream only; the engineering [ref] MATTE_CALLED line carries the
+    # substrate data.
+    # -----------------------------------------------------------------------
+    def _build_matte_context_event(self, tick: int) -> Event:
+        a = self.fighter_a
+        b = self.fighter_b
+        a_phrase = _judoka_state_phrase(a)
+        b_phrase = _judoka_state_phrase(b)
+        prose = (
+            f"{a.identity.name} {a_phrase}; "
+            f"{b.identity.name} {b_phrase}."
+        )
+        return Event(
+            tick=tick,
+            event_type="MATTE_CONTEXT",
+            description=f"[matte_context] {prose}",
+            data={
+                "prose_silent": True,
+                "coach_prose":  prose,
+                "fighter_a":    a.identity.name,
+                "fighter_b":    b.identity.name,
+                "a_composure":  a.state.composure_current,
+                "b_composure":  b.state.composure_current,
+                "a_cardio":     a.state.cardio_current,
+                "b_cardio":     b.state.cardio_current,
+            },
+        )
+
+    # -----------------------------------------------------------------------
     # MATTE HANDLING — resets match state for next exchange
     # -----------------------------------------------------------------------
     def _handle_matte(self, tick: int) -> None:
@@ -5868,11 +6201,29 @@ class Match:
             # of the side-by-side view skip them. Used by THROW_ENTRY so
             # commits are silent in prose (the resolution prose on tick
             # N+1 carries the visible beat).
+            #
+            # HAJ-221 — a `coach_prose` override on the event lets the
+            # coach stream render a narrative-first phrasing while the
+            # debug stream keeps the engineering description. The override
+            # also wins over `prose_silent`: events like GRIP_CASCADE_RESPONSE
+            # are silent in the legacy prose path by description, but the
+            # coach_prose narrative line is exactly what the coach stream
+            # should surface.
             prose_silent = bool(ev.data.get("prose_silent"))
-            if self._stream == "prose":
-                if _is_debug_only_event(ev.event_type) or prose_silent:
+            coach_prose  = ev.data.get("coach_prose")
+            if _is_coach_stream(self._stream):
+                # HAJ-221 — coach_prose wins regardless of debug-only /
+                # prose_silent flagging. Throw sub-events (SUB_*) are
+                # debug-only by default; the body-part narration line
+                # rides on the same event so we surface it here.
+                if coach_prose:
+                    print(_render_prose(str(coach_prose)))
                     continue
-                # Prose stream: no tick prefix, no debug handles, eq= stripped.
+                if _is_debug_only_event(ev.event_type):
+                    continue
+                if prose_silent:
+                    continue
+                # Coach stream: no tick prefix, no debug handles, eq= stripped.
                 print(_render_prose(ev.description))
                 continue
 
@@ -5891,7 +6242,13 @@ class Match:
             # "both" — side-by-side dual stream: engineer on the left with
             # tick numbers, prose on the right with a countdown match clock.
             # A reader can scan one side and read across to correlate.
-            if _is_debug_only_event(ev.event_type) or prose_silent:
+            # HAJ-221 — coach_prose wins over the debug-only / prose_silent
+            # filters here too, so sub-event body-part narration shows up
+            # on the prose side while the engineer-side label stays put.
+            if coach_prose:
+                clock = _format_match_clock(self.max_ticks - ev.tick)
+                prose_line = f"{clock}  {_render_prose(str(coach_prose))}"
+            elif _is_debug_only_event(ev.event_type) or prose_silent:
                 prose_line = ""
             else:
                 clock = _format_match_clock(self.max_ticks - ev.tick)
