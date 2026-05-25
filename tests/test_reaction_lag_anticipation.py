@@ -79,17 +79,28 @@ def _set_fight_iq(judoka, iq: int) -> None:
 # ===========================================================================
 # AC#1 — reaction_lag is signed, distributed, modulated
 # ===========================================================================
-def test_expected_lag_is_signed_per_fight_iq() -> None:
-    """At iq=10 the base sits negative; at iq=0 the base sits positive."""
+def test_expected_lag_scales_with_fight_iq() -> None:
+    """HAJ-222 — elite reads faster than novice, both still take at
+    least one tick at our tick resolution (post-clamp). The signed-lag
+    negative-anticipation semantics from the pre-HAJ-222 calibration
+    are gone: the issue surfaced that the previous bias collapsed
+    perception onto the commit tick. At neutral disguise, the base
+    sits at 1.0 for elite and 4.0 for novice."""
     t, s = _pair()
-    set_uniform(t, 0.0)
-    set_uniform(s, 0.0)
+    # Neutral disguise on both — isolates the fight_iq axis.
+    set_uniform(t, 0.5)
+    set_uniform(s, 0.5)
     _set_fight_iq(t, 10)
     _set_fight_iq(s, 0)
     elite_lag = expected_lag(t, s)
     novice_lag = expected_lag(s, t)
-    assert elite_lag < 0.0, f"elite lag should be negative, got {elite_lag}"
-    assert novice_lag > 0.0, f"novice lag should be positive, got {novice_lag}"
+    assert elite_lag < novice_lag, (
+        f"elite should read faster than novice: elite={elite_lag}, novice={novice_lag}"
+    )
+    # Elite base hugs 1 tick of physical reaction; novice sits in the
+    # 3–5 tick range per HAJ-222 spec.
+    assert elite_lag >= 0.5, f"elite base should be >= ~1, got {elite_lag}"
+    assert novice_lag >= 3.0, f"novice base should be >= 3, got {novice_lag}"
 
 
 def test_sample_lag_is_clamped() -> None:
@@ -105,23 +116,26 @@ def test_sample_lag_is_clamped() -> None:
         assert LAG_CLAMP_MIN <= lag <= LAG_CLAMP_MAX
 
 
-def test_sample_lag_distribution_matches_expected_sign() -> None:
-    """Across many samples, an elite perceiver's lag distribution is
-    skewed negative; a novice's is skewed positive. (Distribution
-    property — AC#1 calls for signed *and* distributed lag.)"""
+def test_sample_lag_distribution_matches_fight_iq() -> None:
+    """HAJ-222 — across many samples, an elite perceiver's lag
+    distribution sits lower than a novice's. Both are positive
+    (no anticipation at tick resolution); the gap is what matters."""
     rng = random.Random(7)
     t, s = _pair()
-    set_uniform(t, 0.0)
-    set_uniform(s, 0.0)
+    set_uniform(t, 0.5)
+    set_uniform(s, 0.5)
     _set_fight_iq(t, 10)
     _set_fight_iq(s, 0)
     elite_samples = [sample_lag(t, s, rng=rng) for _ in range(200)]
     novice_samples = [sample_lag(s, t, rng=rng) for _ in range(200)]
-    assert statistics.mean(elite_samples) < 0.0
-    assert statistics.mean(novice_samples) > 0.0
-    # Distribution width — there's actual variance, not a constant.
-    assert statistics.pstdev(elite_samples) > 0.1
+    assert statistics.mean(elite_samples) < statistics.mean(novice_samples)
+    # Distribution width on the novice side — elite sits at the clamp
+    # floor with little observable variance, but novice base 4.0
+    # leaves room for the Gaussian to actually spread.
     assert statistics.pstdev(novice_samples) > 0.1
+    # HAJ-222 — every sample is at least the LAG_CLAMP_MIN floor (1).
+    assert min(elite_samples) >= LAG_CLAMP_MIN
+    assert min(novice_samples) >= LAG_CLAMP_MIN
 
 
 # ===========================================================================
@@ -209,10 +223,12 @@ def test_familiarity_shaves_lag() -> None:
 # Response selection — BRACE / NONE under HAJ-148's deferral
 # ===========================================================================
 def test_choose_response_brace_for_low_lag() -> None:
-    """An elite perceiver (lag <= 0) braces for the resolution tick."""
+    """An elite perceiver (lag == 1) braces in time — the brace lands
+    on the resolution tick. HAJ-222: the post-clamp minimum is 1, so
+    this is the canonical "fast elite read" case."""
     t, s = _pair()
     _set_fight_iq(t, 10)
-    resp = choose_response(t, s, sampled_lag=-1, commit_tick=10)
+    resp = choose_response(t, s, sampled_lag=1, commit_tick=10)
     assert resp.kind == "BRACE"
     assert resp.target_tick == 11
 
@@ -303,11 +319,17 @@ def _drive_commit_and_perception(m: Match, tori, uke, throw_id, tick: int):
 
 def test_elite_mirror_match_produces_brace_responses() -> None:
     """AC#10 elite mirror — both elite fighters perceive opponent
-    commits in time and brace for resolution."""
-    rng = random.Random(2)
+    commits in time and brace for resolution.
+
+    HAJ-222 calibration: elite base lag is 1 tick, which lands the
+    awareness on the resolution tick → BRACE. Gaussian variance still
+    samples some 2s (NONE), so a strict "all BRACE" assertion is the
+    wrong shape; we require majority BRACE instead. Commit spacing
+    widened to 5 ticks so each attempt resolves before the next
+    stages (a stale in-progress entry would suppress perception)."""
     t, s, m = _elite_match(seed=2)
     # Drive a sequence of commits; collect perception responses.
-    for tick in range(5, 15, 2):
+    for tick in range(5, 30, 5):
         # Patch resolve_throw so the deferred consequence is harmless.
         real = match_module.resolve_throw
         match_module.resolve_throw = lambda *a, **kw: ("FAILED", -2.0)
@@ -320,8 +342,9 @@ def test_elite_mirror_match_produces_brace_responses() -> None:
     # mostly BRACE responses (elite uke reads them in time).
     kinds = [r.kind for r in m._perception_log]
     brace_count = sum(1 for k in kinds if k == "BRACE")
-    assert brace_count >= 3, (
-        f"elite mirror should brace most commits, got {kinds}"
+    assert kinds, "expected at least one perception response"
+    assert brace_count >= len(kinds) // 2, (
+        f"elite mirror should brace majority of commits, got {kinds}"
     )
 
 

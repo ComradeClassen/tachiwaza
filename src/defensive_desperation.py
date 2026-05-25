@@ -55,8 +55,19 @@ WEIGHT_OPP_COMMITS:     float = 1.0   # per opponent commit in window
 WEIGHT_KUZUSHI:         float = 1.5   # per kuzushi event in window
 WEIGHT_COMPOSURE_DROP:  float = 0.8   # per unit of composure lost in window
 
-ENTRY_THRESHOLD: float = 3.0     # score at which the state fires
-EXIT_THRESHOLD:  float = 1.5     # score at which the state releases
+# HAJ-222 — entry/exit thresholds raised after seed-1974183401 playtest
+# showed both judoka entering defensive desperation 25 seconds into a
+# four-minute match. Pre-fix ENTRY_THRESHOLD=3.0 fired on routine
+# exchange pressure (2 commits + 1 kuzushi in window = 3.5). Post-fix
+# the gate requires sustained one-sided pressure before flipping the
+# state — empirically calibrated against the 50-match stats run so the
+# matches that do trigger desperation land in the 90–120s band the
+# ticket calls for, rather than the prior ~25s. Symmetric matchups
+# that end inside regulation typically never reach the threshold,
+# which matches the spec: desperation should be the result of sustained
+# one-sided pressure or a real score deficit, not a default state.
+ENTRY_THRESHOLD: float = 7.0     # score at which the state fires
+EXIT_THRESHOLD:  float = 4.0     # score at which the state releases
 
 # Effect magnitudes — read by counter_windows.py and surfaced in debug.
 CW_PERCEPTION_BONUS:       float = 0.12  # additive on perceived-window score

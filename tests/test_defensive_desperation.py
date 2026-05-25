@@ -54,11 +54,15 @@ def test_composure_drop_contributes_to_score() -> None:
 
 def test_entry_and_exit_with_hysteresis() -> None:
     tr = DefensivePressureTracker()
-    # Push score above entry threshold with commits + kuzushi.
-    for t in range(3):
+    # Push score above entry threshold with commits + kuzushi. HAJ-222
+    # raised the threshold, so the test load grew accordingly: five
+    # commits + three kuzushi = 5.0 + 4.5 = 9.5, comfortably above
+    # the new entry threshold with headroom for jitter.
+    for t in range(5):
         tr.record_opponent_commit(tick=t)
-    tr.record_kuzushi(tick=3)
-    # Score = 3 * 1.0 + 1 * 1.5 = 4.5 >= 3.0 (ENTRY_THRESHOLD)
+    for t in (2, 3, 4):
+        tr.record_kuzushi(tick=t)
+    assert tr.pressure_score(tick=5) >= ENTRY_THRESHOLD
     assert tr.update(tick=5) is True
     assert tr.active is True
 
@@ -72,23 +76,27 @@ def test_hysteresis_stays_active_between_entry_and_exit() -> None:
     """Between EXIT_THRESHOLD and ENTRY_THRESHOLD, state is sticky: once
     active, it only releases when score drops BELOW exit; it doesn't
     flicker off just because the score dipped under entry.
+
+    HAJ-222 — thresholds raised. This test enters with a hefty load,
+    then trims the in-window signals until pressure lands in the
+    sticky band between EXIT and ENTRY.
     """
     tr = DefensivePressureTracker()
-    tr.record_opponent_commit(tick=0)
-    tr.record_opponent_commit(tick=1)
-    tr.record_opponent_commit(tick=2)
-    tr.record_kuzushi(tick=3)
-    tr.update(tick=5)   # active
+    for t in range(5):
+        tr.record_opponent_commit(tick=t)
+    for t in (2, 3, 4):
+        tr.record_kuzushi(tick=t)
+    tr.update(tick=5)   # active (score >= ENTRY)
     assert tr.active is True
 
-    # Shrink the window so we're between exit and entry. Simulate by
-    # feeding a late composure sample so the window starts later — the
-    # simplest way is just to query at a tick where some events still
-    # fall in-window but score sits between the two thresholds.
-    # With 1 commit + 1 kuzushi still in-window: score = 1 + 1.5 = 2.5.
-    # That's below ENTRY_THRESHOLD (3.0) but above EXIT_THRESHOLD (1.5).
-    tr.opp_commit_ticks = [tr.opp_commit_ticks[-1]]
-    # Keeping kuzushi as-is.
+    # Trim to a window that lands between the two thresholds.
+    tr.opp_commit_ticks = tr.opp_commit_ticks[-3:]
+    tr.kuzushi_ticks = tr.kuzushi_ticks[-1:]
+    score = tr.pressure_score(tick=5)
+    assert EXIT_THRESHOLD < score < ENTRY_THRESHOLD, (
+        f"score {score} should fall between EXIT ({EXIT_THRESHOLD}) "
+        f"and ENTRY ({ENTRY_THRESHOLD}) thresholds"
+    )
     assert tr.update(tick=5) is True   # still active (hysteresis)
 
 

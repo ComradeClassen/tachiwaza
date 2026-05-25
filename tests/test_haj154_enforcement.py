@@ -258,13 +258,18 @@ def test_staged_intent_precedes_commit_in_log_order() -> None:
 
 
 # ===========================================================================
-# AC#5 — negative perception lag is reachable
+# AC#5 — elite + low-disguise perception lands on the LAG_CLAMP_MIN floor
 # ===========================================================================
-def test_negative_lag_observable_in_match_with_low_disguise_opponent() -> None:
-    """Two elite-IQ fighters with low disguise (skill_vector axes near 0)
-    should reliably produce negative-lag perception entries — the audit
-    found ZERO such entries pre-fix; this test pins that anticipation
-    actually happens."""
+def test_elite_low_disguise_consistently_hits_clamp_floor() -> None:
+    """HAJ-222 — pre-HAJ-222 this test required negative-lag entries
+    (anticipation before the commit tick). Post-HAJ-222 sub-tick
+    anticipation is no longer allowed at our tick resolution: the
+    LAG_CLAMP_MIN floor is 1 (one tick of physical reaction time).
+    The directional invariant that survives: two elite fighters reading
+    each other's sloppy (low-disguise) commits should consistently land
+    on the clamp floor (lag=1, i.e. read-and-BRACE in time for the
+    resolution tick), not drift to 2+ (NONE / late)."""
+    from reaction_lag import LAG_CLAMP_MIN
     random.seed(0)
     t, s = _pair()
     t.identity.belt_rank = BeltRank.BLACK_5
@@ -272,7 +277,7 @@ def test_negative_lag_observable_in_match_with_low_disguise_opponent() -> None:
     t.capability.fight_iq = 10
     s.capability.fight_iq = 10
     # Make each fighter highly readable (low disguise) so the perceiver's
-    # negative-lag base shines through.
+    # low-lag base shines through.
     set_uniform(t, 0.0)
     set_uniform(s, 0.0)
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki(), seed=0)
@@ -299,13 +304,12 @@ def test_negative_lag_observable_in_match_with_low_disguise_opponent() -> None:
                 m._resolve_consequences(tick + 2, followup)
     finally:
         match_module.resolve_throw = real
-    negative_lag_count = sum(
-        1 for r in m._perception_log if r.sampled_lag < 0
-    )
-    assert negative_lag_count >= 5, (
-        f"expected >=5 negative-lag entries; got {negative_lag_count}. "
-        f"All sampled lags: "
-        f"{[r.sampled_lag for r in m._perception_log]}"
+    lags = [r.sampled_lag for r in m._perception_log]
+    assert lags, "expected at least one perception entry"
+    floor_hits = sum(1 for lag in lags if lag == LAG_CLAMP_MIN)
+    assert floor_hits >= max(5, len(lags) // 2), (
+        f"expected most entries to hit the LAG_CLAMP_MIN ({LAG_CLAMP_MIN}) "
+        f"floor; got {floor_hits}/{len(lags)}. All sampled lags: {lags}"
     )
 
 

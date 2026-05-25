@@ -4580,7 +4580,16 @@ class Match:
         # Being in kuzushi drops composure; inducing it on the opponent
         # raises yours. Small per-tick deltas — the spec calls for tick
         # outcomes to drive composure (Part 3.4 Step 12).
-        drift = 0.05
+        #
+        # HAJ-222 — per-tick drift reduced from 0.05 to 0.02. At the
+        # pre-fix rate, fifteen ticks of intermittent kuzushi could
+        # bleed composure 0.5 (out of a ceiling typically ≤ 10), which
+        # combined with the defensive-pressure tracker's 0.8 weight
+        # to push fighters into desperation 25 seconds into a match.
+        # The reduced drift keeps the directional pressure but moves
+        # the time-to-desperation into the 90–120s band the ticket
+        # calls for.
+        drift = 0.02
         if a_kuzushi:
             self.fighter_a.state.composure_current = max(
                 0.0, self.fighter_a.state.composure_current - drift
@@ -5267,12 +5276,30 @@ class Match:
         the state from leaking into the next exchange. Drop any
         queued POST_SCORE_FOLLOW_UP_MATTE consequence too — the matte
         we're handling now satisfies the same beat.
+
+        HAJ-222 — drop every pending throw-resolution consequence
+        for both judoka. Pre-fix, only POST_SCORE_FOLLOW_UP_MATTE
+        was filtered, which meant a RESOLVE_KAKE_N1 / RESOLVE_DRIVE_THROW
+        consequence queued at commit time could fire several ticks after
+        matte and emit a stale "throw failed" event for an attempt the
+        referee had already declared dead (the t035 stray failure event
+        from seed 1974183401). Also drop FIRE_COMMIT_FROM_INTENT and
+        NEWAZA_TRANSITION_AFTER_STUFF: once the dyad has reset, neither
+        the commit nor the ne-waza door should fire from the prior
+        exchange's intent.
         """
         self._throws_in_progress.clear()
         self._post_score_follow_up = None
+        _DROPPED_ON_MATTE = {
+            "POST_SCORE_FOLLOW_UP_MATTE",
+            "RESOLVE_KAKE_N1",
+            "RESOLVE_DRIVE_THROW",
+            "FIRE_COMMIT_FROM_INTENT",
+            "NEWAZA_TRANSITION_AFTER_STUFF",
+        }
         self._consequence_queue = [
             c for c in self._consequence_queue
-            if c.kind != "POST_SCORE_FOLLOW_UP_MATTE"
+            if c.kind not in _DROPPED_ON_MATTE
         ]
         self._reset_dyad_to_distant(tick, recovery_bonus=0)
         # HAJ-160 — queue the restart-hajime announcement so the viewer's

@@ -215,10 +215,20 @@ class Referee:
             if state.stalemate_ticks >= threshold:
                 return MatteReason.STALEMATE
 
-        # After a stuffed throw: check stuffed_throw_tolerance window
+        # After a stuffed throw: check stuffed_throw_tolerance window.
+        #
+        # HAJ-222 — defer matte while any throw resolution is still
+        # in flight. Pre-fix the stuffed_throw_tick from a prior
+        # exchange could fire matte on the same tick as a fresh
+        # commit's reach-kuzushi / kuzushi sub-events, declaring the
+        # in-progress throw "stuffed" before resolution had a chance
+        # to play out. The OOB matte branch already guards on
+        # `any_throw_in_flight`; mirror that here so the stuffed
+        # matte waits one more tick if a throw is mid-resolution.
         if state.stuffed_throw_tick > 0:
             ticks_since_stuff = current_tick - state.stuffed_throw_tick
             if (not state.ne_waza_active
+                    and not state.any_throw_in_flight
                     and ticks_since_stuff >= self._STUFFED_MATTE_TICKS):
                 return MatteReason.STUFFED_THROW_TIMEOUT
 
