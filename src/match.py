@@ -6216,15 +6216,21 @@ class Match:
                 # prose_silent flagging. Throw sub-events (SUB_*) are
                 # debug-only by default; the body-part narration line
                 # rides on the same event so we surface it here.
+                #
+                # Each coach line is prefixed with the countdown match
+                # clock (M:SS), matching the format the "both" stream
+                # uses on its prose column. The clock lets the reader
+                # correlate beats with match time without losing the
+                # uncluttered narrative read.
+                clock = _format_match_clock(self.max_ticks - ev.tick)
                 if coach_prose:
-                    print(_render_prose(str(coach_prose)))
+                    print(f"{clock}  {_render_prose(str(coach_prose))}")
                     continue
                 if _is_debug_only_event(ev.event_type):
                     continue
                 if prose_silent:
                     continue
-                # Coach stream: no tick prefix, no debug handles, eq= stripped.
-                print(_render_prose(ev.description))
+                print(f"{clock}  {_render_prose(ev.description)}")
                 continue
 
             # Compose the engineer (debug) line — tick prefix + description +
