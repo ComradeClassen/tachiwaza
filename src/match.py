@@ -130,6 +130,35 @@ def _load_default_technique_catalog() -> dict:
     return _CACHED_TECHNIQUE_CATALOG
 
 
+# HAJ-220 — ne-waza catalog cache. Same lazy-load pattern as the
+# tachiwaza catalog above. Passing an explicit `ne_waza_catalog=` to
+# Match() bypasses the cache.
+_CACHED_NE_WAZA_CATALOG = None
+
+
+def _load_default_ne_waza_catalog():
+    """Lazy-load and cache the canonical ne-waza catalog
+    (data/ne_waza_techniques.yaml + data/ne_waza_positions.yaml +
+    data/defensive_struts.yaml). Returns None if any file is missing —
+    callers will fall back to the legacy non-catalog ne-waza path."""
+    global _CACHED_NE_WAZA_CATALOG
+    if _CACHED_NE_WAZA_CATALOG is not None:
+        return _CACHED_NE_WAZA_CATALOG
+    from pathlib import Path
+    from ne_waza_catalog import load_ne_waza_catalog
+    repo_root = Path(__file__).resolve().parent.parent
+    techniques_path = repo_root / "data" / "ne_waza_techniques.yaml"
+    positions_path  = repo_root / "data" / "ne_waza_positions.yaml"
+    struts_path     = repo_root / "data" / "defensive_struts.yaml"
+    if not (techniques_path.exists() and positions_path.exists()
+            and struts_path.exists()):
+        return None
+    _CACHED_NE_WAZA_CATALOG = load_ne_waza_catalog(
+        techniques_path, positions_path, struts_path,
+    )
+    return _CACHED_NE_WAZA_CATALOG
+
+
 # Engagement (Part 2.7): baseline floor; actual duration is max of
 # reach_ticks_for(a) and reach_ticks_for(b), enforced from the graph.
 #
@@ -1041,6 +1070,7 @@ class Match:
         renderer: Optional["Renderer"] = None,
         regulation_ticks: Optional[int] = None,
         technique_catalog: Optional[dict] = None,
+        ne_waza_catalog: Optional["object"] = None,
     ) -> None:
         if stream not in VALID_STREAMS:
             raise ValueError(
@@ -1073,11 +1103,21 @@ class Match:
         # by loading data/techniques.yaml and passing it through.
         self.technique_catalog = technique_catalog
 
+        # HAJ-220 — ne-waza catalog. When supplied (non-None), the
+        # NewazaResolver consults Stage 1 / Stage 2 against the catalog
+        # so ground positions render with Kodokan-named techniques.
+        # Default is None so existing tests preserve the legacy
+        # hardcoded choke/armbar chain; production entry points
+        # (run_match.py, main.py) opt in by loading the ne-waza catalog
+        # files and passing them through.
+        self.ne_waza_catalog = ne_waza_catalog
+
         # Match-level state
         self.grip_graph   = GripGraph()
         self.position     = Position.STANDING_DISTANT
         self.osaekomi     = OsaekomiClock()
         self.ne_waza_resolver = NewazaResolver()
+        self.ne_waza_resolver.set_catalog(self.ne_waza_catalog)
 
         # Phase of live match time. Part 3 physics owns STANDING. NE_WAZA
         # branches out to NewazaResolver.
@@ -1997,6 +2037,19 @@ class Match:
                 # "tachi-waza resumes without matte" exit (AC#7). Clear
                 # the follow-up bookkeeping so the next exchange starts
                 # clean; no explicit matte fires here.
+                self._throws_in_progress.clear()
+                self._post_score_follow_up = None
+                self._reset_dyad_to_distant(
+                    tick, recovery_bonus=POST_SCORE_RECOVERY_TICKS,
+                )
+                self.ne_waza_top_id = None
+                break
+            if ev.event_type == "SUBMISSION_RELEASED":
+                # HAJ-220 — catalog-mode submission abandoned after the
+                # failed-effectiveness threshold. Reset the dyad through
+                # the same recovery path escape takes; the SUBMISSION_RELEASED
+                # event itself carries the "Matte" narrative cue.
+                self.ne_waza_resolver.reset(self.osaekomi)
                 self._throws_in_progress.clear()
                 self._post_score_follow_up = None
                 self._reset_dyad_to_distant(
@@ -5469,6 +5522,10 @@ class Match:
             self.ne_waza_resolver.set_top_fighter(
                 self.ne_waza_top_id, (self.fighter_a, self.fighter_b)
             )
+            # HAJ-220 — seed the catalog-aware ground connection graph
+            # for the entered position. No-op when no ne-waza catalog
+            # was supplied (legacy resolver path).
+            self.ne_waza_resolver.on_ground_entry(start_pos)
             events.append(Event(
                 tick=tick,
                 event_type="NEWAZA_TRANSITION",
@@ -5495,15 +5552,26 @@ class Match:
                   else self.fighter_b)
         held   = (self.fighter_b if holder is self.fighter_a else self.fighter_a)
 
+        # HAJ-220 — catalog-mode pins carry a technique_id; surface it in
+        # the detail string and the score event's data payload so the log
+        # stream + downstream tooling see which Kodokan variant scored.
+        technique_id = self.osaekomi.technique_id
         if award == "IPPON":
             holder.state.score["ippon"] = True
+            detail = (
+                f"{technique_id}, {self.osaekomi.ticks_held}s"
+                if technique_id
+                else f"{self.osaekomi.ticks_held}s hold"
+            )
             score_ev = self.referee.announce_score(
                 outcome="IPPON",
                 scorer_id=holder_id,
                 tick=tick,
                 source="pin",
-                detail=f"{self.osaekomi.ticks_held}s hold",
+                detail=detail,
             )
+            if technique_id is not None:
+                score_ev.data["technique_id"] = technique_id
             events.append(score_ev)
             self._scoring_events.append(score_ev)
             # HAJ-93 — pin ippon ends the match in regulation or golden
@@ -5516,14 +5584,21 @@ class Match:
         elif award == "WAZA_ARI":
             holder.state.score["waza_ari"] += 1
             wa_count = holder.state.score["waza_ari"]
+            detail = (
+                f"{technique_id}, {self.osaekomi.ticks_held}s"
+                if technique_id
+                else f"{self.osaekomi.ticks_held}s hold"
+            )
             score_ev = self.referee.announce_score(
                 outcome="WAZA_ARI",
                 scorer_id=holder_id,
                 count=wa_count,
                 tick=tick,
                 source="pin",
-                detail=f"{self.osaekomi.ticks_held}s hold",
+                detail=detail,
             )
+            if technique_id is not None:
+                score_ev.data["technique_id"] = technique_id
             events.append(score_ev)
             self._scoring_events.append(score_ev)
             # HAJ-93 — sudden death in golden score; otherwise the usual

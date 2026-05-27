@@ -43,7 +43,9 @@ from enums import (
 from throws import THROW_REGISTRY
 from judoka import Identity, Capability, State, Judoka
 from body_state import place_judoka
-from match import Match, _load_default_technique_catalog
+from match import (
+    Match, _load_default_technique_catalog, _load_default_ne_waza_catalog,
+)
 from referee import Referee
 
 
@@ -231,6 +233,7 @@ def _run_simulation(
         stream="both",
         renderer=capture,
         technique_catalog=_load_default_technique_catalog(),
+        ne_waza_catalog=_load_default_ne_waza_catalog(),
     )
     match.run()
 

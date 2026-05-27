@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from judoka import Judoka
     from grip_graph import GripGraph
     from referee import ScoreResult
+    from ne_waza_catalog import NeWazaCatalog
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +101,16 @@ class ActiveTechnique:
 # it runs until escape or the time threshold is reached.
 # ---------------------------------------------------------------------------
 class OsaekomiClock:
-    """Pin clock. 10 ticks = WAZA_ARI; 20 ticks = IPPON (IJF rules: 10s/20s)."""
+    """Pin clock. 10 ticks = WAZA_ARI; 20 ticks = IPPON (IJF rules: 10s/20s).
+
+    HAJ-220 — `technique_id` records which ne-waza catalog entry the
+    engine timed when Stage 2 committed to a pin. Pre-HAJ-220 pin
+    bookkeeping tracked time at the broad-position level (e.g. "pin
+    accumulating in SIDE_CONTROL"); the catalog substrate names the
+    specific Kodokan variant (hon_kesa_gatame, kuzure_kami_shiho_gatame,
+    etc.). Legacy callers that don't supply a technique_id keep the
+    None default and the field is purely informational.
+    """
 
     WAZA_ARI_TICKS: int = 10
     IPPON_TICKS:    int = 20
@@ -110,13 +120,26 @@ class OsaekomiClock:
         self.position:     Optional[Position] = None
         self.ticks_held:   int = 0
         self.is_running:   bool = False
+        # HAJ-220 — set when Stage 2 commits to a pin technique. None on
+        # the legacy non-catalog path.
+        self.technique_id: Optional[str] = None
 
-    def start(self, holder_id: str, position: Position) -> None:
-        """Start or restart the osaekomi clock."""
-        self.holder_id  = holder_id
-        self.position   = position
-        self.ticks_held = 0
-        self.is_running = True
+    def start(
+        self,
+        holder_id: str,
+        position: Position,
+        technique_id: Optional[str] = None,
+    ) -> None:
+        """Start or restart the osaekomi clock.
+
+        HAJ-220 — `technique_id` is the catalog entry the engine is now
+        timing. Defaults to None for the legacy path.
+        """
+        self.holder_id    = holder_id
+        self.position     = position
+        self.ticks_held   = 0
+        self.is_running   = True
+        self.technique_id = technique_id
 
     def tick(self) -> Optional[str]:
         """Advance the clock by one tick. Returns 'WAZA_ARI', 'IPPON', or None."""
@@ -132,9 +155,10 @@ class OsaekomiClock:
 
     def break_pin(self) -> None:
         """Escape! Stop the clock without a score."""
-        self.is_running = False
-        self.holder_id  = None
-        self.ticks_held = 0
+        self.is_running   = False
+        self.holder_id    = None
+        self.ticks_held   = 0
+        self.technique_id = None
 
     @property
     def active(self) -> bool:
@@ -167,6 +191,46 @@ class NewazaResolver:
 
     def __init__(self) -> None:
         self.active_technique: Optional[ActiveTechnique] = None
+        # HAJ-220 — catalog-aware ground consumption state. None when no
+        # ne-waza catalog has been supplied, in which case tick_resolve
+        # falls back to the legacy (Phase 2 Session 2) hardcoded
+        # choke/armbar chain. Set via set_catalog() from Match.__init__.
+        self._ne_waza_catalog: Optional["NeWazaCatalog"] = None
+        # Imported lazily inside set_catalog so unit tests of the legacy
+        # path don't drag the consumption module in.
+        self._connection_graph = None
+        self._last_ground_position: Optional[Position] = None
+        self._dominant_position_id: Optional[str] = None
+        self._submission_attempt = None
+        # Pending log events from the most recent commit_pin /
+        # commit_submission decision. tick_resolve drains and emits them
+        # so the caller's events list stays the single emission point.
+        self._pending_catalog_events: list[Event] = []
+
+    # -----------------------------------------------------------------------
+    # HAJ-220 — CATALOG WIRING
+    # -----------------------------------------------------------------------
+    def set_catalog(self, catalog: Optional["NeWazaCatalog"]) -> None:
+        """Hand the resolver a NeWazaCatalog. None puts the resolver in
+        legacy mode (Phase 2 Session 2 hardcoded chains)."""
+        self._ne_waza_catalog = catalog
+        if catalog is not None:
+            from ne_waza_consumption import GroundConnectionGraph
+            self._connection_graph = GroundConnectionGraph()
+
+    def on_ground_entry(self, position: Position) -> None:
+        """Called by Match when sub_loop_state transitions to NE_WAZA.
+        Initializes the baseline ConnectionEdge set for the entered
+        position so Stage 1 has something to filter against on the very
+        first ne-waza tick. No-op in legacy mode."""
+        if self._ne_waza_catalog is None:
+            return
+        from ne_waza_consumption import baseline_graph_for
+        self._connection_graph = baseline_graph_for(position)
+        self._last_ground_position = position
+        self._dominant_position_id = None
+        self._submission_attempt = None
+        self._pending_catalog_events = []
 
     # -----------------------------------------------------------------------
     # STATE MACHINE — HAJ-185
@@ -195,6 +259,14 @@ class NewazaResolver:
         self.active_technique = None
         if osaekomi.active:
             osaekomi.break_pin()
+        # HAJ-220 — also clear catalog-aware state. on_ground_entry seeds
+        # a fresh ConnectionGraph on the next ne-waza entry.
+        self._submission_attempt = None
+        self._dominant_position_id = None
+        self._last_ground_position = None
+        self._pending_catalog_events = []
+        if self._connection_graph is not None:
+            self._connection_graph.clear()
 
     # -----------------------------------------------------------------------
     # ATTEMPT GROUND COMMIT
@@ -268,12 +340,25 @@ class NewazaResolver:
         osaekomi: OsaekomiClock,
         current_tick: int,
     ) -> list[Event]:
-        """One tick of ne-waza. Returns events for anything notable."""
+        """One tick of ne-waza. Returns events for anything notable.
+
+        HAJ-220 — when a NeWazaCatalog has been set via set_catalog(),
+        Stage 1 / Stage 2 commit logic supersedes the legacy hardcoded
+        choke/armbar chain. Counter-action and escape rolls still run
+        in both paths (those are tori-vs-uke physics, independent of
+        which catalog entry is being timed).
+        """
         events: list[Event] = []
         top_fighter, bottom_fighter = self._determine_top_bottom(position, fighters)
 
         if top_fighter is None:
             return events
+
+        if self._ne_waza_catalog is not None:
+            return self._tick_resolve_catalog(
+                position, graph, fighters, osaekomi, current_tick,
+                top_fighter, bottom_fighter,
+            )
 
         # --- Counter-action available to bottom fighter each tick ---
         counter = self._pick_counter_action(bottom_fighter)
@@ -379,6 +464,235 @@ class NewazaResolver:
                     ),
                     data={"holder": top_fighter.identity.name},
                 ))
+
+        # --- Fatigue accumulation ---
+        self._apply_ne_waza_fatigue(top_fighter, bottom_fighter)
+
+        return events
+
+    # -----------------------------------------------------------------------
+    # HAJ-220 — CATALOG-AWARE TICK
+    # Parallel to tick_resolve; runs when set_catalog() supplied a
+    # NeWazaCatalog. Replaces the hardcoded choke/armbar chain with
+    # Stage 1 / Stage 2 commit logic against the catalog. Counter-action
+    # and escape rolls still run (those are tori-vs-uke physics,
+    # independent of which catalog entry is being timed). The legacy
+    # path stays in place for tests that don't supply a catalog.
+    # -----------------------------------------------------------------------
+    def _tick_resolve_catalog(
+        self,
+        position: Position,
+        graph: "GripGraph",
+        fighters: tuple["Judoka", "Judoka"],
+        osaekomi: OsaekomiClock,
+        current_tick: int,
+        top_fighter: "Judoka",
+        bottom_fighter: "Judoka",
+    ) -> list[Event]:
+        from ne_waza_consumption import (
+            baseline_graph_for, ne_waza_stage1_available_techniques,
+            recognize_dominant_position, stage2_select_commit,
+            pin_still_satisfied, submission_tick,
+            SubmissionAttempt,
+        )
+        from ne_waza_catalog import ScoreMechanism
+
+        events: list[Event] = []
+
+        # If the engine position changed since the last tick (e.g. SCRAMBLE
+        # → SIDE_CONTROL after a stuffed throw), re-seed the connection
+        # baseline so Stage 1 has the right substrate.
+        if position != self._last_ground_position:
+            self._connection_graph = baseline_graph_for(position)
+            self._last_ground_position = position
+            self._dominant_position_id = None
+
+        catalog = self._ne_waza_catalog
+        # Defensive: set_catalog should always be paired with a graph,
+        # but if a caller skipped on_ground_entry we seed one here.
+        if self._connection_graph is None:
+            self._connection_graph = baseline_graph_for(position)
+
+        # --- Counter-action available to bottom fighter each tick ---
+        counter = self._pick_counter_action(bottom_fighter)
+        counter_success = self._resolve_counter(
+            counter, bottom_fighter, top_fighter,
+        )
+
+        # --- Escape attempt ---
+        escaped = self._roll_escape(bottom_fighter, top_fighter, position)
+        if escaped:
+            if osaekomi.active:
+                ticks_held = osaekomi.ticks_held
+                osaekomi.break_pin()
+                events.append(Event(
+                    tick=current_tick,
+                    event_type="OSAEKOMI_BROKEN",
+                    description=(
+                        f"[ne-waza] {bottom_fighter.identity.name} breaks the pin! "
+                        f"Clock stopped at {ticks_held} ticks."
+                    ),
+                ))
+            events.append(Event(
+                tick=current_tick,
+                event_type="ESCAPE_SUCCESS",
+                description=(
+                    f"[ne-waza] {bottom_fighter.identity.name} escapes — "
+                    f"back to standing."
+                ),
+                data={"escapee": bottom_fighter.identity.name},
+            ))
+            self._submission_attempt = None
+            self.active_technique = None
+            return events
+
+        if counter_success:
+            events.append(Event(
+                tick=current_tick,
+                event_type="COUNTER_ACTION",
+                description=(
+                    f"[ne-waza] {bottom_fighter.identity.name} "
+                    f"{counter.name.lower().replace('_', '-')} — partial success."
+                ),
+            ))
+
+        # --- Dominant-position recognition. Fires every tick so a
+        # recognized position can drop back to None once the substrate
+        # tuning loop removes a required ConnectionEdge.
+        self._dominant_position_id = recognize_dominant_position(
+            self._connection_graph, catalog.positions, position,
+        )
+
+        # --- Submission attempt in progress? Run the tap-check loop. ---
+        if self._submission_attempt is not None:
+            outcome = submission_tick(
+                self._submission_attempt, top_fighter, bottom_fighter,
+                random,
+            )
+            if outcome == "tap":
+                tid = self._submission_attempt.technique_id
+                events.append(Event(
+                    tick=current_tick,
+                    event_type="SUBMISSION_VICTORY",
+                    description=(
+                        f"[sub] uke tapped — ippon by {tid}"
+                    ),
+                    data={
+                        "winner":       top_fighter.identity.name,
+                        "loser":        bottom_fighter.identity.name,
+                        "technique_id": tid,
+                        # Legacy compatibility for match.py listeners that
+                        # still read "technique" off the event payload.
+                        "technique":    tid,
+                    },
+                ))
+                self._submission_attempt = None
+                self._apply_ne_waza_fatigue(top_fighter, bottom_fighter)
+                return events
+            if outcome == "release":
+                tid = self._submission_attempt.technique_id
+                events.append(Event(
+                    tick=current_tick,
+                    event_type="SUBMISSION_RELEASED",
+                    description=(
+                        f"[sub] {tid} released — Matte"
+                    ),
+                    data={"technique_id": tid},
+                ))
+                self._submission_attempt = None
+                self._apply_ne_waza_fatigue(top_fighter, bottom_fighter)
+                return events
+            # "continue" — attempt persists to next tick.
+            self._apply_ne_waza_fatigue(top_fighter, bottom_fighter)
+            return events
+
+        # --- Pin in progress? Check that Stage 1 requirements still hold. ---
+        if osaekomi.active and osaekomi.technique_id is not None:
+            pin_def = catalog.techniques.get(osaekomi.technique_id)
+            if pin_def is not None and not pin_still_satisfied(
+                self._connection_graph, pin_def,
+            ):
+                tid = osaekomi.technique_id
+                ticks_held = osaekomi.ticks_held
+                osaekomi.break_pin()
+                events.append(Event(
+                    tick=current_tick,
+                    event_type="OSAEKOMI_BROKEN",
+                    description=(
+                        f"[pin] {tid} broken at {ticks_held}s"
+                    ),
+                    data={"technique_id": tid, "ticks_held": ticks_held},
+                ))
+                self._apply_ne_waza_fatigue(top_fighter, bottom_fighter)
+                return events
+
+        # --- No active commit — run Stage 1 / Stage 2 selection. ---
+        if not osaekomi.active and self._submission_attempt is None:
+            available = ne_waza_stage1_available_techniques(
+                self._connection_graph, position, top_fighter, bottom_fighter,
+                catalog.techniques, catalog.positions,
+                dominant_position_id=self._dominant_position_id,
+            )
+            chosen_tid = stage2_select_commit(
+                available, self._connection_graph, catalog.techniques,
+            )
+            if chosen_tid is not None:
+                chosen_def = catalog.techniques[chosen_tid]
+                if chosen_def.score_mechanism is ScoreMechanism.PIN_TIME_ACCUMULATION:
+                    osaekomi.start(
+                        top_fighter.identity.name,
+                        position,
+                        technique_id=chosen_tid,
+                    )
+                    events.append(Event(
+                        tick=current_tick,
+                        event_type="OSAEKOMI_BEGIN",
+                        description=(
+                            f"[pin] {chosen_tid} committed"
+                        ),
+                        data={
+                            "technique_id": chosen_tid,
+                            "holder":       top_fighter.identity.name,
+                        },
+                    ))
+                else:
+                    self._submission_attempt = SubmissionAttempt(
+                        technique_id=chosen_tid,
+                        aggressor_id=top_fighter.identity.name,
+                        defender_id=bottom_fighter.identity.name,
+                    )
+                    events.append(Event(
+                        tick=current_tick,
+                        event_type="SUBMISSION_COMMITTED",
+                        description=(
+                            f"[sub] {chosen_tid} committed"
+                        ),
+                        data={
+                            "technique_id": chosen_tid,
+                            "aggressor":    top_fighter.identity.name,
+                            "defender":     bottom_fighter.identity.name,
+                        },
+                    ))
+
+        # --- Pin accumulation log line — emit at 5-second intervals so
+        # the visible stream gets a recognizable scoring-clock heartbeat
+        # without spamming every tick.
+        if (osaekomi.active and osaekomi.technique_id is not None
+                and osaekomi.ticks_held > 0
+                and osaekomi.ticks_held % 5 == 0
+                and osaekomi.ticks_held < OsaekomiClock.IPPON_TICKS):
+            events.append(Event(
+                tick=current_tick,
+                event_type="OSAEKOMI_ACCUMULATING",
+                description=(
+                    f"[score] osaekomi accumulating "
+                    f"({osaekomi.technique_id}, {osaekomi.ticks_held}s)"
+                ),
+                data={
+                    "technique_id": osaekomi.technique_id,
+                    "ticks_held":   osaekomi.ticks_held,
+                },
+            ))
 
         # --- Fatigue accumulation ---
         self._apply_ne_waza_fatigue(top_fighter, bottom_fighter)

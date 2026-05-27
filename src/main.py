@@ -386,11 +386,14 @@ def _run_one_match(
     place_judoka(b, com_position=(+0.5, 0.0), facing=(-1.0, 0.0))
 
     _print_match_header(a, b, ref)
-    from match import _load_default_technique_catalog
+    from match import (
+        _load_default_technique_catalog, _load_default_ne_waza_catalog,
+    )
     match = Match(
         fighter_a=a, fighter_b=b, referee=ref,
         debug=debug, seed=seed, stream=stream, renderer=renderer,
         technique_catalog=_load_default_technique_catalog(),
+        ne_waza_catalog=_load_default_ne_waza_catalog(),
     )
     match.run()
 
