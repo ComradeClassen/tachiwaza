@@ -5,7 +5,13 @@ into the engine that produces them. Establishes the commitment/exposure
 principle as the universal lever that ties grip mechanics, skill
 progression, throw availability, and signature emergence into one system.*
 
-*Status: Design specification. No code yet. Ring 1 scope.*
+*Status: Built and wired. Ring 1 scope. The symbolic chain described in
+this doc is implemented: PULL emits KuzushiEvents into a decaying
+per-fighter buffer (`kuzushi.py`), `compromised_state` sums the decayed
+buffer, and throws fire from a signature match reading that buffer
+(`throw_signature.py`). Migration in progress: retiring the parallel
+legacy direct-boolean model — see
+`grip-war-and-connective-tissue-v0_2.md` for migration status.*
 *Companion to: `physics-substrate.md`, `grip-sub-loop.md`,
 `biomechanics.md`, `data-model.md`.*
 
