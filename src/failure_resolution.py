@@ -211,6 +211,7 @@ def apply_failure_resolution(
     resolution: FailureResolution,
     attacker: "Judoka",
     composure_drop: float = 0.10,
+    current_tick: int = 0,
 ) -> None:
     """Apply the mechanical consequences of a failed commit to tori.
 
@@ -219,13 +220,27 @@ def apply_failure_resolution(
       - composure_current drops by `composure_drop`
       - BodyState reconfiguration per the Part 6.3 compromised-state config
         matching resolution.outcome (trunk flex, foot state, CoM height)
+      - a SELF_INFLICTED KuzushiEvent recorded into tori's OWN buffer
+        for compromised outcomes that carry kuzushi severity, so the decaying
+        buffer (and the signature-match layer that reads it) sees tori's
+        broken posture rather than only the parallel body_state mutation.
+        Clean resets / clean counters / tactical drops carry zero severity and
+        record nothing. `current_tick` stamps the event's emission tick.
     """
-    from compromised_state import apply_compromised_body_state
+    from compromised_state import (
+        apply_compromised_body_state, self_inflicted_kuzushi_event,
+    )
+    from kuzushi import record_kuzushi_event
     attacker.state.stun_ticks += resolution.recovery_ticks
     attacker.state.composure_current = max(
         0.0, attacker.state.composure_current - composure_drop
     )
     apply_compromised_body_state(attacker, resolution.outcome)
+    event = self_inflicted_kuzushi_event(
+        attacker, resolution.outcome, current_tick,
+    )
+    if event is not None:
+        record_kuzushi_event(attacker, event)
 
 
 # ---------------------------------------------------------------------------

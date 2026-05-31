@@ -81,6 +81,18 @@ class CompromisedStateConfig:
     weight_fraction_right:  Optional[float] = None
     counter_bonuses:        dict[ThrowID, float] = field(default_factory=dict)
 
+    # Self-inflicted kuzushi folded into the decaying buffer.
+    # `kuzushi_vector_rel` is a (forward, lateral) unit-ish vector in tori's
+    # FACING-relative frame: +x = pitched forward over the toes, +y = toward
+    # tori's left (so an airborne RIGHT foot reads as -y). It is rotated into
+    # the mat frame at emit time via tori's facing. `kuzushi_severity` in
+    # [0, 1] scales BASE_SELF_INFLICTED_KUZUSHI_FORCE. Severity 0 (the
+    # default, and every reset / clean-counter outcome) emits no event — the
+    # compromised-state body mutation still applies, but the buffer stays
+    # untouched.
+    kuzushi_vector_rel:     tuple[float, float] = (0.0, 0.0)
+    kuzushi_severity:       float = 0.0
+
 
 # ---------------------------------------------------------------------------
 # CONFIG TABLE (Part 6.3)
@@ -100,6 +112,9 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
                 ThrowID.O_UCHI_GARI:  0.30,
                 ThrowID.KO_UCHI_GARI: 0.20,
             },
+            # Pitched sharply forward over the toes — strong forward break.
+            kuzushi_vector_rel=(1.0, 0.0),
+            kuzushi_severity=0.70,
         ),
 
         # One foot AIRBORNE, other planted carrying full weight — the failed
@@ -113,6 +128,10 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
                 ThrowID.O_UCHI_GARI: 0.35,
                 ThrowID.UCHI_MATA:   0.25,
             },
+            # Right foot airborne, balanced on the left leg — break is toward
+            # the unsupported (right = -y) side with a slight forward lean.
+            kuzushi_vector_rel=(0.3, -0.95),
+            kuzushi_severity=0.60,
         ),
 
         # Seoi-nage specific: back turned, hips above uke's, spine flexed
@@ -124,6 +143,10 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
                 ThrowID.SUMI_GAESHI: 0.55,
                 ThrowID.TAI_OTOSHI:  0.30,
             },
+            # Bent hard forward with uke draped on the back — heavily loaded
+            # forward break, near the top of the severity range.
+            kuzushi_vector_rel=(1.0, 0.0),
+            kuzushi_severity=0.85,
         ),
 
         # Lever-specific stall: fulcrum engaged but lift failed, bent forward
@@ -134,6 +157,10 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
                 ThrowID.SUMI_GAESHI: 0.40,
                 ThrowID.O_SOTO_GARI: 0.30,
             },
+            # Fulcrum engaged, lift stalled, bent forward — moderate forward
+            # break.
+            kuzushi_vector_rel=(1.0, 0.0),
+            kuzushi_severity=0.60,
         ),
 
         # Seoi-nage drop one-knee: CoM down, one knee on the mat. Uke
@@ -146,6 +173,11 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
                 ThrowID.SUMI_GAESHI: 0.45,
                 ThrowID.O_SOTO_GARI: 0.25,
             },
+            # CoM dropped onto one knee — the collapse is mostly vertical
+            # (not representable as a horizontal vector), so a modest forward
+            # component carries direction and severity carries the magnitude.
+            kuzushi_vector_rel=(0.7, 0.0),
+            kuzushi_severity=0.70,
         ),
 
         # Seoi-nage drop two-knee: CoM way down, both knees on the mat.
@@ -159,6 +191,10 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
                 ThrowID.O_SOTO_GARI: 0.30,
                 ThrowID.TAI_OTOSHI:  0.35,
             },
+            # Both knees down — maximum vulnerability. Top of the severity
+            # range; small forward component for direction.
+            kuzushi_vector_rel=(0.5, 0.0),
+            kuzushi_severity=0.95,
         ),
 
         # Foot-sweep rebound: sweeping leg met a planted foot and bounced.
@@ -172,6 +208,10 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
                 ThrowID.DE_ASHI_HARAI: 0.35,
                 ThrowID.KO_UCHI_GARI:  0.25,
             },
+            # Sweeping leg rebounded off a planted foot — lightest state.
+            # Brief lateral wobble toward the airborne (right = -y) side.
+            kuzushi_vector_rel=(0.2, -0.98),
+            kuzushi_severity=0.40,
         ),
 
         # HAJ-49 / HAJ-50 — tactical drop reset. Tori's CoM was never over
@@ -188,6 +228,9 @@ def _configs() -> dict[FailureOutcome, CompromisedStateConfig]:
             weight_fraction_left=0.55,
             weight_fraction_right=0.45,
             counter_bonuses={},
+            # kuzushi_severity left at 0: tori's CoM was never over the
+            # fulcrum, the drop was a feint. No self-inflicted kuzushi to
+            # fold (mirrors HAJ-50's empty counter_bonuses).
         ),
 
         # Non-compromised outcomes — no body-state reconfig, no counter bonus.
@@ -247,6 +290,81 @@ def apply_compromised_body_state(
         bs.foot_state_left.weight_fraction = cfg.weight_fraction_left
     if cfg.weight_fraction_right is not None:
         bs.foot_state_right.weight_fraction = cfg.weight_fraction_right
+
+
+# ---------------------------------------------------------------------------
+# SELF-INFLICTED KUZUSHI (failed-throw state folded into the buffer)
+# ---------------------------------------------------------------------------
+# A failed throw leaves tori off-balance in their OWN right — no opponent
+# pull is behind it. Previously this lived only as a body_state mutation (see
+# apply_compromised_body_state above) plus the _compromised_states tag in
+# match.py, invisible to the decaying kuzushi buffer that the signature-match
+# layer reads. This emitter folds it in as a SELF_INFLICTED contribution so
+# uke's counter-selection sees tori's broken posture through the same channel
+# as a pull or a foot attack.
+#
+# Calibration stub (HAJ-A.7 tunes): a severity-1.0 state delivers
+# BASE_SELF_INFLICTED_KUZUSHI_FORCE units. Tuned so a forward-lean (0.70) and
+# the kneeling states land above the ~40-unit throwable threshold while a
+# sweep rebound (0.40) stays a light, fast-decaying wobble.
+BASE_SELF_INFLICTED_KUZUSHI_FORCE: float = 80.0
+
+
+def _rotate_rel_to_mat(
+    rel: tuple[float, float], facing: tuple[float, float],
+) -> tuple[float, float]:
+    """Rotate a (forward, lateral) facing-relative vector into the mat frame.
+
+    Forward axis = `facing` (unit); lateral +y axis = facing rotated +90°
+    (counterclockwise), i.e. (-fy, fx). Returns a unit vector, or (0, 0) if
+    the inputs collapse to zero length.
+    """
+    rx, ry = rel
+    fx, fy = facing
+    fmag = math.hypot(fx, fy)
+    if fmag < 1e-9:
+        return (0.0, 0.0)
+    fx, fy = fx / fmag, fy / fmag
+    # forward * facing + lateral * (facing rotated +90°)
+    mx = rx * fx + ry * (-fy)
+    my = rx * fy + ry * (fx)
+    m = math.hypot(mx, my)
+    if m < 1e-9:
+        return (0.0, 0.0)
+    return (mx / m, my / m)
+
+
+def self_inflicted_kuzushi_event(
+    attacker: "Judoka", outcome: FailureOutcome, current_tick: int,
+):
+    """Build the SELF_INFLICTED KuzushiEvent for tori's failed-throw state.
+
+    Reads the outcome's CompromisedStateConfig: rotates `kuzushi_vector_rel`
+    into the mat frame via tori's facing and scales
+    BASE_SELF_INFLICTED_KUZUSHI_FORCE by `kuzushi_severity`.
+
+    Returns None when the outcome carries no self-inflicted kuzushi
+    (severity 0, zero vector, or an unconfigured outcome) — e.g. clean
+    resets, clean counters, and TACTICAL_DROP_RESET. Callers append
+    unconditionally and skip the None.
+    """
+    from kuzushi import KuzushiEvent, KuzushiSource
+    cfg = COMPROMISED_STATE_CONFIGS.get(outcome)
+    if cfg is None or cfg.kuzushi_severity <= 0.0:
+        return None
+    facing = attacker.state.body_state.facing
+    vector = _rotate_rel_to_mat(cfg.kuzushi_vector_rel, facing)
+    if vector == (0.0, 0.0):
+        return None
+    magnitude = BASE_SELF_INFLICTED_KUZUSHI_FORCE * cfg.kuzushi_severity
+    if magnitude <= 0.0:
+        return None
+    return KuzushiEvent(
+        tick_emitted=current_tick,
+        vector=vector,
+        magnitude=magnitude,
+        source_kind=KuzushiSource.SELF_INFLICTED,
+    )
 
 
 # ---------------------------------------------------------------------------

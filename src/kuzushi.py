@@ -46,9 +46,14 @@ class KuzushiSource(Enum):
     """Where a kuzushi event came from. Drives source-specific scoring at the
     signature-match layer (HAJ-A.3 onward) — e.g. foot attacks may compose
     with pulls but score differently for sweep-family throws."""
-    PULL        = auto()  # Emitted by a PULL action through an established grip.
-    FOOT_ATTACK = auto()  # Emitted by ko-uchi / o-uchi / de-ashi style foot attacks.
-    OTHER       = auto()  # Catch-all for future emitters; tests use this too.
+    PULL            = auto()  # Emitted by a PULL action through an established grip.
+    FOOT_ATTACK     = auto()  # Emitted by ko-uchi / o-uchi / de-ashi style foot attacks.
+    # Non-pull off-balance sources folded into the same buffer so
+    # the symbolic decaying model is no longer blind to kuzushi that doesn't
+    # originate from an opponent pull.
+    SELF_INFLICTED  = auto()  # Tori's own failed-throw compromised state (Part 6.3).
+    THROW_RESOLUTION = auto()  # Uke driven across the mat by a landing throw (kake).
+    OTHER           = auto()  # Catch-all for future emitters; tests use this too.
 
 
 # ---------------------------------------------------------------------------
@@ -669,4 +674,55 @@ def foot_attack_kuzushi_event(
         vector=direction,
         magnitude=mag,
         source_kind=KuzushiSource.FOOT_ATTACK,
+    )
+
+
+# ===========================================================================
+# THROW_RESOLUTION (kake landing-drive) → KuzushiEvent emission
+# ===========================================================================
+# When a throw lands (IPPON / WAZA_ARI) with a multi-tick drive, uke's CoM is
+# walked across the mat by the throw itself — a maximal, terminal kuzushi that
+# previously only moved uke's com_position without registering in the buffer.
+# This emitter folds that displacement in so a continuing sequence (a partial
+# or a throw the match doesn't immediately reset on) reads uke's just-driven
+# state via the same decaying buffer as every other source.
+#
+# The drive vector arrives in METERS of mat-frame displacement. We scale it
+# into buffer kuzushi-force units; a typical ~0.5–1.5 m drive lands well above
+# the throwable threshold (uke is, after all, being thrown). Calibration stub;
+# HAJ-A.7 will tune. Capped so an outlier drive can't blow out the buffer.
+BASE_THROW_RESOLUTION_KUZUSHI_FORCE: float = 100.0
+THROW_RESOLUTION_DRIVE_CAP_M:        float = 2.0
+
+
+def throw_resolution_kuzushi_event(
+    victim:        "Judoka",
+    drive_vector:  Vector2,
+    current_tick:  int,
+) -> Optional[KuzushiEvent]:
+    """Build the KuzushiEvent emitted into uke's buffer by a landing throw's
+    drive across the mat.
+
+    `drive_vector` is the mat-frame displacement (meters) applied to uke's
+    CoM on a scoring throw. Direction is uke's drive direction; magnitude is
+    the drive length scaled by BASE_THROW_RESOLUTION_KUZUSHI_FORCE and capped
+    at THROW_RESOLUTION_DRIVE_CAP_M.
+
+    Returns None when the drive is zero (snap throws / failed throws apply no
+    drive, so they emit no resolution event).
+    """
+    dx, dy = drive_vector
+    drive_len = math.hypot(dx, dy)
+    if drive_len < 1e-9:
+        return None
+    direction = (dx / drive_len, dy / drive_len)
+    capped = min(drive_len, THROW_RESOLUTION_DRIVE_CAP_M)
+    magnitude = BASE_THROW_RESOLUTION_KUZUSHI_FORCE * capped
+    if magnitude <= 0.0:
+        return None
+    return KuzushiEvent(
+        tick_emitted=current_tick,
+        vector=direction,
+        magnitude=magnitude,
+        source_kind=KuzushiSource.THROW_RESOLUTION,
     )

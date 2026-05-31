@@ -3824,6 +3824,18 @@ class Match:
             bs = defender.state.body_state
             cx, cy = bs.com_position
             bs.com_position = (cx + drive_vector[0], cy + drive_vector[1])
+            # Fold the landing drive into uke's kuzushi buffer so a
+            # continuing sequence reads the just-driven state through the same
+            # decaying channel as every other source. Failed/snap throws apply
+            # zero drive and emit nothing (builder returns None).
+            from kuzushi import (
+                throw_resolution_kuzushi_event, record_kuzushi_event,
+            )
+            drive_event = throw_resolution_kuzushi_event(
+                defender, drive_vector, tick,
+            )
+            if drive_event is not None:
+                record_kuzushi_event(defender, drive_event)
         return list(self._apply_throw_result(
             attacker, defender, throw_id, outcome, net, window_q, tick,
             is_forced=is_forced, execution_quality=eq,
@@ -4646,7 +4658,8 @@ class Match:
         )
         # No composure cost — the throw was prevented, not blown. Tori's
         # read was reasonable; uke just had the right defense available.
-        apply_failure_resolution(resolution, attacker, composure_drop=0.0)
+        apply_failure_resolution(resolution, attacker, composure_drop=0.0,
+                                 current_tick=tick)
         a_name = attacker.identity.name
         self._commit_motivation.pop(a_name, None)
         self._commit_kumi_kata_snapshot.pop(a_name, 0)
@@ -5368,15 +5381,17 @@ class Match:
             apply_failure_resolution(
                 resolution, attacker,
                 composure_drop=0.10 + DESPERATION_COMPOSURE_DROP,
+                current_tick=tick,
             )
         elif is_tactical_drop:
             # HAJ-50 — near-zero composure hit on the outcome itself.
             # Whether tori labelled this as an intentional fake or
             # stumbled into one via a low-signature commit, the cost is
             # a single tick of no-offense and nothing else.
-            apply_failure_resolution(resolution, attacker, composure_drop=0.005)
+            apply_failure_resolution(resolution, attacker, composure_drop=0.005,
+                                     current_tick=tick)
         else:
-            apply_failure_resolution(resolution, attacker)
+            apply_failure_resolution(resolution, attacker, current_tick=tick)
 
         # Track the compromised-state tag so uke's counter attempts during
         # the recovery window get the per-state vulnerability bonus.
