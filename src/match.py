@@ -446,6 +446,20 @@ def _step_direction_sign(
         return +1
     return 0
 
+
+def _off_balance_cause_suffix(source) -> str:
+    """B-3 — map the dominant kuzushi source behind an off-balance beat to a
+    short narration suffix, so the KUZUSHI_INDUCED prose can name the cause.
+    Returns '' for an unknown / absent source (defensive)."""
+    from kuzushi import KuzushiSource
+    return {
+        KuzushiSource.PULL:             " (pulled off balance)",
+        KuzushiSource.FOOT_ATTACK:      " (swept off balance)",
+        KuzushiSource.SELF_INFLICTED:   " (over-committed)",
+        KuzushiSource.THROW_RESOLUTION: " (driven by the throw)",
+    }.get(source, "")
+
+
 # Part 3 force-model calibration stubs. Phase 3 telemetry will tune these.
 JUDOKA_MASS_KG:           float = 80.0   # v0.1 uniform; Part 6 can pull from identity.
 FRICTION_DAMPING:         float = 0.55   # fraction of velocity surviving a tick (planted feet)
@@ -1747,23 +1761,11 @@ class Match:
         self._enforce_stance_leash(self.fighter_a)
         self._enforce_stance_leash(self.fighter_b)
 
-        # Step 9 — kuzushi check (post-update state).
-        a_kuzushi = self._is_kuzushi(self.fighter_a)
-        b_kuzushi = self._is_kuzushi(self.fighter_b)
-        if a_kuzushi and not self._a_was_kuzushi_last_tick:
-            events.append(Event(
-                tick=tick, event_type="KUZUSHI_INDUCED",
-                description=f"[physics] {self.fighter_a.identity.name} off-balance.",
-            ))
-            self._defensive_pressure[self.fighter_a.identity.name].record_kuzushi(tick)
-        if b_kuzushi and not self._b_was_kuzushi_last_tick:
-            events.append(Event(
-                tick=tick, event_type="KUZUSHI_INDUCED",
-                description=f"[physics] {self.fighter_b.identity.name} off-balance.",
-            ))
-            self._defensive_pressure[self.fighter_b.identity.name].record_kuzushi(tick)
-        self._a_was_kuzushi_last_tick = a_kuzushi
-        self._b_was_kuzushi_last_tick = b_kuzushi
+        # Step 9 — kuzushi check (post-update state). B-3 rewire: reads the
+        # decaying kuzushi buffer instead of the CoM-envelope predicate.
+        # Returns the per-fighter off-balance booleans for the downstream
+        # composure-drift and stalemate-counter consumers.
+        a_kuzushi, b_kuzushi = self._check_off_balance(tick, events)
 
         # Steps 10 & 11 — compound COMMIT_THROW handling. HAJ-154 splits
         # this into two phases: a staging tick that fires the pre-commit
@@ -3159,8 +3161,65 @@ class Match:
                 ))
 
     # -----------------------------------------------------------------------
-    # STEP 9 — KUZUSHI CHECK
+    # STEP 9 — KUZUSHI CHECK (B-3: buffer-driven off-balance signal)
     # -----------------------------------------------------------------------
+    def _check_off_balance(
+        self, tick: int, events: list[Event],
+    ) -> tuple[bool, bool]:
+        """Fire KUZUSHI_INDUCED and feed defensive pressure when a fighter's
+        decaying kuzushi buffer magnitude crosses the off-balance threshold.
+
+        B-3 — replaces the per-tick `is_kuzushi` CoM-envelope predicate with
+        a read of the accumulated, decayed kuzushi buffer
+        (`compromised_state`). Edge-triggered per fighter via
+        `_*_was_kuzushi_last_tick`, so the beat fires on the tick the buffer
+        first crosses OFF_BALANCE_MAGNITUDE_THRESHOLD, not every tick it stays
+        above. The resultant (post-cancellation) magnitude is the trigger —
+        mirroring the directional notion of the old predicate — and the
+        dominant source + direction are surfaced on the event for narration.
+
+        Returns the per-fighter off-balance booleans (a, b) so the caller can
+        feed the downstream composure-drift and stalemate-counter consumers,
+        which key off the same off-balance signal.
+        """
+        from kuzushi import compromised_state, OFF_BALANCE_MAGNITUDE_THRESHOLD
+        a_cs = compromised_state(self.fighter_a.kuzushi_events, tick)
+        b_cs = compromised_state(self.fighter_b.kuzushi_events, tick)
+        a_kuzushi = a_cs.magnitude >= OFF_BALANCE_MAGNITUDE_THRESHOLD
+        b_kuzushi = b_cs.magnitude >= OFF_BALANCE_MAGNITUDE_THRESHOLD
+        if a_kuzushi and not self._a_was_kuzushi_last_tick:
+            self._emit_kuzushi_induced(self.fighter_a, a_cs, tick, events)
+        if b_kuzushi and not self._b_was_kuzushi_last_tick:
+            self._emit_kuzushi_induced(self.fighter_b, b_cs, tick, events)
+        self._a_was_kuzushi_last_tick = a_kuzushi
+        self._b_was_kuzushi_last_tick = b_kuzushi
+        return a_kuzushi, b_kuzushi
+
+    def _emit_kuzushi_induced(
+        self, fighter: Judoka, cs, tick: int, events: list[Event],
+    ) -> None:
+        """Append a KUZUSHI_INDUCED event for `fighter` and record the kuzushi
+        tick on their defensive-pressure tracker. `cs` is the fighter's
+        CompromisedState this tick; its dominant source names the cause."""
+        from kuzushi import dominant_kuzushi_source
+        src = dominant_kuzushi_source(fighter.kuzushi_events, tick)
+        events.append(Event(
+            tick=tick, event_type="KUZUSHI_INDUCED",
+            description=(
+                f"[physics] {fighter.identity.name} "
+                f"off-balance{_off_balance_cause_suffix(src)}."
+            ),
+            data={
+                "fighter":   fighter.identity.name,
+                "magnitude": cs.magnitude,
+                "vector":    cs.vector,
+                "source":    src.name if src is not None else None,
+            },
+        ))
+        self._defensive_pressure[fighter.identity.name].record_kuzushi(tick)
+
+    # Legacy CoM-envelope predicate. No longer drives the off-balance signal
+    # (B-3 moved that to _check_off_balance); kept until B-4 retires it.
     def _is_kuzushi(self, judoka: Judoka) -> bool:
         from body_state import is_kuzushi
         leg_strength = min(

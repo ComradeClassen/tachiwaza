@@ -160,6 +160,42 @@ def compromised_state(
 
 
 # ---------------------------------------------------------------------------
+# OFF-BALANCE SIGNAL (B-3 — kuzushi buffer drives the KUZUSHI_INDUCED beat)
+# ---------------------------------------------------------------------------
+# The match layer's off-balance signal (the [physics] KUZUSHI_INDUCED event +
+# the defensive-pressure feed) reads the decaying buffer's resultant magnitude
+# and fires when it crosses this threshold, replacing the instantaneous
+# CoM-envelope predicate (body_state.is_kuzushi, retired in B-4).
+#
+# Calibration: tuned so the edge-triggered firing rate roughly matches the
+# pre-rewire is_kuzushi rate on reference seeds 2041330979 (15 events) and
+# 7004 (4 events). The resultant (post-cancellation) magnitude is used rather
+# than total_decayed_magnitude, mirroring is_kuzushi's directional notion of
+# "CoM pushed past the recoverable envelope" — a fighter yanked equally two
+# ways is not net off-balance.
+OFF_BALANCE_MAGNITUDE_THRESHOLD: float = 70.0
+
+
+def dominant_kuzushi_source(
+    events:       Iterable[KuzushiEvent],
+    current_tick: int,
+) -> Optional[KuzushiSource]:
+    """Return the KuzushiSource contributing the most decayed magnitude to
+    the buffer at `current_tick`, or None when the buffer is empty / fully
+    decayed. Lets the off-balance beat name its cause (pulled / swept /
+    over-committed / thrown) for narration."""
+    totals: dict[KuzushiSource, float] = {}
+    for ev in events:
+        d = decay_factor(current_tick - ev.tick_emitted)
+        if d <= 0.0:
+            continue
+        totals[ev.source_kind] = totals.get(ev.source_kind, 0.0) + ev.magnitude * d
+    if not totals:
+        return None
+    return max(totals, key=totals.get)
+
+
+# ---------------------------------------------------------------------------
 # BUFFER HELPERS
 # ---------------------------------------------------------------------------
 def fresh_buffer() -> deque[KuzushiEvent]:
