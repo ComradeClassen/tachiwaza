@@ -136,9 +136,12 @@ def test_commit_threshold_for_reads_worked_template() -> None:
     assert commit_threshold_for(ThrowID.UCHI_MATA) == UCHI_MATA.commit_threshold
 
 
-def test_commit_threshold_for_default_on_legacy() -> None:
-    # Sumi-gaeshi has no worked template; default applies.
-    assert commit_threshold_for(ThrowID.SUMI_GAESHI) == DEFAULT_COMMIT_THRESHOLD
+def test_commit_threshold_for_sumi_gaeshi_reads_template() -> None:
+    # B-3a — Sumi-gaeshi migrated to a worked template (commit_threshold 0.60),
+    # so commit_threshold_for reads the template, not DEFAULT_COMMIT_THRESHOLD.
+    # Every v0.1 throw is now templated, so the default path is dormant.
+    assert commit_threshold_for(ThrowID.SUMI_GAESHI) == 0.60
+    assert DEFAULT_COMMIT_THRESHOLD == 0.5
 
 
 # ---------------------------------------------------------------------------

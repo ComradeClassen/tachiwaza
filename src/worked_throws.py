@@ -742,8 +742,17 @@ TOMOE_NAGE: LeverThrow = LeverThrow(
     commit_threshold=0.60,                       # slightly lower — sacrifice nature
     counter_vulnerability=0.65,                  # tori is on the ground; miss = bad
     failure_outcome=FailureSpec(
-        primary=FailureOutcome.TORI_ON_BOTH_KNEES_UKE_STANDING,
-        secondary=FailureOutcome.UKE_VOLUNTARY_NEWAZA,
+        # REAR sacrifice (back-roll, foot on uke's abdomen): like Sumi-gaeshi,
+        # a failed tomoe-nage leaves tori SUPINE WITH UKE ON TOP — the risk is
+        # being pinned or reversed, not a forward kneeling collapse. (Foot
+        # placement differs from sumi — abdomen vs inner thigh — but the
+        # sacrifice direction and failure geometry are the same.)
+        #   primary   — uke follows to the ground on top: pin pathway, and
+        #               opens the HAJ-155 sacrifice ne-waza door.
+        #   secondary — a sharp uke reverses tori with a counter throw.
+        #   tertiary  — fatigued/panicked uke can't capitalize: clean reset.
+        primary=FailureOutcome.UKE_VOLUNTARY_NEWAZA,
+        secondary=FailureOutcome.KAESHI_WAZA_GENERIC,
         tertiary=FailureOutcome.STANCE_RESET,
     ),
 )
@@ -817,6 +826,89 @@ O_GURUMA: LeverThrow = LeverThrow(
 
 
 # ---------------------------------------------------------------------------
+# SUMI-GAESHI (隅返) — Lever sutemi, corner sacrifice (sibling of Tomoe-nage)
+# Both are rear sacrifice (sutemi-waza) throws in the lever-sutemi family:
+# tori drops under, a leg/instep hooks uke and gravity finishes the rotation.
+# Modeled directly on TOMOE_NAGE, parameterized for the side/corner line:
+#   - kuzushi vector carries a lateral component (uke drawn to the FRONT
+#     CORNER, not straight forward as in Tomoe-nage's direct line);
+#   - the canonical over-the-top collar grip (HAJ-161) is accepted on the
+#     tsurite hand alongside the lapel (mirrors O-guruma's typed-collar list).
+# Same physics family (lever-sutemi), same low min_lift / on-the-ground
+# fulcrum, same sacrifice commit threshold and counter vulnerability.
+# ---------------------------------------------------------------------------
+SUMI_GAESHI: LeverThrow = LeverThrow(
+    name="Sumi-gaeshi",
+    execution_ticks=2,
+    drive_distance=1.1,
+    kuzushi_requirement=KuzushiRequirement(
+        direction=(0.85, 0.5),                   # forward-CORNER — uke drawn to the front corner
+        tolerance_rad=math.radians(28),
+        min_displacement_past_recoverable=0.10,
+    ),
+    force_grips=(
+        GripRequirement(
+            hand="left_hand",
+            grip_type=(GripTypeV2.SLEEVE_HIGH,),    # hikite at elbow/tricep
+            min_depth=GripDepth.STANDARD,
+            mode=GripMode.DRIVING,
+        ),
+        GripRequirement(
+            hand="right_hand",
+            # HAJ-161 — canonical over-the-top collar grip is the sumi-gaeshi
+            # tsurite; lapel grips are accepted too (kenka-yotsu entries).
+            grip_type=(
+                GripTypeV2.COLLAR_BACK,
+                GripTypeV2.COLLAR_SIDE,
+                GripTypeV2.LAPEL_HIGH,
+                GripTypeV2.LAPEL_LOW,
+            ),
+            min_depth=GripDepth.STANDARD,
+            mode=GripMode.DRIVING,
+        ),
+    ),
+    required_forces=(
+        ForceRequirement(
+            hand="left_hand", kind=ForceKind.PULL,
+            direction=(0.85, 0.45, 0.3),         # pull forward-corner-up as tori drops
+            min_magnitude_n=330.0,
+        ),
+    ),
+    min_lift_force_n=200.0,                       # LOW — tori goes under; the hook + gravity finish it
+    body_part_requirement=LeverBodyPartRequirement(
+        fulcrum_body_part=BodyPart.RIGHT_FOOT,   # instep/shin hooks uke's inner thigh
+        fulcrum_contact_on_uke=BodyPart.CORE,
+        fulcrum_offset_below_uke_com_m=0.0,      # tori on the ground; offset not the constraint
+        tori_supporting_feet=SupportRequirement.ONE_KNEE_DOWN_ONE_BENT,
+        # Sutemi with a hook below uke — a uke hip drop helps tori, so hip
+        # block is not a defense (mirrors Tomoe-nage). Stays False.
+    ),
+    uke_posture_requirement=UkePostureRequirement(
+        trunk_sagittal_range=(math.radians(-5), math.radians(30)),
+        trunk_frontal_range=(math.radians(-25), math.radians(25)),   # wider — corner direction
+        com_height_range=(0.85, 1.30),
+        uke_com_over_fulcrum=True,
+    ),
+    commit_threshold=0.60,                        # sacrifice nature (mirror Tomoe-nage)
+    counter_vulnerability=0.65,                   # tori is on the ground; a miss is bad
+    failure_outcome=FailureSpec(
+        # REAR sacrifice: tori drops onto his back to finish, so a failed
+        # sumi-gaeshi leaves him SUPINE WITH UKE ON TOP — the risk is being
+        # pinned or reversed, NOT a forward kneeling collapse. (This diverges
+        # from Tomoe-nage's TORI_ON_BOTH_KNEES primary, which is a drop-throw
+        # posture that doesn't fit a back-roll sacrifice.)
+        #   primary   — uke follows to the ground on top: pin pathway, and
+        #               opens the HAJ-155 sacrifice ne-waza door.
+        #   secondary — a sharp uke reverses tori with a counter throw.
+        #   tertiary  — fatigued/panicked uke can't capitalize: clean reset.
+        primary=FailureOutcome.UKE_VOLUNTARY_NEWAZA,
+        secondary=FailureOutcome.KAESHI_WAZA_GENERIC,
+        tertiary=FailureOutcome.STANCE_RESET,
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
 # REGISTRY
 # Maps ThrowID → worked template. Throws not in this table fall back to the
 # legacy THROW_DEFS / EdgeRequirement path in throws.py.
@@ -836,6 +928,9 @@ WORKED_THROWS: dict[ThrowID, ThrowTemplate] = {
     ThrowID.HARAI_GOSHI_CLASSICAL: HARAI_GOSHI_CLASSICAL,
     ThrowID.TOMOE_NAGE:            TOMOE_NAGE,
     ThrowID.O_GURUMA:              O_GURUMA,
+    # B-3a — sumi-gaeshi migrated off the legacy two-factor path (sibling
+    # of Tomoe-nage). With this entry all 8 live throws are templated.
+    ThrowID.SUMI_GAESHI:           SUMI_GAESHI,
 }
 
 

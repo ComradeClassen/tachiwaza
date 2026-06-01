@@ -116,12 +116,14 @@ def perceive_edge_distance(
 # ACTUAL-SIGNATURE MATCH
 # Ground-truth 0.0–1.0 match for a throw given current match state.
 #
-# Two paths:
-#   - Worked-template path (Part 5): throw has an entry in WORKED_THROWS →
-#     dispatch to throw_signature.signature_match, which runs the full
-#     four-dimension weighted match (Part 4.2).
-#   - Legacy path: two 0.5-weight factors (grip prereqs + kuzushi predicate).
-#     Used for throws not yet instantiated as Part-5 templates.
+# Single path (B-4): every v0.1 ThrowID now has a Part-5 worked template
+# (Sumi-gaeshi was the last to migrate, B-3a), so scoring always dispatches to
+# throw_signature.signature_match — the full four-dimension weighted match
+# (Part 4.2). The legacy two-factor fallback (grip-prereq + kuzushi predicate)
+# was retired here: with no template-less live throw it was statically
+# unreachable, and it carried an oddity (the attacker's leg strength fed into
+# uke's kuzushi-recovery envelope) that retires with it. A None template now
+# means a throw_id with no scoring model and cannot fire → score 0.0.
 # ---------------------------------------------------------------------------
 def actual_signature_match(
     throw_id: ThrowID,
@@ -132,36 +134,14 @@ def actual_signature_match(
 ) -> float:
     from worked_throws import worked_template_for
     template = worked_template_for(throw_id)
-    if template is not None:
-        from throw_signature import signature_match
-        base = signature_match(template, attacker, defender, graph,
-                               current_tick=current_tick)
-    else:
-        # --- Legacy two-factor path ---
-        td_ = THROW_DEFS.get(throw_id)
-        if td_ is None:
-            return 0.0
-        grip_score = 0.5 if graph.satisfies(
-            td_.requires, attacker.identity.name, attacker.identity.dominant_side
-        ) else 0.0
-        from body_state import is_kuzushi
-        leg_strength = min(
-            attacker.effective_body_part("right_leg"),
-            attacker.effective_body_part("left_leg"),
-        ) / 10.0
-        d_fatigue = 0.5 * (
-            defender.state.body["right_leg"].fatigue
-            + defender.state.body["left_leg"].fatigue
-        )
-        d_composure = _composure_mod(defender)
-        kuzushi_score = 0.5 if is_kuzushi(
-            defender.state.body_state,
-            leg_strength=leg_strength,
-            fatigue=d_fatigue,
-            composure=d_composure,
-        ) else 0.0
-        base = grip_score + kuzushi_score
-
+    if template is None:
+        # No worked template ⇒ no scoring model. The two-factor fallback that
+        # used to score here was retired in B-4; a template-less throw can no
+        # longer fire. Total-function guard for defensive callers.
+        return 0.0
+    from throw_signature import signature_match
+    base = signature_match(template, attacker, defender, graph,
+                           current_tick=current_tick)
     return _apply_stance_preference(base, throw_id, attacker, defender)
 
 

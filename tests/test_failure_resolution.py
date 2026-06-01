@@ -220,44 +220,12 @@ def test_multi_tick_failure_resolves_at_kake_commit_tick() -> None:
     assert "outcome" in failed[0].data
 
 
-def test_match_failed_branch_for_legacy_throw_is_unchanged() -> None:
-    """Non-worked throws (e.g. SUMI_GAESHI, the only remaining legacy-only
-    throw after HAJ-29 backfill) still fall through to the generic
-    'failed (no commitment, net X.XX)' event shape with no outcome data.
-    Elite belt forces N=1 so the resolution lands in a single tick.
-    """
-    from enums import BeltRank
-    from match import Match
-    from referee import build_suzuki
-    from worked_throws import WORKED_THROWS
-    # Sanity — SUMI_GAESHI must remain legacy-only for this test to mean what
-    # it claims. If someone adds it to WORKED_THROWS, swap to another throw.
-    assert ThrowID.SUMI_GAESHI not in WORKED_THROWS
-    random.seed(0)
-    t, s = _pair()
-    t.identity.belt_rank = BeltRank.BLACK_5
-    m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
-    # HAJ-141 — direct-resolve unit test; bypass the engagement-distance gate.
-    from enums import Position
-    m.position = Position.GRIPPING
-    import match as match_module
-    real_resolve = match_module.resolve_throw
-    match_module.resolve_throw = lambda *a, **kw: ("FAILED", -5.0)
-    try:
-        events = m._resolve_commit_throw(t, s, ThrowID.SUMI_GAESHI, tick=9)
-        # HAJ-148 + HAJ-157 V1/V5 — N=1 throws spread sub-events across
-        # 3 ticks (RK+KA, TS, KC) before the outcome lands on T+3.
-        events = list(events)
-        events.extend(m._advance_throws_in_progress(tick=10))
-        events.extend(m._advance_throws_in_progress(tick=11))
-        followup: list = []
-        m._resolve_consequences(tick=12, events=followup)
-        events.extend(followup)
-    finally:
-        match_module.resolve_throw = real_resolve
-    failed = [ev for ev in events if ev.event_type == "FAILED"]
-    assert failed
-    assert "outcome" not in failed[0].data
+# NOTE (B-4): test_match_failed_branch_for_legacy_throw_is_unchanged was
+# removed here. It exercised the legacy generic 'failed (no commitment)'
+# branch using SUMI_GAESHI as the last template-less throw. SUMI_GAESHI is now
+# templated (B-3a), so every v0.1 throw routes through the FailureSpec path and
+# that branch is unreachable in live play. The worked-template FAILED-with-
+# outcome path is covered by the UCHI_MATA test above.
 
 
 # ---------------------------------------------------------------------------

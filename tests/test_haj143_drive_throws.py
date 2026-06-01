@@ -117,12 +117,14 @@ def test_drive_class_throws_carry_seed_values() -> None:
     assert TOMOE_NAGE.drive_distance > 0.0
 
 
-def test_lookup_helpers_default_for_legacy_throws() -> None:
-    """Throws not in WORKED_THROWS (legacy ThrowDef path) default to
-    snap so the legacy pipeline keeps its 1-tick resolution."""
-    # SUMI_GAESHI is on the legacy path per worked_throws.py header.
-    assert execution_ticks_for(ThrowID.SUMI_GAESHI) == 1
-    assert drive_distance_for(ThrowID.SUMI_GAESHI) == 0.0
+def test_lookup_helpers_round_trip_worked_templates() -> None:
+    """The duration/drive lookups round-trip each worked template's values.
+    B-3a — SUMI_GAESHI migrated to a worked template (execution_ticks 1→2,
+    drive_distance 0.0→1.1), so it now reports its template values rather than
+    the legacy snap defaults. With every v0.1 throw templated, the 1-tick /
+    0.0 default path is dormant (no live ThrowID is template-less)."""
+    assert execution_ticks_for(ThrowID.SUMI_GAESHI) == 2
+    assert drive_distance_for(ThrowID.SUMI_GAESHI) == 1.1
     # Worked-throw lookups round-trip the template values.
     assert execution_ticks_for(ThrowID.O_UCHI_GARI) == 3
     assert drive_distance_for(ThrowID.O_UCHI_GARI) == 2.0

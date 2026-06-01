@@ -80,6 +80,7 @@ NON_HIP_LOADING_THROWS = {
     ThrowID.KO_UCHI_GARI,       # ashi-waza, hand+foot
     ThrowID.O_UCHI_GARI,        # inner-leg reap, no hip load
     ThrowID.TOMOE_NAGE,         # sacrifice, foot-on-belt below uke (hip drop helps tori)
+    ThrowID.SUMI_GAESHI,        # sacrifice, instep-hook below uke (hip drop helps tori)
 }
 
 
@@ -308,15 +309,15 @@ def test_block_clears_commit_bookkeeping() -> None:
     assert t.identity.name not in m._commit_kumi_kata_snapshot
 
 
-def test_legacy_throw_without_template_cannot_be_blocked() -> None:
-    """A throw without a worked template (legacy ThrowDef path) has no
-    body_part_requirement and so cannot be hip-blocked. The action is a
-    no-op rather than a crash."""
+def test_non_hip_loading_throw_cannot_be_blocked() -> None:
+    """A non-hip-loading throw (hip_loading=False) cannot be hip-blocked —
+    there is no hip-loading geometry to deny. The action is a no-op rather
+    than a crash. Sumi-gaeshi (sutemi) is hip_loading=False."""
     from match import Match, _ThrowInProgress
     from referee import build_suzuki
     t, s = _pair()
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki())
-    # SUMI_GAESHI has no worked template (still on legacy path).
+    # SUMI_GAESHI is a sacrifice throw — hip_loading=False, so no hip block.
     m._throws_in_progress[t.identity.name] = _ThrowInProgress(
         attacker_name=t.identity.name, defender_name=s.identity.name,
         throw_id=ThrowID.SUMI_GAESHI, start_tick=0, compression_n=3,

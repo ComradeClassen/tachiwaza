@@ -28,9 +28,9 @@ from throw_signature import signature_match
 from worked_throws import (
     WORKED_THROWS, worked_template_for,
     O_GOSHI, TAI_OTOSHI, KO_UCHI_GARI, O_UCHI_GARI,
-    HARAI_GOSHI, HARAI_GOSHI_CLASSICAL, TOMOE_NAGE, O_GURUMA,
+    HARAI_GOSHI, HARAI_GOSHI_CLASSICAL, TOMOE_NAGE, O_GURUMA, SUMI_GAESHI,
 )
-from perception import actual_signature_match
+from perception import actual_signature_match, _apply_stance_preference
 from kuzushi import seed_kuzushi_from_velocity
 import main as main_module
 
@@ -64,13 +64,16 @@ def _seat_deep_grips(graph, attacker, defender, tsurite=GripTypeV2.LAPEL_HIGH):
 # ---------------------------------------------------------------------------
 # Registry and display data
 # ---------------------------------------------------------------------------
-def test_worked_throws_registry_has_all_twelve() -> None:
-    """Original four + eight backfill = twelve worked templates."""
-    assert len(WORKED_THROWS) == 12
+def test_worked_throws_registry_has_all_thirteen() -> None:
+    """Original four + eight backfill + Sumi-gaeshi (B-3a) = thirteen worked
+    templates. With Sumi-gaeshi templated, every v0.1 ThrowID is now on the
+    worked path and the legacy two-factor fallback is unreachable in live play.
+    """
+    assert len(WORKED_THROWS) == 13
     for tid in (ThrowID.O_GOSHI, ThrowID.TAI_OTOSHI, ThrowID.KO_UCHI_GARI,
                 ThrowID.O_UCHI_GARI, ThrowID.HARAI_GOSHI,
                 ThrowID.HARAI_GOSHI_CLASSICAL, ThrowID.TOMOE_NAGE,
-                ThrowID.O_GURUMA):
+                ThrowID.O_GURUMA, ThrowID.SUMI_GAESHI):
         assert tid in WORKED_THROWS
 
 
@@ -91,6 +94,7 @@ def test_classifications_match_part_5_5_notes() -> None:
     assert HARAI_GOSHI_CLASSICAL.classification == ThrowClassification.LEVER
     assert TOMOE_NAGE.classification            == ThrowClassification.LEVER
     assert O_GURUMA.classification              == ThrowClassification.LEVER
+    assert SUMI_GAESHI.classification           == ThrowClassification.LEVER
     # Couple forms:
     assert KO_UCHI_GARI.classification == ThrowClassification.COUPLE
     assert O_UCHI_GARI.classification  == ThrowClassification.COUPLE
@@ -104,7 +108,7 @@ def test_commit_thresholds_within_classification_bounds() -> None:
             f"{throw.name} Couple threshold out of range"
         )
     for throw in (O_GOSHI, TAI_OTOSHI, HARAI_GOSHI_CLASSICAL,
-                  TOMOE_NAGE, O_GURUMA):
+                  TOMOE_NAGE, O_GURUMA, SUMI_GAESHI):
         assert 0.60 <= throw.commit_threshold <= 0.80, (
             f"{throw.name} Lever threshold out of range"
         )
@@ -129,10 +133,75 @@ def test_hip_lever_throws_demand_fulcrum_offset() -> None:
     assert 0.0 < TAI_OTOSHI.body_part_requirement.fulcrum_offset_below_uke_com_m < 0.10
 
 
-def test_tomoe_nage_failure_primary_is_on_both_knees() -> None:
-    """Tomoe-nage sacrifices standing position — the primary failure state
-    matches the two-knee exposure per Part 6.3."""
-    assert TOMOE_NAGE.failure_outcome.primary == FailureOutcome.TORI_ON_BOTH_KNEES_UKE_STANDING
+def test_tomoe_nage_failure_routes_to_uke_advantage_not_kneeling() -> None:
+    """Tomoe-nage is a REAR sacrifice (back-roll, foot on uke's abdomen) — a
+    failed attempt leaves tori supine with uke on top, so the failure routes
+    to uke's ground/counter advantage (pin or reversal), NOT a forward
+    kneeling collapse. Same geometry as Sumi-gaeshi."""
+    spec = TOMOE_NAGE.failure_outcome
+    assert spec.primary == FailureOutcome.UKE_VOLUNTARY_NEWAZA
+    assert spec.secondary == FailureOutcome.KAESHI_WAZA_GENERIC
+    assert spec.primary != FailureOutcome.TORI_ON_BOTH_KNEES_UKE_STANDING
+
+
+# ---------------------------------------------------------------------------
+# Sumi-gaeshi (B-3a) — sibling of Tomoe-nage; mirrors the tomoe-nage coverage
+# ---------------------------------------------------------------------------
+def test_sumi_gaeshi_failure_routes_to_uke_advantage_not_kneeling() -> None:
+    """Sumi-gaeshi is a REAR sacrifice — tori drops onto his back to finish.
+    A failed attempt leaves tori supine with uke on top, so the failure routes
+    to uke's ground/counter advantage (pin or reversal), NOT a forward kneeling
+    collapse (TORI_ON_BOTH_KNEES is a drop-throw posture, wrong for a back
+    roll)."""
+    spec = SUMI_GAESHI.failure_outcome
+    assert spec.primary == FailureOutcome.UKE_VOLUNTARY_NEWAZA     # uke on top / pin pathway
+    assert spec.secondary == FailureOutcome.KAESHI_WAZA_GENERIC    # uke reverses into a throw
+    assert spec.primary != FailureOutcome.TORI_ON_BOTH_KNEES_UKE_STANDING
+
+
+def test_sumi_gaeshi_kuzushi_vector_is_corner_not_straight() -> None:
+    """Unlike Tomoe-nage's straight-forward kuzushi line, Sumi-gaeshi draws
+    uke to the front CORNER — the kuzushi vector carries a lateral component."""
+    assert TOMOE_NAGE.kuzushi_requirement.direction[1] == 0.0
+    assert SUMI_GAESHI.kuzushi_requirement.direction[1] != 0.0
+
+
+def test_sumi_gaeshi_accepts_collar_tsurite() -> None:
+    """HAJ-161 — the canonical over-the-top collar grip is an accepted tsurite
+    on the right hand alongside the lapel grips."""
+    right = next(g for g in SUMI_GAESHI.force_grips if g.hand == "right_hand")
+    assert GripTypeV2.COLLAR_BACK in right.grip_type
+
+
+def test_sumi_gaeshi_routes_through_worked_template() -> None:
+    """actual_signature_match dispatches Sumi-gaeshi to the template scorer
+    (+ stance-preference), not the legacy two-factor scorer. Sumi-gaeshi has a
+    MIRRORED stance preference, so the routed value is the template signature
+    passed through _apply_stance_preference (this dyad is MATCHED)."""
+    t, s = _pair()
+    g = GripGraph()
+    _seat_deep_grips(g, t, s)
+    seed_kuzushi_from_velocity(s, (-0.5, 0.0))   # forward in uke's frame
+    template = worked_template_for(ThrowID.SUMI_GAESHI)
+    assert template is not None
+    direct = signature_match(template, t, s, g)
+    expected = _apply_stance_preference(direct, ThrowID.SUMI_GAESHI, t, s)
+    routed = actual_signature_match(ThrowID.SUMI_GAESHI, t, s, g)
+    assert abs(routed - expected) < 1e-9, f"routed {routed} != expected {expected}"
+
+
+def test_sumi_gaeshi_scores_with_corner_kuzushi() -> None:
+    """Worked-scenario sanity: with deep grips and a forward-corner kuzushi
+    seeded on uke, the worked template clears its commit threshold."""
+    t, s = _pair()
+    g = GripGraph()
+    _seat_deep_grips(g, t, s)
+    # Sato faces (-1, 0); forward-corner in uke's body frame ≈ mat (-x, +y).
+    seed_kuzushi_from_velocity(s, (-0.45, 0.25))
+    score = signature_match(SUMI_GAESHI, t, s, g)
+    assert score >= SUMI_GAESHI.commit_threshold, (
+        f"sumi-gaeshi scored {score} < threshold {SUMI_GAESHI.commit_threshold}"
+    )
 
 
 # ---------------------------------------------------------------------------

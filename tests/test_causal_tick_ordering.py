@@ -246,10 +246,12 @@ def test_simultaneous_commits_legal_consequences_distribute() -> None:
 # ===========================================================================
 # Sacrifice-throw chain — throw → land → ne-waza door across 3 ticks
 # ===========================================================================
-def test_sacrifice_throw_chain_distributes_across_three_ticks() -> None:
+def test_sacrifice_throw_chain_distributes_across_distinct_ticks() -> None:
     """A stuffed sacrifice-style commit (we approximate with any STUFFED
-    outcome) produces the chain: commit → stuff → ne-waza door, each on
-    a distinct tick (N, N+1, N+2)."""
+    outcome) produces the chain: commit → stuff → ne-waza door, each on a
+    distinct tick. B-3a — Sumi-gaeshi is now a 2-tick worked throw (was a
+    1-tick snap), so the spread is one tick longer and the outcome lands on
+    N+4 (was N+3)."""
     t, s, m = _elite_match(seed=3)
     real_resolve = match_module.resolve_throw
     match_module.resolve_throw = lambda *a, **kw: ("STUFFED", -1.0)
@@ -258,12 +260,12 @@ def test_sacrifice_throw_chain_distributes_across_three_ticks() -> None:
         N = 12
         # Tick N: commit (silent in prose) + RK + KA sub-events.
         collected.extend(m._resolve_commit_throw(t, s, ThrowID.SUMI_GAESHI, tick=N))
-        # Ticks N+1, N+2: TS and KC sub-events emit from _advance.
+        # Ticks N+1..N+3: drive + TS + KC sub-events emit from _advance.
         collected.extend(m._advance_throws_in_progress(tick=N + 1))
         collected.extend(m._advance_throws_in_progress(tick=N + 2))
-        # Tick N+3: STUFFED resolution fires; ne-waza door scheduled for N+4.
+        collected.extend(m._advance_throws_in_progress(tick=N + 3))
+        # Tick N+4: STUFFED resolution fires; ne-waza door scheduled for N+5.
         m._resolve_consequences(tick=N + 3, events=collected)
-        # Tick N+4: ne-waza door fires.
         m._resolve_consequences(tick=N + 4, events=collected)
     finally:
         match_module.resolve_throw = real_resolve
@@ -272,13 +274,12 @@ def test_sacrifice_throw_chain_distributes_across_three_ticks() -> None:
     stuff_tick = next(
         e.tick for e in collected if e.event_type == "STUFFED"
     )
-    # HAJ-157 V1/V5 — N=1 spread defers the outcome to N+3.
     assert commit_tick == N
-    assert stuff_tick == N + 3
+    assert stuff_tick == N + 4
     # Every event from the queue carries the from_consequence_queue mark.
     queue_events = [e for e in collected if e.data.get("from_consequence_queue")]
-    assert any(e.tick == N + 3 for e in queue_events), (
-        "stuff resolution should be a queue event on N+3"
+    assert any(e.tick == N + 4 for e in queue_events), (
+        "stuff resolution should be a queue event on N+4"
     )
 
 

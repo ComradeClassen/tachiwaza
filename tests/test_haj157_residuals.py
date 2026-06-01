@@ -299,16 +299,17 @@ def test_simultaneous_stuffs_dedupe_to_single_newaza_door() -> None:
     match_module.resolve_throw = lambda *a, **kw: ("STUFFED", -2.0)
     try:
         T = 5
-        # Both fighters commit elite N=1 sacrifice throws on the same
-        # tick; both stuffs land on T+3 from the consequence queue.
+        # Both fighters commit sacrifice throws on the same tick. B-3a —
+        # Sumi-gaeshi is now a 2-tick worked throw, so both stuffs land on
+        # T+4 (was T+3) from the consequence queue.
         m._resolve_commit_throw(t, s, ThrowID.SUMI_GAESHI, tick=T)
         m._resolve_commit_throw(s, t, ThrowID.SUMI_GAESHI, tick=T)
-        # Walk the schedule (offsets 1, 2) and let RESOLVE_KAKE_N1 fire
-        # both stuffs on T+3.
+        # Walk the schedule (offsets 1, 2, 3), then resolve on T+4.
         m._advance_throws_in_progress(tick=T + 1)
         m._advance_throws_in_progress(tick=T + 2)
+        m._advance_throws_in_progress(tick=T + 3)
         outcomes: list = []
-        m._resolve_consequences(tick=T + 3, events=outcomes)
+        m._resolve_consequences(tick=T + 4, events=outcomes)
     finally:
         match_module.resolve_throw = real
 
@@ -326,7 +327,7 @@ def test_simultaneous_stuffs_dedupe_to_single_newaza_door() -> None:
         f"expected exactly 1 ne-waza door consequence; got "
         f"{len(door_consequences)}"
     )
-    assert door_consequences[0].due_tick == T + 4
+    assert door_consequences[0].due_tick == T + 5
 
 
 def test_single_stuff_still_queues_exactly_one_newaza_door() -> None:
@@ -339,11 +340,14 @@ def test_single_stuff_still_queues_exactly_one_newaza_door() -> None:
     match_module.resolve_throw = lambda *a, **kw: ("STUFFED", -2.0)
     try:
         T = 5
+        # B-3a — Sumi-gaeshi is now a 2-tick worked throw; the stuff lands on
+        # T+4 (was T+3) and the ne-waza door is queued for T+5.
         m._resolve_commit_throw(t, s, ThrowID.SUMI_GAESHI, tick=T)
         m._advance_throws_in_progress(tick=T + 1)
         m._advance_throws_in_progress(tick=T + 2)
+        m._advance_throws_in_progress(tick=T + 3)
         outcomes: list = []
-        m._resolve_consequences(tick=T + 3, events=outcomes)
+        m._resolve_consequences(tick=T + 4, events=outcomes)
     finally:
         match_module.resolve_throw = real
 

@@ -243,12 +243,14 @@ def test_vulnerability_pulls_from_worked_template() -> None:
     assert abs(attacker_vulnerability_for(ThrowID.SEOI_NAGE) - 0.55) < 1e-9
 
 
-def test_vulnerability_default_for_legacy_throws() -> None:
-    # SUMI_GAESHI is the only v0.1 throw without a Part-5 template after
-    # HAJ-29 backfill — default 0.30 applies.
+def test_vulnerability_sumi_gaeshi_pulls_from_template() -> None:
+    # B-3a — SUMI_GAESHI migrated to a worked template; its vulnerability now
+    # comes from the template's counter_vulnerability (0.65), not the legacy
+    # 0.30 default. With every v0.1 throw templated, the 0.30 default path is
+    # dormant (no live ThrowID is template-less).
     from worked_throws import WORKED_THROWS
-    assert ThrowID.SUMI_GAESHI not in WORKED_THROWS
-    assert attacker_vulnerability_for(ThrowID.SUMI_GAESHI) == 0.30
+    assert ThrowID.SUMI_GAESHI in WORKED_THROWS
+    assert abs(attacker_vulnerability_for(ThrowID.SUMI_GAESHI) - 0.65) < 1e-9
 
 
 # ---------------------------------------------------------------------------

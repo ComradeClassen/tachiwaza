@@ -200,11 +200,13 @@ def test_actual_signature_match_routes_to_template_for_worked_throws() -> None:
     # baseline-state score is strictly positive where legacy was zero.
     worked_score = actual_signature_match(ThrowID.UCHI_MATA, t, s, g)
     assert worked_score > 0.0
-    # A ThrowID not in the worked registry still uses legacy and returns 0.
-    # SUMI_GAESHI is the only v0.1 throw without a Part-5 template.
-    assert ThrowID.SUMI_GAESHI not in WORKED_THROWS
-    legacy_score = actual_signature_match(ThrowID.SUMI_GAESHI, t, s, g)
-    assert legacy_score == 0.0
+    # B-4 — the legacy two-factor fallback was retired. Every v0.1 ThrowID
+    # (SUMI_GAESHI was the last, B-3a) now has a worked template, so
+    # actual_signature_match always routes to the template scorer. A
+    # template-less throw_id would score 0.0 (total-function guard), but no
+    # live ThrowID is template-less.
+    assert ThrowID.SUMI_GAESHI in WORKED_THROWS
+    assert actual_signature_match(ThrowID.SUMI_GAESHI, t, s, g) >= 0.0
 
 
 def test_template_scorer_matches_direct_call() -> None:
