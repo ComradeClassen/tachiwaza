@@ -7,6 +7,30 @@ A second copy of nine engine files exists under `design-notes/Hajime Design Syst
 
 ---
 
+> **Refresh (2026-05-31) — kuzushi-as-cause migration completed.**
+> The central tension this audit flagged (two parallel "kuzushi" models running
+> side by side) has been resolved. There is now **exactly one** kuzushi model
+> wired into the engine: the decaying kuzushi buffer
+> (`kuzushi.compromised_state`). It drives the off-balance `KUZUSHI_INDUCED`
+> signal, the defensive-pressure feed, throw signatures, and failed-throw
+> self-kuzushi.
+> - The off-balance trigger was rewired to read the buffer
+>   (`Match._check_off_balance`, magnitude threshold `OFF_BALANCE_MAGNITUDE_THRESHOLD`).
+>   The old `match._is_kuzushi` wrapper is **deleted**; `body_state.is_kuzushi`
+>   and the recoverable-envelope geometry remain as **latent CoM math** (unit-
+>   tested in `test_body_state`, no live engine consumer).
+> - The legacy two-factor `actual_signature_match` fallback is **retired**
+>   (and the attacker-leg-strength-into-uke's-envelope oddity with it).
+> - `SUMI_GAESHI` now has a worked template — **all 13 ThrowIDs are templated**.
+>
+> Inline §2 and §3 below are updated to current reality, and open ambiguities
+> #1–#3 are marked resolved. The dated module table and "tension" notes are
+> left as the original 2026-05-28 snapshot for historical context. Current
+> suite: **1485 tests, 1 failure** — still only
+> `test_higher_fight_iq_yields_larger_magnitude` (pre-existing, unrelated).
+
+---
+
 ## Test suite result
 
 - **Total collected: 1447 tests** (`tests/` only). **1446 passed, 1 failed, 0 errors, 0 skipped.** (JUnit: `tests=1447 failures=1 errors=0 skipped=0`, wall 13.2s.)
@@ -29,12 +53,12 @@ Descriptions are taken verbatim-ish from each file's top-of-file comment / prima
 
 | Module | Date | What it appears to do |
 |---|---|---|
-| `body_state.py` ⚠ | 2026-04-18 | Physics Part 1: `BodyState` + geometry; `is_kuzushi` (CoM-outside-recoverable-envelope predicate), posture derivation. |
+| `body_state.py` | 2026-05-31 | Physics Part 1: `BodyState` + geometry; recoverable-envelope + `is_kuzushi` (CoM-outside-envelope predicate, now **latent geometry only** — retired as a kuzushi signal 2026-05-31), posture derivation. |
 | `grip_presence_gate.py` ⚠ | 2026-04-21 | HAJ-36: formal grip-presence commit gate (precondition layer on throw commit). |
 | `commit_motivation.py` ⚠ | 2026-04-24 | HAJ-67: non-scoring attack motivations as a typed concept (extends false-attack pathway). |
 | `compromised_state.py` ⚠ | 2026-04-26 | Physics Part 6.3: failed-throw compromised-state spec (tori-side state machine after a missed throw). |
 | `failure_resolution.py` ⚠ | 2026-04-26 | Physics 4.5/6.3: failure-outcome routing when a committed throw doesn't clear threshold. |
-| `perception.py` ⚠ | 2026-04-26 | Physics 3.5: actual-vs-perceived signature gap; `actual_signature_match` (two paths — see archaeology). |
+| `perception.py` | 2026-05-31 | Physics 3.5: actual-vs-perceived signature gap; `actual_signature_match` (**single worked-template path** since 2026-05-31; legacy two-factor fallback retired). |
 | `throw_signature.py` ⚠ | 2026-04-26 | Physics 4.2: four-dimension signature match; `match_kuzushi_vector` reads uke's decayed buffer. |
 | `counter_windows.py` ⚠ | 2026-04-27 | Physics 6.2: the three counter-windows as state regions. |
 | `position_machine.py` ⚠ | 2026-04-27 | Position state machine: legal transitions, throw-possibility gating. |
@@ -229,9 +253,9 @@ So kuzushi is **emitted as a cause by PULL/FOOT_ATTACK actions**, not (only) as 
 
 ### 2. Per-fighter decaying kuzushi-event buffer → compromised state? Or a direct off-balance flip?
 
-**Both exist, for different consumers.**
+**As of 2026-05-31: the buffer is the single model.** *(Original audit read "Both exist, for different consumers" — that has since been resolved by the migration; see below.)*
 
-**The new event-buffer model is real and complete.** Each `Judoka` owns a per-fighter buffer `kuzushi_events` (a `deque`, default factory `fresh_buffer()` with `maxlen=KUZUSHI_BUFFER_CAPACITY=20`; [src/kuzushi.py:160-169](src/kuzushi.py), wired on `judoka.py`). Decay is a 5-tick half-life ([src/kuzushi.py:88-100](src/kuzushi.py): `decay_factor(age) = 0.5 ** (age/5)`). The compromised state is **computed** by summing decayed event contributions ([src/kuzushi.py:124-154](src/kuzushi.py)):
+**The event-buffer model is real and complete.** Each `Judoka` owns a per-fighter buffer `kuzushi_events` (a `deque`, default factory `fresh_buffer()` with `maxlen=KUZUSHI_BUFFER_CAPACITY=20`; [src/kuzushi.py:160-169](src/kuzushi.py), wired on `judoka.py`). Decay is a 5-tick half-life ([src/kuzushi.py:88-100](src/kuzushi.py): `decay_factor(age) = 0.5 ** (age/5)`). The compromised state is **computed** by summing decayed event contributions ([src/kuzushi.py:124-154](src/kuzushi.py)):
 ```python
 def compromised_state(events, current_tick) -> CompromisedState:
     rx = ry = total = 0.0
@@ -243,25 +267,18 @@ def compromised_state(events, current_tick) -> CompromisedState:
     mag = (rx*rx + ry*ry) ** 0.5
     return CompromisedState(vector=(rx,ry), magnitude=mag, total_decayed_magnitude=total)
 ```
-This is consumed by the throw-signature layer (see §3), not by a boolean flag.
+This is consumed by the throw-signature layer (see §3) **and** by the off-balance signal (below).
 
-**The OLD direct off-balance predicate also still runs.** Separately, each tick `match._tick` calls `_is_kuzushi(fighter)` and emits a `KUZUSHI_INDUCED` "off-balance" event ([src/match.py:1751-1764](src/match.py)):
+**The off-balance signal now reads the same buffer (RESOLVED).** Each tick the kuzushi check emits a `KUZUSHI_INDUCED` "off-balance" event and feeds defensive pressure when a fighter's decaying buffer magnitude crosses a threshold — edge-triggered, with the dominant source named for narration ([src/match.py](src/match.py), `Match._check_off_balance` / `_emit_kuzushi_induced`):
 ```python
-a_kuzushi = self._is_kuzushi(self.fighter_a)
-...
+a_cs = compromised_state(self.fighter_a.kuzushi_events, tick)
+a_kuzushi = a_cs.magnitude >= OFF_BALANCE_MAGNITUDE_THRESHOLD   # 70.0, calibrated
 if a_kuzushi and not self._a_was_kuzushi_last_tick:
-    events.append(Event(tick=tick, event_type="KUZUSHI_INDUCED",
-        description=f"[physics] {self.fighter_a.identity.name} off-balance."))
+    # KUZUSHI_INDUCED event carries {magnitude, vector, source}; cause-named
+    # description e.g. "[physics] X off-balance (pulled off balance)."
     self._defensive_pressure[...].record_kuzushi(tick)
 ```
-`_is_kuzushi` ([src/match.py:3164-3181](src/match.py)) delegates to `body_state.is_kuzushi`, which is a **direct, instantaneous geometry predicate** — "CoM projection outside recoverable_envelope" ([src/body_state.py:275-289](src/body_state.py)):
-```python
-def is_kuzushi(body_state, leg_strength, fatigue, composure) -> bool:
-    envelope = recoverable_envelope(body_state, leg_strength, fatigue, composure)
-    if not envelope: return True
-    return not _point_in_polygon(body_state.com_position, envelope)
-```
-So **the "off-balance" narration event and the defensive-pressure feed are still driven by the old direct CoM-envelope flip, NOT by the decaying buffer.** The buffer-derived compromised state and the boolean off-balance predicate are two parallel notions of "kuzushi" living side by side. (The `kuzushi.py` header at lines 7-21 explicitly acknowledges the older `body_state.is_kuzushi` predicate and the name clash with `compromised_state.py`.)
+The old direct CoM-envelope flip (`match._is_kuzushi` → `body_state.is_kuzushi`) **has been retired** as the off-balance signal. `body_state.is_kuzushi` ([src/body_state.py:275](src/body_state.py)) — "CoM projection outside recoverable_envelope" — remains **defined as latent geometry / CoM math** (unit-tested in `test_body_state`) but has **no live engine consumer**; `match._is_kuzushi` is deleted. So the off-balance event, the defensive-pressure feed, throw signatures, and failed-throw self-kuzushi all read the **one** decaying buffer. The two-parallel-notions tension the original audit recorded no longer exists.
 
 ### 3. Do throws fire from a signature match against accumulated kuzushi, or from a grip-depth precondition checked at commit time?
 
@@ -285,15 +302,14 @@ Header at [src/throw_signature.py:110-113](src/throw_signature.py): *"This dimen
 
 **Grip depth is not the firing precondition** — it feeds the *force-application* dimension ([src/throw_signature.py:174-243](src/throw_signature.py), via `delivered_pull_force(grip_type, depth_level, …)`) and the pull-magnitude formula, i.e. it modulates the score. The only hard preconditions checked at commit time are coarse gates, not depth: an **engagement-distance gate** (cannot commit in `STANDING_DISTANT` with no owned grip edges, [src/match.py:3220-3232](src/match.py)) and an **OOB gate** ([src/match.py:3241-3251](src/match.py)). A separate `grip_presence_gate.py` (HAJ-36) exists as a formal grip-presence gate and is consumed by `action_selection.py`, but it gates *whether the selector offers a commit*, not the signature firing math.
 
-**Caveat (mixed model #2):** `actual_signature_match` has a **legacy two-factor fallback** for any throw without a worked template ([src/perception.py:139-163](src/perception.py)):
+**Caveat (mixed model #2) — RESOLVED (2026-05-31).** `actual_signature_match` previously had a **legacy two-factor fallback** (grip-prereq + `is_kuzushi` boolean) for any throw without a worked template. That fallback has been **retired**: `SUMI_GAESHI` (the last template-less live throw) now has a worked template, so all 13 ThrowIDs route through the four-dimension `signature_match`, and the `else`-branch was deleted. A template-less `throw_id` now scores `0.0` (total-function guard). The attacker-leg-strength-into-uke's-`is_kuzushi` oddity flagged below lived only in that branch and is gone with it. `actual_signature_match` is now a single path:
 ```python
-else:  # --- Legacy two-factor path ---
-    grip_score = 0.5 if graph.satisfies(td_.requires, ...) else 0.0
-    ...
-    kuzushi_score = 0.5 if is_kuzushi(defender.state.body_state, leg_strength=..., ...) else 0.0
-    base = grip_score + kuzushi_score
+template = worked_template_for(throw_id)
+if template is None:
+    return 0.0                      # no scoring model — cannot fire
+base = signature_match(template, attacker, defender, graph, current_tick=current_tick)
+return _apply_stance_preference(base, throw_id, attacker, defender)
 ```
-That fallback uses the **old `is_kuzushi` boolean predicate**, not the buffer. So a throw that lacks a worked template still fires off the inverted/direct model. The 12 backfilled throws have worked templates (per `test_backfilled_throws`), so the new path dominates in practice — but the old path is still wired and reachable. (Possible latent bug worth your eyes, not concluded here: this branch computes `leg_strength` from the **attacker's** legs but passes it into the **defender's** `is_kuzushi` call — [src/perception.py:148-162](src/perception.py).)
 
 ### 4. What is `grip_cascade` in code — definition, all branches, and what selects among them?
 
@@ -343,9 +359,9 @@ So: narration is **partly a separate data-driven layer (`throw_narration.py` + Y
 
 ## Open ambiguities (need your judgement)
 
-1. **Two coexisting kuzushi models — intended end state?** The decaying buffer (`kuzushi.compromised_state`) drives throw signatures, but the old direct `body_state.is_kuzushi` predicate still drives the `"off-balance"` event, the defensive-pressure feed ([src/match.py:1758](src/match.py)), and the legacy `actual_signature_match` fallback ([src/perception.py:147-163](src/perception.py)). Is the direct predicate meant to be retired, or is it a permanent second signal? Mechanically both run every tick.
-2. **Legacy fallback reachability.** How many live `ThrowID`s lack a worked template and thus hit the old two-factor path? I confirmed the 12 backfilled throws *have* templates, but didn't enumerate every `ThrowID` against `worked_template_for`. If any in-use throw has no template, it fires off the inverted model.
-3. **Possible attacker/defender mix-up** at [src/perception.py:148-162](src/perception.py): `leg_strength` is computed from the **attacker's** legs but fed into the **defender's** `is_kuzushi`. Could be deliberate (modeling tori's pulling leverage) or a bug. I'm showing it, not concluding.
+1. **Two coexisting kuzushi models — intended end state?** **RESOLVED (2026-05-31).** The direct `body_state.is_kuzushi` predicate was retired as a signal. The decaying buffer is now the single model: it drives throw signatures *and* the off-balance event / defensive-pressure feed (via `Match._check_off_balance`). `body_state.is_kuzushi` stays as latent CoM geometry with no live consumer.
+2. **Legacy fallback reachability.** **RESOLVED (2026-05-31).** Enumerated: all 13 `ThrowID`s now have worked templates (`SUMI_GAESHI` was the last to migrate), so no live throw hit the two-factor path — which has since been deleted. The fallback is gone, not merely unreachable.
+3. **Possible attacker/defender mix-up** at the old `perception.py` two-factor branch (`leg_strength` from the attacker fed into the defender's `is_kuzushi`). **RESOLVED (2026-05-31)** — moot: that branch was deleted with the legacy fallback, so the oddity no longer exists in the code.
 4. **`viewer_capture.py` status** — production-unreferenced (only a comment in `match.py` and 3 tests reference it). Is it a deliberately-kept reusable layer, or dead since `match_viewer.py` became canonical? (Memory note says `viewer_capture` is the reusable capture layer, but no live viewer imports it.)
 5. **`narration/bench_voice.py`** — public-API re-export but no consumer; scaffold or abandoned?
 6. **`position_machine.py`** — 1 src importer, **0 test coverage**. Is the position state machine still authoritative, or has `match.py`/`ne_waza.py` absorbed its responsibilities?
