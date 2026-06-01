@@ -1949,6 +1949,7 @@ class Match:
             ))
 
         self._print_events(events)
+        self._print_kuzushi_buffer_debug(tick)
 
         if self._debug is not None:
             self._debug.maybe_pause(tick, events)
@@ -6395,6 +6396,59 @@ class Match:
                 clock = _format_match_clock(self.max_ticks - ev.tick)
                 prose_line = f"{clock}  {_render_prose(ev.description)}"
             print(_render_side_by_side(debug_line, prose_line))
+
+    def _print_kuzushi_buffer_debug(self, tick: int) -> None:
+        """Instrumentation — surface the decaying kuzushi buffer's internals on
+        the debug stream so the kuzushi model is observable tick-by-tick.
+
+        Read-only: this method computes nothing that feeds back into the sim
+        (it re-reads the same `compromised_state` / `dominant_kuzushi_source`
+        the off-balance signal already consumes). It emits two line kinds,
+        both `[kuzushi]`-tagged and tick-stamped like the engineer event lines:
+
+          * a DEPOSIT line for each event emitted THIS tick
+            (``tick_emitted == tick``) — its source, raw magnitude
+            contribution, and unit vector — so a deposit and its subsequent
+            decay across following ticks are both legible; and
+          * a per-fighter BUFFER readout on ticks where the buffer is
+            non-empty: the resultant (threshold-compared) magnitude `mag`, the
+            uncancelled total `tot`, the resultant unit direction `dir`, the
+            dominant source `dom`, and the live-event count `n`.
+
+        Debug stream only — the coach/prose streams are untouched, and `both`
+        is left alone so its side-by-side layout stays aligned.
+        """
+        if self._stream != "debug":
+            return
+        from kuzushi import compromised_state, dominant_kuzushi_source
+        for fighter in (self.fighter_a, self.fighter_b):
+            name = fighter.identity.name
+            buf = fighter.kuzushi_events
+            # Deposit lines: events stamped this tick (a fresh contribution).
+            for ev in buf:
+                if ev.tick_emitted == tick:
+                    vx, vy = ev.vector
+                    print(
+                        f"t{tick:03d}: [kuzushi] {name} +{ev.source_kind.name} "
+                        f"mag={ev.magnitude:.1f} vec=({vx:+.2f},{vy:+.2f})"
+                    )
+            # Buffer readout: only on ticks where the buffer holds events.
+            if not buf:
+                continue
+            cs = compromised_state(buf, tick)
+            rx, ry = cs.vector
+            rmag = math.hypot(rx, ry)
+            if rmag > 1e-9:
+                dir_s = f"({rx / rmag:+.2f},{ry / rmag:+.2f})"
+            else:
+                dir_s = "(net-cancelled)"
+            dom = dominant_kuzushi_source(buf, tick)
+            dom_s = dom.name if dom is not None else "-"
+            print(
+                f"t{tick:03d}: [kuzushi] {name} buf "
+                f"mag={cs.magnitude:.1f} tot={cs.total_decayed_magnitude:.1f} "
+                f"dir={dir_s} dom={dom_s} n={len(buf)}"
+            )
 
     def _print_header(self) -> None:
         a = self.fighter_a.identity
