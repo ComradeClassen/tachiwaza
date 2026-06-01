@@ -282,6 +282,16 @@ def is_kuzushi(
 
     True when the judoka's CoM has exited the region from which they can
     still recover balance.
+
+    NOTE (final kuzushi migration): this instantaneous CoM-envelope predicate
+    is NO LONGER the engine's off-balance / kuzushi signal — that is now the
+    decaying kuzushi buffer (kuzushi.compromised_state, read by
+    Match._check_off_balance). This function is retained as standalone
+    recoverable-envelope geometry / CoM math (exercised by test_body_state)
+    and has no live engine consumer. Do not re-wire it as a kuzushi signal; if
+    a consumer ever genuinely needs a "literally falling this instant" check
+    distinct from accumulated kuzushi, that is the one legitimate reason to
+    revive a narrow form of it.
     """
     envelope = recoverable_envelope(body_state, leg_strength, fatigue, composure)
     if not envelope:

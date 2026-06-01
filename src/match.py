@@ -3218,26 +3218,12 @@ class Match:
         ))
         self._defensive_pressure[fighter.identity.name].record_kuzushi(tick)
 
-    # Legacy CoM-envelope predicate. No longer drives the off-balance signal
-    # (B-3 moved that to _check_off_balance); kept until B-4 retires it.
-    def _is_kuzushi(self, judoka: Judoka) -> bool:
-        from body_state import is_kuzushi
-        leg_strength = min(
-            judoka.effective_body_part("right_leg"),
-            judoka.effective_body_part("left_leg"),
-        ) / 10.0
-        leg_fatigue = 0.5 * (
-            judoka.state.body["right_leg"].fatigue
-            + judoka.state.body["left_leg"].fatigue
-        )
-        ceiling = max(1.0, float(judoka.capability.composure_ceiling))
-        composure = max(0.0, min(1.0, judoka.state.composure_current / ceiling))
-        return is_kuzushi(
-            judoka.state.body_state,
-            leg_strength=leg_strength,
-            fatigue=leg_fatigue,
-            composure=composure,
-        )
+    # Final migration — the CoM-envelope off-balance predicate (the former
+    # _is_kuzushi wrapper over body_state.is_kuzushi) is fully retired. The
+    # decaying kuzushi buffer (_check_off_balance) is now the sole off-balance
+    # / kuzushi signal in the engine. body_state.is_kuzushi and the
+    # recoverable-envelope geometry remain defined (CoM math, still unit-
+    # tested in test_body_state) but are no longer wired as a match signal.
 
     # -----------------------------------------------------------------------
     # STEPS 10-11 — COMMIT_THROW RESOLUTION (Part 6.1 skill-compression aware)
