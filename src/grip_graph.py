@@ -402,9 +402,10 @@ class GripGraph:
         the grip's resistance, depth degrades one step along the strip chain
         (DEEP → STANDARD → POCKET → SLIPPING → stripped).
 
-        `strip_force` is in Newtons; Part 3's STRIP action will supply it.
-        Until then, match.py does not call this — so grips only degrade via
-        force_break (fatigue) and voluntary release.
+        `strip_force` is in Newtons, supplied by the STRIP action in the
+        action ladder — match.py calls this from the ActionKind.STRIP
+        handler (see match.py, `apply_strip_pressure` call site). Grips
+        also degrade via force_break (fatigue) and voluntary release.
         """
         from force_envelope import FORCE_ENVELOPES, grip_strength as _grip_strength
 
