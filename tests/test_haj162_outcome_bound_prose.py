@@ -94,23 +94,39 @@ def _seat_both_grips(graph, a, b):
 # ===========================================================================
 # AC#1 — initiative-aware grip-seating prose
 # ===========================================================================
+# HAJ-225 — the first-grip line is now data-driven (grip_narration.yaml) and
+# the one-sided case can read as contested. These markers cover every leader-
+# first variant (uncontested + contested) so the tests assert the *shape*
+# (asymmetric, leader-first) without pinning a single string.
+_ASYMMETRIC_FIRST_GRIP_MARKERS = (
+    "secures the first grip",   # uncontested
+    "wins the lead grip",       # uncontested / contested
+    "gets the first grip",      # contested
+    "lands the lead grip",      # contested
+    "takes the lead hand",      # contested
+)
+
+
 def test_grip_seating_prose_renders_asymmetric_when_only_leader_has_grips() -> None:
     """The t003 anchor: at the cascade-staging tick only the leader has
     seated grips. The transition prose reads as the leader securing the
     first grip — not 'Both fighters lock,' which would be dishonest by
-    one fighter."""
+    one fighter. HAJ-225 — string is data-driven; assert the asymmetric
+    leader-first shape rather than one exact variant."""
     from narration.altitudes.mat_side import _grip_seating_prose
     t, s, m = _new_match()
     m.begin()
     _seat_one_grip(m.grip_graph, t, s)  # only Tanaka has a grip
-    line = _grip_seating_prose(m)
-    assert "secures the first grip" in line, (
-        f"expected asymmetric line; got: {line!r}"
+    line = _grip_seating_prose(m, tick=3)
+    assert line != "Both fighters lock onto their grips."
+    assert any(mark in line for mark in _ASYMMETRIC_FIRST_GRIP_MARKERS), (
+        f"expected an asymmetric first-grip line; got: {line!r}"
     )
     assert t.identity.name in line
     assert s.identity.name in line
-    # The follower phrasing makes clear the second fighter didn't grip.
-    assert "reaches but finds nothing" in line
+    assert line.startswith(t.identity.name), (
+        f"leader's name should lead the line: {line!r}"
+    )
 
 
 def test_grip_seating_prose_renders_canonical_when_both_have_grips() -> None:
@@ -121,26 +137,23 @@ def test_grip_seating_prose_renders_canonical_when_both_have_grips() -> None:
     t, s, m = _new_match()
     m.begin()
     _seat_both_grips(m.grip_graph, t, s)
-    line = _grip_seating_prose(m)
+    line = _grip_seating_prose(m, tick=3)
     assert line == "Both fighters lock onto their grips."
 
 
 def test_grip_seating_prose_handles_either_fighter_as_leader() -> None:
     """Symmetry — the asymmetric line works when either side leads.
-    The leader's name appears first; the follower's name appears with
-    the 'reaches but finds nothing' phrasing."""
+    The leader's name appears first; the follower's name appears after."""
     from narration.altitudes.mat_side import _grip_seating_prose
     # Sato leads.
     t, s, m = _new_match(seed=2)
     m.begin()
     _seat_one_grip(m.grip_graph, s, t)
-    line = _grip_seating_prose(m)
-    # Sato secures, Tanaka reaches.
+    line = _grip_seating_prose(m, tick=5)
+    # Sato leads, Tanaka follows.
     assert line.startswith(s.identity.name)
-    assert "secures the first grip" in line
-    assert (
-        line.index(t.identity.name) > line.index("secures")
-    ), (
+    assert any(mark in line for mark in _ASYMMETRIC_FIRST_GRIP_MARKERS)
+    assert line.index(t.identity.name) > line.index(s.identity.name), (
         f"follower's name should appear after leader's in the line: {line!r}"
     )
 
@@ -159,9 +172,14 @@ def test_full_match_emits_asymmetric_grip_prose_on_first_engagement() -> None:
     with contextlib.redirect_stdout(buf):
         m.run()
     out = buf.getvalue()
-    # The first grip-seating beat should be the asymmetric line, not
-    # the canonical "Both fighters lock" claim.
-    seating_index = out.find("secures the first grip")
+    # The first grip-seating beat should be an asymmetric line, not the
+    # canonical "Both fighters lock" claim. HAJ-225 — accept any asymmetric
+    # variant (contested or uncontested).
+    seating_index = min(
+        (out.find(mark) for mark in _ASYMMETRIC_FIRST_GRIP_MARKERS
+         if out.find(mark) >= 0),
+        default=-1,
+    )
     assert seating_index >= 0, (
         f"expected asymmetric grip-seating prose somewhere in:\n{out}"
     )

@@ -114,18 +114,26 @@ def decompose_grip_deepen(
 
 def decompose_grip_strip(
     stripper: "Judoka", target_edge: "GripEdge", tick: int,
-    succeeded: bool,
+    had_effect: bool,
 ) -> list[BodyPartEvent]:
-    """Stripping pressure was applied to an opponent's edge. The narrative
-    beat is the stripper's hand *breaking* (succeeded) or *snapping*
-    (still alive) the opponent's grip. HAJ-146 — strip events always
-    carry intent=BREAK regardless of skill: that's the structural purpose
-    of a strip."""
+    """Stripping pressure was applied to an opponent's edge.
+
+    The narrative beat is the stripper's hand *breaking* the grip (when the
+    strip had any mechanical effect — degraded a level or removed it) or
+    *snapping* at it fruitlessly (when the grip held with no effect). HAJ-225
+    — `had_effect` discriminates: pre-fix a partial degrade emitted a SNAP
+    that the mat-side narrator read as "can't budge it," misreporting a
+    successful partial strip as a failure. Now SNAP is reserved for the
+    genuine no-effect case; partial and full strips carry BREAK and are
+    narrated off the GRIP_DEGRADE / GRIP_STRIPPED engine events.
+
+    HAJ-146 — strip events always carry intent=BREAK regardless of skill:
+    that's the structural purpose of a strip."""
     mods = compute_modifiers(
         stripper, execution_axis="stripping",
         commitment=Commitment.COMMITTING,
     )
-    verb = BodyPartVerb.BREAK if succeeded else BodyPartVerb.SNAP
+    verb = BodyPartVerb.BREAK if had_effect else BodyPartVerb.SNAP
     target = (
         target_from_grip_target(target_edge.target_location.value)
         or target_from_grip_type_v2(target_edge.grip_type_v2.name)

@@ -135,7 +135,7 @@ Each item now carries a **status** drawn from the audit. Buckets reordered by wh
 
 ### Bucket D — Narration (finish the migration — was "build")
 
-- **D-1 — Extend data-driven narration to mat-side grip/movement/state prose.** *Status:* pattern exists (`throw_narration.py` + YAML); extend it to `mat_side.py`'s inline strings.
+- **D-1 — Extend data-driven narration to mat-side grip/movement/state prose.** *Status:* grip-war slice landed in HAJ-225. Added `data/grip_narration.yaml` + `src/grip_narration.py` (mirroring the `throw_narration.py` pattern) and migrated the inline mat-side strip / first-grip f-strings to it: successful strips now read as partial ("drags the lapel grip down to a pocket") or full ("rips the lapel grip loose"), distinct from the failed-strip "can't budge it"; the first-grip tick has a contested variant. Movement/state prose migration remains future work.
 - **D-2 — Cut the "crisp and explosive" bloat / give grip-establish variety.** *Status:* content edit; most meaningful after D-1 and after A-2 makes the underlying event read as contested.
 
 ### Bucket E — Rendering / ordering bugs (untouched by audit; stand as-is)

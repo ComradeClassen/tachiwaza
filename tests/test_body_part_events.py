@@ -449,7 +449,7 @@ def test_strip_always_emits_break_intent() -> None:
         grip_type_v2=GripTypeV2.LAPEL_HIGH, depth_level=GripDepth.STANDARD,
         strength=1.0, established_tick=0,
     )
-    bpes = decompose_grip_strip(t, edge, tick=1, succeeded=True)
+    bpes = decompose_grip_strip(t, edge, tick=1, had_effect=True)
     assert bpes[0].intent is GripIntent.BREAK
 
 

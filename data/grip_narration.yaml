@@ -1,0 +1,59 @@
+# grip_narration.yaml
+# HAJ-225 — data-driven mat-side prose for grip-war beats that used to be
+# inline f-strings in narration/altitudes/mat_side.py.
+#
+# Loaded by src/grip_narration.py. Each key maps to a list of variant
+# templates; one is chosen deterministically per beat from a tick-seeded
+# RNG so replays produce identical prose. Templates are str.format'd with
+# the fields listed per key. Missing file / empty list falls back to the
+# constants baked into grip_narration.py (which mirror the pre-HAJ-225
+# inline strings), so the coach stream never goes silent.
+
+# ---------------------------------------------------------------------------
+# STRIP OUTCOMES (off the GRIP_STRIPPED / GRIP_DEGRADE engine events and the
+# failed-attempt BodyPartEvent). The contest now reads three ways: the grip
+# is ripped off, dragged down a level, or held.
+# ---------------------------------------------------------------------------
+
+# Full strip — GRIP_STRIPPED. Fields: {stripper}, {target}, {grip}.
+strip_full:
+  - "{stripper} rips {target}'s {grip} grip loose."
+  - "{stripper} tears {target}'s {grip} grip clean off."
+  - "{stripper} peels {target}'s {grip} grip away entirely."
+  - "{stripper} breaks {target}'s {grip} grip — and it's gone."
+
+# Partial strip — GRIP_DEGRADE. The grip survives but is dragged shallower.
+# Fields: {stripper}, {target}, {grip}, {depth}.
+strip_partial:
+  - "{stripper} breaks {target}'s {grip} grip down to a {depth}."
+  - "{stripper} drags {target}'s {grip} grip down to a {depth}."
+  - "{stripper} works {target}'s {grip} grip loose, down to a {depth}."
+  - "{stripper} fights {target}'s {grip} grip down to a {depth}."
+
+# Failed strip — no mechanical effect. Fields: {actor}, {target_phrase}.
+strip_failed:
+  - "{actor} tries to rip {target_phrase} but can't budge it."
+  - "{actor} digs at {target_phrase} but it holds."
+  - "{actor} fights {target_phrase} but can't strip it free."
+
+# ---------------------------------------------------------------------------
+# FIRST GRIP (closing → grip_war transition). With HAJ-224's single-hand
+# first grip the leader seats one grip and the off-hand follows a beat later,
+# so the initiation tick is a genuine contest, not always a clean shut-out.
+# ---------------------------------------------------------------------------
+
+# Both fighters already gripped on the transition tick. No fields.
+both_grips:
+  - "Both fighters lock onto their grips."
+
+# Leader has the lead grip; follower whiffs. Fields: {leader}, {follower}.
+first_grip_uncontested:
+  - "{leader} secures the first grip — {follower} reaches but finds nothing."
+  - "{leader} wins the lead grip; {follower} comes up empty."
+
+# Leader has the lead grip; follower contests it. Fields: {leader}, {follower}.
+first_grip_contested:
+  - "{leader} gets the first grip, but {follower} fights for the inside."
+  - "{leader} lands the lead grip — {follower} frames against it, denying the second."
+  - "{leader} wins the first grip; {follower} fights to intercept the next."
+  - "{leader} takes the lead hand — {follower} battles to break the angle."

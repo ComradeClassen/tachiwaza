@@ -349,6 +349,24 @@ OFF_HAND_SEAT_LAG_TICKS: int = 3
 STRIP_FORCE_FACTOR: float = 1.3
 
 
+def _grip_label_for(edge: "GripEdge") -> str:
+    """HAJ-225 — short human label for a grip ('lapel' / 'sleeve' / 'collar'
+    / 'belt' / ...), used in mat-side strip prose. Derives from the target
+    location, falling back to a spaced-out form of whatever it is."""
+    loc = edge.target_location.value
+    if loc.endswith("lapel"):
+        return "lapel"
+    if loc.endswith("sleeve"):
+        return "sleeve"
+    if "collar" in loc:
+        return "collar"
+    if loc == "belt":
+        return "belt"
+    if loc.endswith("back_gi"):
+        return "back"
+    return loc.strip("_").replace("_", " ")
+
+
 def is_out_of_bounds(judoka: Judoka) -> bool:
     """HAJ-127 — True when the fighter's CoM is outside the contest area.
 
@@ -2164,13 +2182,31 @@ class Match:
                 )
                 if result is not None:
                     result.tick = tick
-                    events.append(result)
-                    succeeded = (
-                        pre_alive
-                        and target_edge not in self.grip_graph.edges
+                    # HAJ-225 — enrich the strip event so the mat-side
+                    # narrator can author a plain-language line (the engine
+                    # description is the raw debug form). The stripper is the
+                    # acting judoka; the owner is the grip-holder.
+                    owner = self._owner(target_edge)
+                    result.data["stripper"] = judoka.identity.name
+                    result.data["owner"] = (
+                        owner.identity.name if owner is not None else ""
                     )
+                    result.data["grip_label"] = _grip_label_for(target_edge)
+                    result.data["new_depth"] = target_edge.depth_level.name
+                    events.append(result)
+                    # Both a partial degrade and a full strip "had effect" —
+                    # the BPE carries BREAK so the failed-strip narrator
+                    # (SNAP-only) doesn't misread them as "can't budge it".
                     self._attach_bpe(result, decompose_grip_strip(
-                        judoka, target_edge, tick, succeeded=succeeded,
+                        judoka, target_edge, tick, had_effect=True,
+                    ))
+                else:
+                    # No mechanical effect — the grip held. No engine Event
+                    # (the graph didn't change), but emit a failed-attempt
+                    # BPE so the mat-side narrator can still read the attempt
+                    # as the genuine "can't budge it" failure. HAJ-225.
+                    self._attach_bpe(None, decompose_grip_strip(
+                        judoka, target_edge, tick, had_effect=False,
                     ))
 
             elif act.kind == ActionKind.RELEASE and act.edge is not None:

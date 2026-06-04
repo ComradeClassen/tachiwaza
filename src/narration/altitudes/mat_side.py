@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Optional, TYPE_CHECKING
 
@@ -27,6 +28,7 @@ from narration.word_verbs import (
 )
 from narration.reader import Reader
 from significance import THRESHOLD_MAT_SIDE
+import grip_narration
 
 if TYPE_CHECKING:
     from match import Match
@@ -159,11 +161,15 @@ _DEFERRED_PULL_K_TICKS: int = 3
 
 # Always-promote engine events — their bare description is already
 # coach-voice prose, so the clock log echoes them rather than re-authoring.
+# HAJ-225 — GRIP_STRIPPED is NO LONGER always-promoted: its bare description
+# is the raw debug form ("X loses left_lapel grip on Y — stripped"). It is now
+# authored as plain-language prose by `_detect_grip_strip_outcome` off the
+# data-driven grip_narration layer.
 _ALWAYS_PROMOTE_EVENT_TYPES: frozenset[str] = frozenset({
     "SCORE_AWARDED", "IPPON_AWARDED", "THROW_LANDING",
     "THROW_ENTRY", "COUNTER_COMMIT", "STUFFED",
     "SUBMISSION_VICTORY", "ESCAPE_SUCCESS", "MATTE",
-    "NEWAZA_TRANSITION", "GRIP_STRIPPED", "GRIP_BREAK",
+    "NEWAZA_TRANSITION", "GRIP_BREAK",
 })
 
 # Sample one prose line every N ticks during stable grip-war phases.
@@ -210,7 +216,7 @@ _PHASE_TRANSITION_PROSE: dict[tuple[str, str], str] = {
 # ---------------------------------------------------------------------------
 # HAJ-162 — outcome-bound prose for grip seating
 # ---------------------------------------------------------------------------
-def _grip_seating_prose(match: "Match") -> str:
+def _grip_seating_prose(match: "Match", tick: int) -> str:
     """Resolve the (closing → grip_war) phase-transition line against
     engine state at the transition tick.
 
@@ -223,33 +229,47 @@ def _grip_seating_prose(match: "Match") -> str:
 
     Post-fix: read each fighter's own-grip-edge count and compose:
       - Both gripped → "Both fighters lock onto their grips." (canonical)
-      - One gripped  → "{leader} secures the first grip — {follower}
-                        reaches but finds nothing."
+      - One gripped  → first-grip line, contested or uncontested.
       - Neither      → fallback to the canonical line (defensive; should
                         not happen because the engine sets GRIPPING
                         position only after at least one grip seats).
+
+    HAJ-225 — the strings now come from the data-driven grip_narration layer,
+    and the one-gripped case can read as contested. With HAJ-224's single-hand
+    first grip the leader seats one grip and the follower responds a beat
+    later, so the initiation tick is a genuine contest rather than always a
+    clean shut-out (`finds nothing`).
     """
     a_name = match.fighter_a.identity.name
     b_name = match.fighter_b.identity.name
-    a_owned = match.grip_graph.edges_owned_by(a_name)
-    b_owned = match.grip_graph.edges_owned_by(b_name)
-    a_has = bool(a_owned)
-    b_has = bool(b_owned)
-    if a_has and b_has:
-        return "Both fighters lock onto their grips."
-    if a_has and not b_has:
-        return (
-            f"{a_name} secures the first grip — "
-            f"{b_name} reaches but finds nothing."
-        )
-    if b_has and not a_has:
-        return (
-            f"{b_name} secures the first grip — "
-            f"{a_name} reaches but finds nothing."
-        )
-    # Defensive fallback — shouldn't hit unless the engine transitioned
-    # to GRIPPING with no edges in the graph (test-only configuration).
-    return "Both fighters lock onto their grips."
+    a_has = bool(match.grip_graph.edges_owned_by(a_name))
+    b_has = bool(match.grip_graph.edges_owned_by(b_name))
+    if a_has == b_has:
+        # Both gripped, or (defensively) neither.
+        return grip_narration.select_line(grip_narration.BOTH_GRIPS, seed=tick)
+    leader, follower = (a_name, b_name) if a_has else (b_name, a_name)
+    key = (
+        grip_narration.FIRST_GRIP_CONTESTED
+        if _first_grip_contested(match, tick)
+        else grip_narration.FIRST_GRIP_UNCONTESTED
+    )
+    return grip_narration.select_line(
+        key, seed=tick, leader=leader, follower=follower,
+    )
+
+
+def _first_grip_contested(match: "Match", tick: int) -> bool:
+    """HAJ-225 — does the first-grip tick read as contested?
+
+    The follower contests when a cascade response is staged (HAJ-151/224: the
+    leader seats the lead grip and the follower answers a beat later, so a
+    response is pending on the transition tick). We keep some clean-shut-out
+    variety so it isn't *always* contested — deterministic in `tick` for
+    replay stability."""
+    cascade_pending = getattr(match, "_grip_cascade", None) is not None
+    if not cascade_pending:
+        return False
+    return random.Random(f"haj225:firstgrip:{tick}").random() < 0.65
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +528,10 @@ class MatSideNarrator:
         out.extend(self._detect_self_cancel(tick, bpes))
         out.extend(self._detect_intent_outcome_mismatch(tick, bpes))
 
+        # Pipeline rule 3b (HAJ-225) — successful strip outcomes (partial /
+        # full) authored off the GRIP_DEGRADE / GRIP_STRIPPED engine events.
+        out.extend(self._detect_grip_strip_outcome(tick, events))
+
         # Pipeline rule 4 — non-default modifier promotion.
         out.extend(self._promote_modifier_extremes(tick, bpes))
 
@@ -574,7 +598,7 @@ class MatSideNarrator:
         if self._last_phase is not None and phase != self._last_phase:
             transition = (self._last_phase, phase)
             if transition == ("closing", "grip_war"):
-                prose = _grip_seating_prose(match)
+                prose = _grip_seating_prose(match, tick)
             else:
                 prose = _PHASE_TRANSITION_PROSE.get(
                     transition,
@@ -818,6 +842,11 @@ class MatSideNarrator:
     def _detect_intent_outcome_mismatch(
         self, tick: int, bpes: list[BodyPartEvent],
     ) -> list[MatchClockEntry]:
+        """Failed strip — a strip BPE that snapped at the grip with no
+        mechanical effect (intent=BREAK, verb=SNAP). HAJ-225: a partial
+        degrade now carries verb=BREAK and is narrated as a successful
+        partial strip by `_detect_grip_strip_outcome`, so SNAP here is the
+        genuine 'held it' case. String comes from the data-driven layer."""
         out: list[MatchClockEntry] = []
         seen_actors: set[str] = set()
         for b in bpes:
@@ -830,14 +859,67 @@ class MatSideNarrator:
                     continue
                 seen_actors.add(b.actor)
                 tgt = _target_phrase(b.target).lstrip()
+                prose = grip_narration.select_line(
+                    grip_narration.STRIP_FAILED,
+                    seed=tick, actor=b.actor, target_phrase=tgt,
+                )
                 out.append(MatchClockEntry(
-                    tick=tick,
-                    prose=(
-                        f"{b.actor} tries to rip {tgt} but can't budge it."
-                    ),
+                    tick=tick, prose=prose,
                     source="intent_mismatch",
                     actors=(b.actor,),
                 ))
+        return out
+
+    # HAJ-225 — depth label for partial-strip prose. The engine event carries
+    # the post-degrade depth name; render it as a short phrase.
+    _STRIP_DEPTH_PHRASE: dict[str, str] = {
+        "STANDARD": "shallower hold",
+        "POCKET":   "pocket",
+        "SLIPPING": "slipping fingertip hold",
+    }
+
+    def _detect_grip_strip_outcome(
+        self, tick: int, events: list,
+    ) -> list[MatchClockEntry]:
+        """HAJ-225 — author plain-language mat-side prose for successful
+        strips, off the GRIP_DEGRADE (partial) and GRIP_STRIPPED (full)
+        engine events. Distinct from the failed-strip 'can't budge it' line.
+        Rate-limited per stripper so a multi-tick strip run doesn't flood
+        the clock log."""
+        out: list[MatchClockEntry] = []
+        for ev in events:
+            et = ev.event_type
+            if et not in ("GRIP_DEGRADE", "GRIP_STRIPPED"):
+                continue
+            data = getattr(ev, "data", {}) or {}
+            stripper = data.get("stripper")
+            owner = data.get("owner")
+            grip = data.get("grip_label")
+            if not (stripper and owner and grip):
+                # Event wasn't enriched (e.g. a fatigue/voluntary degrade with
+                # no stripper) — skip rather than mis-author a strip line.
+                continue
+            if not self._rate_check(stripper, "grip_strip_outcome", tick):
+                continue
+            if et == "GRIP_STRIPPED":
+                prose = grip_narration.select_line(
+                    grip_narration.STRIP_FULL,
+                    seed=tick, stripper=stripper, target=owner, grip=grip,
+                )
+            else:
+                depth = self._STRIP_DEPTH_PHRASE.get(
+                    data.get("new_depth", ""), "shallower hold",
+                )
+                prose = grip_narration.select_line(
+                    grip_narration.STRIP_PARTIAL,
+                    seed=tick, stripper=stripper, target=owner,
+                    grip=grip, depth=depth,
+                )
+            out.append(MatchClockEntry(
+                tick=tick, prose=prose,
+                source="grip_strip_outcome",
+                actors=(stripper,),
+            ))
         return out
 
     def _detect_head_steer(
