@@ -328,6 +328,26 @@ MATTE_TO_HAJIME_PAUSE_TICKS: int = 3
 # a visible beat of "ahead" before the follower cascade fires.
 GRIP_CASCADE_LAG_TICKS: int = 2
 
+# HAJ-224 — single-hand first grip. At engagement the leader seats only the
+# lead (dominant-hand lapel) grip; the off-hand sleeve grip follows this many
+# ticks later. The window in between is contestable — the follower's cascade
+# response resolves at GRIP_CASCADE_LAG_TICKS (2), so a lag of 3 lets the
+# follower interpose (strip the lead grip, seat their own) before the leader
+# completes the two-handed grip. This lengthens and contests the grip war;
+# most throws need sleeve+lapel, so a one-grip-at-a-time leader reaches
+# commit-eligibility a beat slower.
+OFF_HAND_SEAT_LAG_TICKS: int = 3
+
+# HAJ-224 — strip force factor. The STRIP action delivers a force of
+# `strip_resistance × STRIP_FORCE_FACTOR × grip_strength(stripper)`, competed
+# against the owner's depth-scaled resistance in apply_strip_pressure. The
+# old value (1.1) made full removal of a DEEP grip unreachable — overshoot
+# vs a DEEP grip (depth modifier 1.0) at comparable grip strength was only
+# ~1.1, a single step. Raising it lets a strong strip overshoot the margin
+# model far enough to drop multiple steps or break a grip outright, while
+# shallow grips (POCKET 0.4 / SLIPPING 0.2) tear off readily.
+STRIP_FORCE_FACTOR: float = 1.3
+
 
 def is_out_of_bounds(judoka: Judoka) -> bool:
     """HAJ-127 — True when the fighter's CoM is outside the contest area.
@@ -1266,6 +1286,12 @@ class Match:
         #    "stance_matchup": StanceMatchup,
         #    "clock_pressure_role_follower": Optional[str]}
         self._grip_cascade: Optional[dict] = None
+        # HAJ-224 — pending off-hand seat for the cascade leader. Shape:
+        #   {"leader_name": str, "follower_name": str, "seat_tick": int}
+        # Set when the leader seats their lead grip; consumed when the tick
+        # reaches seat_tick (off-hand sleeve grip seats then). Cleared if the
+        # leader loses all grips (full strip / disengage) before it fires.
+        self._pending_off_hand: Optional[dict] = None
         # Append-only log of grip-race decisions for tests / inspector.
         self._grip_cascade_log: list[dict] = []
         # Per-fighter intra-match grip-race wins/losses tally — feeds the
@@ -2125,7 +2151,7 @@ class Match:
                 # stripping hand; magnitude scales with grasper strength.
                 strip_force = (
                     FORCE_ENVELOPES[act.edge.grip_type_v2].strip_resistance
-                    * 1.1 * _grip_strength(judoka)
+                    * STRIP_FORCE_FACTOR * _grip_strength(judoka)
                 )
                 # Snapshot whether the edge was alive before the strip
                 # call — apply_strip_pressure removes the edge when it
@@ -2223,6 +2249,11 @@ class Match:
         self, actions_a: list[Action], actions_b: list[Action],
         tick: int, events: list[Event],
     ) -> None:
+        # HAJ-224 — seat the leader's off-hand grip if its lag has elapsed.
+        # Processed before the cascade early-return so it fires even while a
+        # follower response is still pending.
+        self._seat_pending_off_hand(tick, events)
+
         # HAJ-151 — if a grip cascade is staged from a previous tick, the
         # follower picks a response now; the closing-phase counter is
         # paused while we resolve the cascade. The cascade resolver
@@ -2282,6 +2313,48 @@ class Match:
     # -----------------------------------------------------------------------
     # HAJ-151 — GRIP CASCADE STAGING + RESOLUTION
     # -----------------------------------------------------------------------
+    def _seat_pending_off_hand(self, tick: int, events: list[Event]) -> None:
+        """HAJ-224 — seat the cascade leader's off-hand (sleeve) grip once its
+        lag has elapsed, completing the two-handed grip the leader began with
+        a single lead grip. Drops the pending seat if the leader lost their
+        lead grip in the meantime (fully stripped / disengaged) — there is no
+        partial grip left to build on."""
+        pending = self._pending_off_hand
+        if pending is None:
+            return
+        if tick < pending["seat_tick"]:
+            return
+        self._pending_off_hand = None
+
+        leader = self._fighter_by_name(pending["leader_name"])
+        follower = self._fighter_by_name(pending["follower_name"])
+        if leader is None or follower is None:
+            return
+        # If the leader has no surviving grips, the lead grip was broken
+        # before the off-hand could follow — abandon the second beat.
+        if not self.grip_graph.edges_owned_by(leader.identity.name):
+            return
+        # Don't double-seat if the off-hand somehow already gripped.
+        for edge in self.grip_graph.edges_owned_by(leader.identity.name):
+            if edge.grip_type_v2 == GripTypeV2.SLEEVE_HIGH:
+                return
+
+        new_edges = self._seat_grips_for(leader, follower, tick, hands="off")
+        for edge in new_edges:
+            ev = Event(
+                tick=tick, event_type="GRIP_ESTABLISH",
+                description=(
+                    f"[grip] {edge.grasper_id} ({edge.grasper_part.value}) → "
+                    f"{edge.target_id} ({edge.target_location.value}, "
+                    f"{edge.grip_type_v2.name} @ {edge.depth_level.name})"
+                ),
+                data={"edge_id": id(edge), "from_grip_cascade": "leader_off_hand"},
+            )
+            events.append(ev)
+            self._attach_bpe(
+                ev, decompose_grip_establish(edge, leader, tick),
+            )
+
     def _stage_grip_cascade(self, tick: int, events: list[Event]) -> None:
         """Compute initiative for both fighters, seat the leader's
         grips this tick, and stage the follower's response for tick+1.
@@ -2348,9 +2421,11 @@ class Match:
             },
         ))
 
-        # Seat the leader's two grips now. Reuse grip_graph._new_pocket_edge
-        # via a thin per-fighter helper.
-        new_edges = self._seat_grips_for(leader, follower, tick)
+        # HAJ-224 — seat only the leader's LEAD grip now (dominant-hand
+        # lapel). The off-hand sleeve follows OFF_HAND_SEAT_LAG_TICKS later,
+        # leaving a contestable window in between. Pre-HAJ-224 this seated
+        # both hands atomically, which read as an instantaneous double grip.
+        new_edges = self._seat_grips_for(leader, follower, tick, hands="lead")
         for edge in new_edges:
             ev = Event(
                 tick=tick, event_type="GRIP_ESTABLISH",
@@ -2367,6 +2442,12 @@ class Match:
             )
         if new_edges:
             self.position = Position.GRIPPING
+            # Schedule the off-hand (second beat) to follow.
+            self._pending_off_hand = {
+                "leader_name": leader.identity.name,
+                "follower_name": follower.identity.name,
+                "seat_tick": tick + OFF_HAND_SEAT_LAG_TICKS,
+            }
 
         # Stage the follower's response for the next tick.
         self._grip_cascade = {
@@ -2464,51 +2545,60 @@ class Match:
 
     def _seat_grips_for(
         self, attacker: Judoka, defender: Judoka, tick: int,
+        hands: str = "both",
     ) -> list[GripEdge]:
         """Seat the standard sleeve-and-lapel grip pair for one fighter
         only. Mirrors grip_graph.attempt_engagement's per-fighter logic
-        without the symmetric loop."""
+        without the symmetric loop.
+
+        HAJ-224 — `hands` selects which grips to seat:
+          - "both" (default): lead lapel + off-hand sleeve, atomically.
+          - "lead": dominant-hand lapel only (the first grip a leader wins).
+          - "off":  off-hand sleeve only (the second beat, seated later).
+        """
         from enums import DominantSide as _DS
         dom = attacker.identity.dominant_side
         is_right = dom == _DS.RIGHT
         target_name = defender.identity.name
         new_edges: list[GripEdge] = []
 
-        dom_hand_part = (BodyPart.RIGHT_HAND if is_right
-                         else BodyPart.LEFT_HAND)
-        dom_hand_key  = "right_hand" if is_right else "left_hand"
-        lapel_target  = (GripTarget.LEFT_LAPEL if is_right
-                         else GripTarget.RIGHT_LAPEL)
-        dom_strength  = min(
-            1.0, attacker.effective_body_part(dom_hand_key) / 10.0,
-        )
-        new_edges.append(self.grip_graph._new_pocket_edge(
-            attacker=attacker,
-            grasper_part=dom_hand_part,
-            target_id=target_name,
-            target_location=lapel_target,
-            grip_type_v2=GripTypeV2.LAPEL_HIGH,
-            strength=dom_strength,
-            current_tick=tick,
-        ))
+        if hands in ("both", "lead"):
+            dom_hand_part = (BodyPart.RIGHT_HAND if is_right
+                             else BodyPart.LEFT_HAND)
+            dom_hand_key  = "right_hand" if is_right else "left_hand"
+            lapel_target  = (GripTarget.LEFT_LAPEL if is_right
+                             else GripTarget.RIGHT_LAPEL)
+            dom_strength  = min(
+                1.0, attacker.effective_body_part(dom_hand_key) / 10.0,
+            )
+            new_edges.append(self.grip_graph._new_pocket_edge(
+                attacker=attacker,
+                grasper_part=dom_hand_part,
+                target_id=target_name,
+                target_location=lapel_target,
+                grip_type_v2=GripTypeV2.LAPEL_HIGH,
+                strength=dom_strength,
+                current_tick=tick,
+            ))
 
-        non_hand_part = (BodyPart.LEFT_HAND if is_right
-                         else BodyPart.RIGHT_HAND)
-        non_hand_key  = "left_hand" if is_right else "right_hand"
-        sleeve_target = (GripTarget.RIGHT_SLEEVE if is_right
-                         else GripTarget.LEFT_SLEEVE)
-        non_strength  = min(
-            1.0, attacker.effective_body_part(non_hand_key) / 10.0,
-        )
-        new_edges.append(self.grip_graph._new_pocket_edge(
-            attacker=attacker,
-            grasper_part=non_hand_part,
-            target_id=target_name,
-            target_location=sleeve_target,
-            grip_type_v2=GripTypeV2.SLEEVE_HIGH,
-            strength=non_strength,
-            current_tick=tick,
-        ))
+        if hands in ("both", "off"):
+            non_hand_part = (BodyPart.LEFT_HAND if is_right
+                             else BodyPart.RIGHT_HAND)
+            non_hand_key  = "left_hand" if is_right else "right_hand"
+            sleeve_target = (GripTarget.RIGHT_SLEEVE if is_right
+                             else GripTarget.LEFT_SLEEVE)
+            non_strength  = min(
+                1.0, attacker.effective_body_part(non_hand_key) / 10.0,
+            )
+            new_edges.append(self.grip_graph._new_pocket_edge(
+                attacker=attacker,
+                grasper_part=non_hand_part,
+                target_id=target_name,
+                target_location=sleeve_target,
+                grip_type_v2=GripTypeV2.SLEEVE_HIGH,
+                strength=non_strength,
+                current_tick=tick,
+            ))
         return new_edges
 
     def _resolve_grip_cascade(self, tick: int, events: list[Event]) -> None:
@@ -2786,6 +2876,9 @@ class Match:
         # Re-engagement begins immediately under the existing closing-
         # phase logic (engagement_ticks rebuilds from zero).
         self.grip_graph.break_all_edges()
+        # HAJ-224 — the leader's lead grip just broke; cancel any pending
+        # off-hand seat so it doesn't materialize out of a disengaged dyad.
+        self._pending_off_hand = None
         self.position = Position.STANDING_DISTANT
         self.engagement_ticks = 0
 
@@ -5844,6 +5937,9 @@ class Match:
         """
         # Break all edges
         self.grip_graph.break_all_edges()
+        # HAJ-224 — drop any pending off-hand seat; the leader's lead grip
+        # is gone, so there is nothing for the second beat to build on.
+        self._pending_off_hand = None
         # HAJ-185 — single ne-waza reset surface. The resolver clears its
         # own active_technique and breaks the osaekomi atomically so the
         # next ground entry starts in NeWazaState.TRANSITIONAL.

@@ -734,6 +734,12 @@ def test_pressure_match_produces_visible_displacement() -> None:
     action_selection._maybe_emit_foot_attack = lambda *a, **kw: None
     real_plan = action_selection._apply_plan_layer
     action_selection._apply_plan_layer = lambda *a, **kw: a[5]
+    # HAJ-224 — the driving rung now rolls an archetype-weighted strip
+    # propensity in the secondary slot, which consumes an rng draw and would
+    # otherwise shift this isolated locomotion-calibration rng path. Suppress
+    # it for the same reason foot-attack/plan are suppressed above.
+    real_strip = action_selection._maybe_emit_strip
+    action_selection._maybe_emit_strip = lambda *a, **kw: None
     buf = io.StringIO()
     try:
         with redirect_stdout(buf):
@@ -741,6 +747,7 @@ def test_pressure_match_produces_visible_displacement() -> None:
     finally:
         action_selection._maybe_emit_foot_attack = real_emit
         action_selection._apply_plan_layer = real_plan
+        action_selection._maybe_emit_strip = real_strip
     # Tanaka should have moved by more than the grip-only baseline.
     # Pre-cluster baseline (no locomotion) was ~0.05 m; post-cluster
     # this test settled at ~0.14 m once HAJ-141/139/140/129/133/134/135/137

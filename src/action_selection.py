@@ -25,7 +25,7 @@ from actions import (
 )
 from enums import (
     GripTypeV2, GripDepth, GripTarget, GripMode, DominantSide, StanceMatchup,
-    PositionalStyle, Position,
+    PositionalStyle, Position, BodyArchetype,
 )
 from throws import THROW_DEFS, ThrowID
 from grip_presence_gate import evaluate_gate, GateResult, REASON_OK
@@ -468,11 +468,22 @@ def _select_grip_actions(
         judoka, opponent, kumi_kata_clock, r, attacker_to_opp,
     )
 
-    # Secondary action: deepen a shallow grip if any, else push with 2nd hand.
+    # HAJ-224 — mid-exchange strip. Roll the archetype-weighted propensity
+    # for the secondary slot; on success it takes priority over deepening or
+    # pushing so that breaking the opponent's grip stays a live option after
+    # own-grips are seated (not just in the pre-deepen opening).
+    strip_action = _maybe_emit_strip(
+        judoka, opp_edges, r, busy_hand=primary.grasper_part.value,
+    )
+
+    # Secondary action: strip the opponent, else foot-attack, else deepen a
+    # shallow grip, else push with the 2nd hand.
     shallow = [e for e in own_edges if e.depth_level != GripDepth.DEEP
                and e is not primary]
     out = [pull(primary.grasper_part.value, pull_dir, drive_mag)]
-    if foot_attack is not None:
+    if strip_action is not None:
+        out.append(strip_action)
+    elif foot_attack is not None:
         # Foot attack takes the secondary slot — it's a parallel kuzushi
         # generator, not a replacement for the primary pull.
         out.append(foot_attack)
@@ -482,6 +493,59 @@ def _select_grip_actions(
         secondary = own_edges[1] if own_edges[0] is primary else own_edges[0]
         out.append(push(secondary.grasper_part.value, push_dir, drive_mag * 0.5))
     return out
+
+
+# ---------------------------------------------------------------------------
+# HAJ-224 — UNIVERSAL MID-EXCHANGE STRIP
+# ---------------------------------------------------------------------------
+# Pre-HAJ-224, STRIP was only issued in the pre-deepen rung (no own-grip at
+# STANDARD/DEEP), so the moment a fighter deepened a grip they never stripped
+# again and the whole grip war read as pure deepening. Every archetype now
+# carries a baseline per-tick propensity to attack the opponent's grip from
+# the main driving rung; GRIP_FIGHTER rolls it most often, but LEVER / MOTOR /
+# EXPLOSIVE / GROUND_SPECIALIST all strip too. Aggression modulates the rate.
+_STRIP_PROPENSITY: dict[BodyArchetype, float] = {
+    BodyArchetype.GRIP_FIGHTER:      0.60,
+    BodyArchetype.MOTOR:             0.35,
+    BodyArchetype.LEVER:             0.30,
+    BodyArchetype.EXPLOSIVE:         0.25,
+    BodyArchetype.GROUND_SPECIALIST: 0.20,
+}
+_STRIP_PROPENSITY_DEFAULT: float = 0.30
+
+
+def _strip_propensity(judoka: "Judoka") -> float:
+    """Per-tick probability the driving rung emits a strip in its secondary
+    slot (when the opponent has a strippable grip). Archetype baseline scaled
+    by the aggressive facet so a passive fighter strips less than a relentless
+    one of the same archetype."""
+    base = _STRIP_PROPENSITY.get(
+        judoka.identity.body_archetype, _STRIP_PROPENSITY_DEFAULT,
+    )
+    aggr = float(judoka.identity.personality_facets.get("aggressive", 5)) / 10.0
+    return base * (0.6 + 0.8 * aggr)
+
+
+def _maybe_emit_strip(
+    judoka: "Judoka",
+    opp_edges: list,
+    r: random.Random,
+    busy_hand: Optional[str] = None,
+) -> Optional[Action]:
+    """Roll the archetype-weighted strip propensity. On success, target the
+    opponent's deepest (strongest) grip with a free hand — falling back to the
+    hand not driving the primary pull if both hands are occupied."""
+    if not opp_edges:
+        return None
+    if r.random() >= _strip_propensity(judoka):
+        return None
+    target = max(opp_edges, key=lambda e: e.depth_level.modifier())
+    strip_hand = _free_hand(judoka)
+    if strip_hand is None:
+        strip_hand = (
+            "left_hand" if busy_hand == "right_hand" else "right_hand"
+        )
+    return strip(strip_hand, target)
 
 
 # ---------------------------------------------------------------------------

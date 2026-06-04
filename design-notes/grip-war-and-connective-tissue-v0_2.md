@@ -119,7 +119,7 @@ Each item now carries a **status** drawn from the audit. Buckets reordered by wh
 ### Bucket A — Grip war (design)
 
 - **A-1 — Transcribe grip response selection into a design doc, add `ACCEPT_BAIT`.** *Status:* construct fully exists in `grip_initiative.py`; audit quoted its full behavior. Task is transcription + one new branch (§1.2/1.3), not design from scratch.
-- **A-2 — Calibration: is the leader's grab too uncontested?** *Status:* open question. The follower-response model exists; whether the *leader* takes grips too freely (the "finds nothing" sameness) is a calibration/narration question, not a missing model. Park with G/I.
+- **A-2 — Calibration: is the leader's grab too uncontested?** *Status:* addressed in HAJ-224. Three calibration changes landed: (1) strips degrade by a margin-scaled number of steps so a grip can be broken from any depth, not only after a forced four-step walk-down; (2) a universal archetype-weighted strip propensity in the driving rung so every fighter strips mid-exchange (GRIP_FIGHTER most), not only in the pre-deepen opening; (3) the leader seats a single lead grip at engagement with the off-hand following a later, contestable beat (`OFF_HAND_SEAT_LAG_TICKS`). Strip/partial-strip narration is the sibling ticket HAJ-225.
 
 ### Bucket B — The one-model migration (the real spine work — was "build", now "migrate")
 
@@ -183,7 +183,7 @@ The shape changed completely. v0.1 said "build the spine first." The spine is bu
 
 **Decisions, not builds:** F-1 (ne-waza reachability). Make the call.
 
-**Parked until after B / after calibration:** G-1, G-2, A-2, D-2.
+**Parked until after B / after calibration:** G-1, G-2, D-2. (A-2 landed in HAJ-224.)
 
 **The single recommended first action:** Z-1, then B-1. Z-1 because a lying status header is actively dangerous to planning. B-1 because it is the prerequisite that gates the entire migration, and the migration is now the load-bearing work — not a build, a consolidation of three parallel notions of "compromised" into the one source-agnostic buffer the architecture always wanted.
 

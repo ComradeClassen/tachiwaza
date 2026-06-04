@@ -26,6 +26,20 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# STRIP MARGIN MODEL (HAJ-224)
+# A strip that only just beats a grip's resistance knocks it down one step
+# along the chain (DEEP → STANDARD → POCKET → SLIPPING → stripped). A strip
+# that overshoots drops multiple steps, and enough overshoot tears the grip
+# off outright — so a DEEP grip can be broken from any depth without first
+# being walked down to POCKET; it simply demands proportionally more force.
+# Each whole multiple of this value, in overshoot above 1.0, drops one extra
+# step (e.g. with 0.5: overshoot 1.4 → 1 step, 2.0 → 3 steps, 2.5 → 4 = break
+# a DEEP grip outright).
+# ---------------------------------------------------------------------------
+STRIP_MARGIN_PER_STEP = 0.5
+
+
+# ---------------------------------------------------------------------------
 # EVENT
 # A typed event produced by any subsystem. The match log is a sequence of
 # these; the prose engine (Phase 4) will render them into full sentences.
@@ -399,8 +413,13 @@ class GripGraph:
         grasper: "Judoka",
     ) -> Optional[Event]:
         """Compete a stripping force against the grip. If pressure exceeds
-        the grip's resistance, depth degrades one step along the strip chain
-        (DEEP → STANDARD → POCKET → SLIPPING → stripped).
+        the grip's resistance, depth degrades along the strip chain
+        (DEEP → STANDARD → POCKET → SLIPPING → stripped) by a margin-scaled
+        number of steps: a marginal win knocks the grip down one step, while
+        a forceful overshoot drops several steps or tears the grip off
+        outright (HAJ-224). Resistance scales with depth — a DEEP grip
+        resists hardest — so breaking a deep grip in one strip is possible
+        but demands proportionally more force.
 
         `strip_force` is in Newtons, supplied by the STRIP action in the
         action ladder — match.py calls this from the ActionKind.STRIP
@@ -418,9 +437,23 @@ class GripGraph:
         if strip_force <= resistance:
             return None
 
-        next_depth = edge.depth_level.degraded()
+        # Margin-based degrade: each whole multiple of STRIP_MARGIN_PER_STEP
+        # in overshoot above 1.0 drops one extra step down the strip chain.
+        # A grip whose resistance has bottomed out (owner grip strength → 0)
+        # offers no purchase, so any strip force overshoots it completely.
+        overshoot = strip_force / resistance if resistance > 0 else strip_force
+        steps = 1 + int((overshoot - 1.0) / STRIP_MARGIN_PER_STEP)
+
+        next_depth = edge.depth_level
+        for _ in range(steps):
+            stepped = next_depth.degraded()
+            if stepped is None:
+                next_depth = None
+                break
+            next_depth = stepped
+
         if next_depth is None:
-            # Past SLIPPING: the grip is stripped.
+            # Walked past SLIPPING: the grip is stripped.
             self.remove_edge(edge)
             from body_state import ContactState as _ContactState
             key = edge.grasper_part.value

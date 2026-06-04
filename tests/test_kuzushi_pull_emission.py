@@ -8,8 +8,8 @@
 #   - uke_posture_vulnerability multipliers stack:
 #       grounded balanced uke vs mid-step uke vs leaning-and-moving uke.
 #   - pull_kuzushi_magnitude formula factors all change the result:
-#       depth, strength (via fatigue), technique (fight_iq), experience
-#       (belt rank), posture vulnerability.
+#       depth, strength (via fatigue), technique (pull_execution axis),
+#       experience (belt rank), posture vulnerability.
 #   - End-to-end: a PULL action processed through Match._compute_net_force_on
 #     appends an event to the victim's buffer with the right vector and
 #     a strictly-positive magnitude. Force vector is unchanged from the
@@ -222,15 +222,22 @@ class TestPullKuzushiMagnitude:
         assert (pull_kuzushi_magnitude(black, edge_b, victim)
                 > pull_kuzushi_magnitude(white, edge_w, victim))
 
-    def test_higher_fight_iq_yields_larger_magnitude(self):
-        # technique term is fight_iq / 10 — placeholder until HAJ-C.3.
-        low_iq  = _build_judoka("L", fight_iq=3)
-        high_iq = _build_judoka("H", fight_iq=9)
-        victim  = _build_judoka("V")
-        edge_l  = _make_edge("L", "V")
-        edge_h  = _make_edge("H", "V")
-        assert (pull_kuzushi_magnitude(high_iq, edge_h, victim)
-                > pull_kuzushi_magnitude(low_iq, edge_l, victim))
+    def test_higher_pull_execution_yields_larger_magnitude(self):
+        # HAJ-137 — the technique term reads `pull_execution` off the skill
+        # vector, not the old `fight_iq / 10` placeholder. (Judoka now
+        # auto-populates a belt-default skill_vector in __post_init__, so the
+        # fight_iq fallback in skill_vector.axis() no longer fires and
+        # fight_iq no longer moves pull magnitude.) Vary the authoritative
+        # axis directly: cleaner pull conversion → larger kuzushi magnitude.
+        low  = _build_judoka("L")
+        high = _build_judoka("H")
+        low.skill_vector.pull_execution  = 0.2
+        high.skill_vector.pull_execution = 0.9
+        victim = _build_judoka("V")
+        edge_l = _make_edge("L", "V")
+        edge_h = _make_edge("H", "V")
+        assert (pull_kuzushi_magnitude(high, edge_h, victim)
+                > pull_kuzushi_magnitude(low, edge_l, victim))
 
     def test_posture_vulnerability_modulates_magnitude(self):
         # Same pull on grounded uke vs mid-step uke → different magnitudes.

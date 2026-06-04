@@ -148,7 +148,16 @@ def test_strip_pressure_below_resistance_is_noop() -> None:
     assert edge in g.edges
 
 
-def test_strip_pressure_above_resistance_degrades_one_step() -> None:
+def _strip_resistance_of(edge, grasper) -> float:
+    """Mirror apply_strip_pressure's resistance formula for test calibration."""
+    from force_envelope import FORCE_ENVELOPES, grip_strength
+    base = FORCE_ENVELOPES[edge.grip_type_v2].strip_resistance
+    return base * edge.depth_level.modifier() * grip_strength(grasper)
+
+
+def test_strip_pressure_just_above_resistance_degrades_one_step() -> None:
+    # HAJ-224 — under the margin model a strip that only just beats the
+    # grip's resistance knocks it down exactly one step.
     t = main_module.build_tanaka()
     place_judoka(t, com_position=(0.0, 0.0), facing=(1.0, 0.0))
     g = GripGraph()
@@ -163,11 +172,66 @@ def test_strip_pressure_above_resistance_degrades_one_step() -> None:
         established_tick=0,
     )
     g.add_edge(edge)
-    result = g.apply_strip_pressure(edge, strip_force=10_000.0, grasper=t)
+    resistance = _strip_resistance_of(edge, t)
+    # Overshoot ~1.1 → one step.
+    result = g.apply_strip_pressure(edge, strip_force=resistance * 1.1, grasper=t)
     assert result is not None
     assert result.event_type == "GRIP_DEGRADE"
     assert edge.depth_level == GripDepth.POCKET  # STANDARD → POCKET
     assert edge in g.edges
+
+
+def test_strip_pressure_large_overshoot_drops_multiple_steps() -> None:
+    # HAJ-224 — a forceful strip that overshoots the margin drops several
+    # steps in one hit. From DEEP, an overshoot of ~2.0 (margin 1.0 / 0.5 =
+    # +2 steps, total 3) walks DEEP → STANDARD → POCKET → SLIPPING.
+    t = main_module.build_tanaka()
+    place_judoka(t, com_position=(0.0, 0.0), facing=(1.0, 0.0))
+    g = GripGraph()
+    edge = GripEdge(
+        grasper_id=t.identity.name,
+        grasper_part=BodyPart.RIGHT_HAND,
+        target_id="x",
+        target_location=GripTarget.LEFT_LAPEL,
+        grip_type_v2=GripTypeV2.CROSS,
+        depth_level=GripDepth.DEEP,
+        strength=1.0,
+        established_tick=0,
+    )
+    g.add_edge(edge)
+    resistance = _strip_resistance_of(edge, t)
+    result = g.apply_strip_pressure(edge, strip_force=resistance * 2.0, grasper=t)
+    assert result is not None
+    assert result.event_type == "GRIP_DEGRADE"
+    assert edge.depth_level == GripDepth.SLIPPING  # DEEP → -3 → SLIPPING
+    assert edge in g.edges
+
+
+def test_strip_pressure_deep_grip_broken_outright_by_large_overshoot() -> None:
+    # HAJ-224 acceptance #1 — a DEEP grip can be stripped entirely by a
+    # single sufficiently-forceful strip, without first being walked down.
+    # Overshoot >= 2.5 → +3 steps beyond the first = 4 total = full chain.
+    t = main_module.build_tanaka()
+    place_judoka(t, com_position=(0.0, 0.0), facing=(1.0, 0.0))
+    g = GripGraph()
+    edge = GripEdge(
+        grasper_id=t.identity.name,
+        grasper_part=BodyPart.RIGHT_HAND,
+        target_id="x",
+        target_location=GripTarget.LEFT_LAPEL,
+        grip_type_v2=GripTypeV2.CROSS,
+        depth_level=GripDepth.DEEP,
+        strength=1.0,
+        established_tick=0,
+    )
+    g.add_edge(edge)
+    t.state.body["right_hand"].contact_state = ContactState.GRIPPING_UKE
+    resistance = _strip_resistance_of(edge, t)
+    result = g.apply_strip_pressure(edge, strip_force=resistance * 3.0, grasper=t)
+    assert result is not None
+    assert result.event_type == "GRIP_STRIPPED"
+    assert edge not in g.edges
+    assert t.state.body["right_hand"].contact_state == ContactState.FREE
 
 
 def test_strip_pressure_past_slipping_removes_edge() -> None:
