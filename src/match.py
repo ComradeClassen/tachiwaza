@@ -1123,6 +1123,7 @@ class Match:
         regulation_ticks: Optional[int] = None,
         technique_catalog: Optional[dict] = None,
         ne_waza_catalog: Optional["object"] = None,
+        debug_kuzushi: bool = False,
     ) -> None:
         if stream not in VALID_STREAMS:
             raise ValueError(
@@ -1142,6 +1143,10 @@ class Match:
         self.seed      = seed
         self._debug = debug
         self._stream = stream
+        # HAJ-227 — dedicated kuzushi-buffer verbosity gate. The raw per-tick
+        # `[kuzushi] buf` dump is a deep-debug readout, so it stays off even
+        # the engineer (`debug`) stream unless explicitly opted into.
+        self._debug_kuzushi = debug_kuzushi
         # HAJ-125 — optional viewer hook. None during normal/test runs.
         self._renderer = renderer
         if self._debug is not None:
@@ -5954,6 +5959,21 @@ class Match:
     # -----------------------------------------------------------------------
     # POST-SCORE / POST-MATTE — shared dyad reset to STANDING_DISTANT
     # -----------------------------------------------------------------------
+    def _clear_kuzushi_buffers(self) -> None:
+        """HAJ-227 — drop every fighter's decaying kuzushi buffer.
+
+        The buffer (`Judoka.kuzushi_events`) only ages via the deque cap and
+        the 5-tick half-life decay, so without an explicit clear, impulses
+        from the prior exchange persist into the next phase and surface as
+        ghost off-balance state on the ground, after a matte, after the match
+        ends, and before the first grip of the next exchange. Called on every
+        hard boundary — matte / post-score / reset-to-standing (all via
+        `_reset_dyad_to_distant`) and match end (`_end_match`) — so each new
+        exchange starts from a clean off-balance state.
+        """
+        self.fighter_a.kuzushi_events.clear()
+        self.fighter_b.kuzushi_events.clear()
+
     def _reset_dyad_to_distant(self, tick: int, recovery_bonus: int = 0) -> None:
         """Reset the dyad to STANDING_DISTANT and seed the closing phase.
 
@@ -5988,6 +6008,12 @@ class Match:
         self.stalemate_ticks     = 0
         self._a_was_kuzushi_last_tick = False
         self._b_was_kuzushi_last_tick = False
+        # HAJ-227 — clear the decaying kuzushi buffer on the reset. Without
+        # this the deque only ages via maxlen + 5-tick half-life, so prior-
+        # exchange impulses bleed ~4-5 ticks into the next phase (the ground,
+        # post-matte, and pre-first-grip "kuzushi with no grips" ghosts). This
+        # is the shared boundary for matte, post-score, and reset-to-standing.
+        self._clear_kuzushi_buffers()
         self.position = Position.STANDING_DISTANT
         # Reset postures + CoM velocity/position for a clean re-engage.
         # HAJ-128 — also reset feet via place_judoka so a reset after a
@@ -6549,8 +6575,22 @@ class Match:
 
         Debug stream only — the coach/prose streams are untouched, and `both`
         is left alone so its side-by-side layout stays aligned.
+
+        HAJ-227 — the dump is gated hard. Beyond the engineer stream it
+        requires the dedicated `--debug-kuzushi` verbosity flag, and it is
+        suppressed everywhere the readout is noise or a ghost rather than a
+        live signal: after the match is over, off the feet (the off-balance
+        signal isn't even computed in ne-waza, so any line there is pure
+        debug noise), and with no grips established (decayed impulses from a
+        prior exchange that no longer describe a live contest).
         """
-        if self._stream != "debug":
+        if self._stream != "debug" or not self._debug_kuzushi:
+            return
+        if self.match_over:
+            return
+        if self.sub_loop_state != SubLoopState.STANDING:
+            return
+        if self.grip_graph.edge_count() == 0:
             return
         from kuzushi import compromised_state, dominant_kuzushi_source
         for fighter in (self.fighter_a, self.fighter_b):
@@ -6637,6 +6677,11 @@ class Match:
         self.winner = winner
         self.win_method = method
         self.match_over = True
+        # HAJ-227 — clear the kuzushi buffer at match end so no stale
+        # off-balance state lingers past the final whistle (the print is
+        # already gated on `match_over`, but clearing keeps any post-match
+        # buffer read clean and matches the other hard boundaries).
+        self._clear_kuzushi_buffers()
         a, b = self.fighter_a, self.fighter_b
         if winner is not None:
             desc = (

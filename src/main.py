@@ -370,7 +370,7 @@ def _print_match_header(a: Judoka, b: Judoka, ref) -> None:
 
 def _run_one_match(
     build_a, build_b, ref_builder, debug=None, seed=None, stream="both",
-    renderer=None,
+    renderer=None, debug_kuzushi=False,
 ) -> None:
     import random
     if seed is not None:
@@ -394,13 +394,14 @@ def _run_one_match(
         debug=debug, seed=seed, stream=stream, renderer=renderer,
         technique_catalog=_load_default_technique_catalog(),
         ne_waza_catalog=_load_default_ne_waza_catalog(),
+        debug_kuzushi=debug_kuzushi,
     )
     match.run()
 
 
 def _interactive_loop(
     ref_builder, debug_factory=None, seed_for_next=None, stream="both",
-    renderer_factory=None,
+    renderer_factory=None, debug_kuzushi=False,
 ) -> None:
     # Derive the quit key from the matchup count so adding new matchups
     # doesn't collide with the exit option (HAJ-67 added matchup 3,
@@ -428,6 +429,7 @@ def _interactive_loop(
         _run_one_match(
             build_a, build_b, ref_builder,
             debug=debug, seed=seed, stream=stream, renderer=renderer,
+            debug_kuzushi=debug_kuzushi,
         )
 
 
@@ -471,6 +473,12 @@ if __name__ == "__main__":
                              "renders the two streams side-by-side — engineer/"
                              "tick on the left, prose with a countdown match "
                              "clock on the right.")
+    parser.add_argument("--debug-kuzushi", action="store_true",
+                        help="HAJ-227: emit the raw per-tick kuzushi-buffer "
+                             "dump (`[kuzushi] buf …` / deposit lines) on the "
+                             "engineer stream. Off by default — this is a "
+                             "deep-debug readout, gated to standing play with "
+                             "live grips. Requires `--stream debug`.")
     parser.add_argument("--viewer", action="store_true",
                         help="HAJ-125: open the pygame top-down viewer "
                              "alongside the match. Dev-tool only — reads "
@@ -547,6 +555,7 @@ if __name__ == "__main__":
             ref_builder, debug_factory=debug_factory,
             seed_for_next=seed_for_next, stream=args.stream,
             renderer_factory=renderer_factory,
+            debug_kuzushi=args.debug_kuzushi,
         )
     else:
         _, build_a, build_b = MATCHUPS[args.matchup]
@@ -559,4 +568,5 @@ if __name__ == "__main__":
                 build_a, build_b, ref_builder,
                 debug=debug_factory(), seed=seed_for_next(),
                 stream=args.stream, renderer=renderer_factory(),
+                debug_kuzushi=args.debug_kuzushi,
             )
