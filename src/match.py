@@ -3946,16 +3946,8 @@ class Match:
         if phase is None:
             return None
         seed_token = f"{self.seed}:{attacker.identity.name}:{start_tick}"
-        if throw_id is not None:
-            line = _tn.select_phase_line(
-                data, throw_id, phase,
-                quality=quality, seed=seed_token,
-            )
-            if line:
-                return line
-        # Generic fallback so an unauthored throw still produces a
-        # coach line per HAJ-221 AC. The {tori}/{uke} substitution uses
-        # the actual fighter names whenever they're resolvable.
+        # {tori}/{uke} placeholders in authored narration resolve to the
+        # live fighter names so the lexicon stays matchup-stable (HAJ-223).
         uke_name = (
             defender.identity.name if defender is not None
             else (
@@ -3964,8 +3956,18 @@ class Match:
                 else self.fighter_a.identity.name
             )
         )
+        tori_name = attacker.identity.name
+        if throw_id is not None:
+            line = _tn.select_phase_line(
+                data, throw_id, phase,
+                quality=quality, seed=seed_token,
+            )
+            if line:
+                return _tn.render_line(line, tori=tori_name, uke=uke_name)
+        # Generic fallback so an unauthored throw still produces a
+        # coach line per HAJ-221 AC.
         return _tn.generic_phase_line(
-            phase, tori=attacker.identity.name, uke=uke_name,
+            phase, tori=tori_name, uke=uke_name,
         )
 
     def _resolve_kake(
@@ -5579,7 +5581,7 @@ class Match:
 
         events.extend(self._format_failure_events(
             attacker, defender, throw_name, resolution, desperation, tick,
-            motivation=motivation,
+            motivation=motivation, throw_id=throw_id,
         ))
         return events
 
@@ -5591,10 +5593,32 @@ class Match:
     # outcomes collapse into a single [throw] failed line using a human-
     # readable tag. Debug tooling reads the enum from event data.
     # -----------------------------------------------------------------------
+    def _authored_failure_prose(
+        self, throw_id: Optional[ThrowID], outcome, tick: int,
+        *, tori: str, uke: str,
+    ) -> Optional[str]:
+        """HAJ-223 — the body-part failure narration line for this
+        (throw, FailureOutcome), with {tori}/{uke} resolved to live names.
+        Returns None when the throw is unauthored or has no entry for this
+        outcome, so the caller keeps the engineer-facing fallback phrasing
+        (_FAILURE_TAGS / _COUNTER_NARRATIONS). Mirrors the phase-line wiring
+        in _coach_prose_for_sub_event."""
+        if throw_id is None:
+            return None
+        import throw_narration as _tn
+        line = _tn.select_failure_line(
+            _tn.get_default_data(), throw_id, outcome.name,
+            seed=f"{self.seed}:{tori}:{tick}",
+        )
+        if not line:
+            return None
+        return _tn.render_line(line, tori=tori, uke=uke)
+
     def _format_failure_events(
         self, attacker: Judoka, defender: Judoka, throw_name: str,
         resolution, desperation: bool, tick: int,
         motivation: Optional["CommitMotivation"] = None,
+        throw_id: Optional[ThrowID] = None,
     ) -> list[Event]:
         from throw_templates import FailureOutcome
         a_name = attacker.identity.name
@@ -5611,13 +5635,28 @@ class Match:
         }
         desp_tag = "; desperation" if desperation else ""
 
+        # HAJ-223 — authored body-part failure narration overrides the
+        # engineer-facing tag on the coach stream when an entry exists.
+        authored = self._authored_failure_prose(
+            throw_id, outcome, tick, tori=a_name, uke=d_name,
+        )
+
         counter_desc = _COUNTER_NARRATIONS.get(outcome)
         if counter_desc is not None:
+            counter_data = {**data, "counter_thrower": d_name}
+            if authored is not None:
+                counter_data["coach_prose"] = authored
             return [
                 Event(
                     tick=tick, event_type="THROW_STUFFED",
                     description=f"[throw] {a_name} → {throw_name} stuffed.",
-                    data={"throw_name": throw_name, "attacker": a_name},
+                    data={
+                        "throw_name": throw_name, "attacker": a_name,
+                        # Suppress the bare "stuffed" beat on the coach
+                        # stream when an authored counter line follows —
+                        # the authored line is the full narrative beat.
+                        **({"prose_silent": True} if authored is not None else {}),
+                    },
                 ),
                 Event(
                     tick=tick, event_type="FAILED",
@@ -5625,7 +5664,7 @@ class Match:
                         f"[counter] {d_name} {counter_desc} "
                         f"({a_name} recovers {recovery} tick(s){desp_tag})."
                     ),
-                    data={**data, "counter_thrower": d_name},
+                    data=counter_data,
                 ),
             ]
 
@@ -5639,22 +5678,30 @@ class Match:
         # that's the original HAJ-50 compact register.
         if outcome == FailureOutcome.TACTICAL_DROP_RESET:
             effective_motivation = motivation or CommitMotivation.CLOCK_RESET
+            # The motivation prose already reads as a narrative beat; only
+            # override it when the throw authored a tactical_drop_reset line.
+            drop_data = dict(data)
+            if authored is not None:
+                drop_data["coach_prose"] = authored
             return [Event(
                 tick=tick, event_type="FAILED",
                 description=motivation_narration_for(
                     effective_motivation, tori=a_name, throw=throw_name,
                 ),
-                data=data,
+                data=drop_data,
             )]
 
         tag = _FAILURE_TAGS.get(outcome, outcome.name.lower())
+        failed_data = dict(data)
+        if authored is not None:
+            failed_data["coach_prose"] = authored
         return [Event(
             tick=tick, event_type="FAILED",
             description=(
                 f"[throw] {a_name} → {throw_name} → failed "
                 f"({tag}; recovery {recovery} tick(s){desp_tag})."
             ),
-            data=data,
+            data=failed_data,
         )]
 
     # -----------------------------------------------------------------------

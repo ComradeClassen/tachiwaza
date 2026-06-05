@@ -291,6 +291,109 @@ def test_select_failure_line_accepts_enum_name() -> None:
     ) == "bounce-off"
 
 
+# ---------------------------------------------------------------------------
+# HAJ-223 — authored failure narration wired into the coach stream.
+# _format_failure_events attaches the authored body-part failure line to the
+# FAILED event's `coach_prose`, falling back to the engineer tag when the
+# throw has no entry for that FailureOutcome.
+# ---------------------------------------------------------------------------
+def _failure_resolution(outcome, recovery=1):
+    from failure_resolution import FailureResolution
+    return FailureResolution(
+        outcome=outcome, recovery_ticks=recovery,
+        failed_dimension="kuzushi", dimension_score=0.3,
+    )
+
+
+def _match_for_failures():
+    t, s = _pair()
+    return Match(
+        fighter_a=t, fighter_b=s, referee=build_suzuki(),
+        seed=1, stream="coach",
+    ), t, s
+
+
+def test_authored_failure_line_surfaces_as_coach_prose() -> None:
+    from throw_templates import FailureOutcome
+    tn.reset_default_data(tn.parse_throw_narration({
+        "ko_uchi_gari": {
+            "failures": {
+                "TORI_SWEEP_BOUNCES_OFF": ["{tori}'s foot skids off {uke}'s heel."],
+            },
+        },
+    }))
+    try:
+        m, t, s = _match_for_failures()
+        events = m._format_failure_events(
+            t, s, "Ko-uchi-gari",
+            _failure_resolution(FailureOutcome.TORI_SWEEP_BOUNCES_OFF),
+            desperation=False, tick=10, throw_id=ThrowID.KO_UCHI_GARI,
+        )
+        failed = [e for e in events if e.event_type == "FAILED"]
+        assert len(failed) == 1
+        # {tori}/{uke} resolved to live fighter names (attacker=tori).
+        assert failed[0].data.get("coach_prose") == (
+            f"{t.identity.name}'s foot skids off {s.identity.name}'s heel."
+        )
+        # Engineer-facing description still carries the enum tag for debug.
+        assert "sweep bounces off" in failed[0].description
+    finally:
+        tn.reset_default_data(None)
+
+
+def test_unauthored_failure_falls_back_to_tag() -> None:
+    """No narration entry for this (throw, outcome) → no coach_prose; the
+    engineer tag phrasing is preserved."""
+    from throw_templates import FailureOutcome
+    tn.reset_default_data(tn.parse_throw_narration({}))
+    try:
+        m, t, s = _match_for_failures()
+        events = m._format_failure_events(
+            t, s, "Ko-uchi-gari",
+            _failure_resolution(FailureOutcome.STANCE_RESET),
+            desperation=False, tick=10, throw_id=ThrowID.KO_UCHI_GARI,
+        )
+        failed = [e for e in events if e.event_type == "FAILED"]
+        assert len(failed) == 1
+        assert "coach_prose" not in failed[0].data
+        assert "stance reset" in failed[0].description
+    finally:
+        tn.reset_default_data(None)
+
+
+def test_authored_counter_line_overrides_counter_narration() -> None:
+    """A clean-counter outcome (OSOTO_GAESHI) routes the authored line onto
+    the [counter] FAILED event and silences the bare 'stuffed' beat."""
+    from throw_templates import FailureOutcome
+    tn.reset_default_data(tn.parse_throw_narration({
+        "o_soto_gari": {
+            "failures": {
+                "OSOTO_GAESHI": ["{uke} catches the reap and turns it back on {tori}."],
+            },
+        },
+    }))
+    try:
+        m, t, s = _match_for_failures()
+        events = m._format_failure_events(
+            t, s, "O-soto-gari",
+            _failure_resolution(FailureOutcome.OSOTO_GAESHI),
+            desperation=False, tick=10, throw_id=ThrowID.O_SOTO_GARI,
+        )
+        stuffed = [e for e in events if e.event_type == "THROW_STUFFED"]
+        failed = [e for e in events if e.event_type == "FAILED"]
+        assert len(stuffed) == 1 and len(failed) == 1
+        # Authored line lands on the counter (FAILED) event, names resolved.
+        assert failed[0].data.get("coach_prose") == (
+            f"{s.identity.name} catches the reap and turns it back on "
+            f"{t.identity.name}."
+        )
+        # The bare "stuffed" beat is silenced on the coach stream so the
+        # authored counter line is the single narrative beat.
+        assert stuffed[0].data.get("prose_silent") is True
+    finally:
+        tn.reset_default_data(None)
+
+
 def test_empty_narration_data_falls_back_gracefully() -> None:
     """HAJ-221 AC: empty narration data must not crash."""
     assert tn.parse_throw_narration({}) == {}

@@ -378,6 +378,19 @@ _GENERIC_PHASE_FALLBACK: dict[str, str] = {
 }
 
 
+def render_line(line: str, *, tori: str, uke: str) -> str:
+    """Substitute {tori}/{uke} placeholders in an authored narration line
+    with the live fighter names. Authored content (HAJ-223) uses these
+    placeholders so the lexicon is matchup-stable. Tolerant of lines that
+    carry no placeholders, and of stray braces an author might introduce
+    (a KeyError/ValueError from str.format falls back to the raw line
+    rather than dropping the coach line entirely)."""
+    try:
+        return line.format(tori=tori, uke=uke)
+    except (KeyError, IndexError, ValueError):
+        return line
+
+
 def generic_phase_line(
     phase: str, *, tori: str, uke: str,
 ) -> Optional[str]:

@@ -1,23 +1,1127 @@
-# Throw narration data — HAJ-221 scaffold.
+# Throw narration data — HAJ-223 authoring (body-part lexicon).
+#
+# Populated for the 13 engine-implemented throws (those in
+# THROW_TO_TECHNIQUE_ID with worked_throws physics profiles). Keys are
+# the ThrowID enum name lowered (throw_narration._throw_key_for), NOT the
+# technique_id string — e.g. ThrowID.O_SOTO_GARI -> `o_soto_gari`.
+#
+# Audited against src/availability.py THROW_TO_TECHNIQUE_ID + src/worked_throws.py
+# on 2026-06-05. The ticket's original 13 named ko_soto_gari / ippon_seoi_nage /
+# tsuri_komi_goshi, none of which are engine-implemented; the live set
+# substitutes harai_goshi_classical / tomoe_nage / o_guruma (the Lever forms).
 #
 # Schema:
 #   <throw_id_lowered>:
-#     commit:          ["..."]                       # flat list
-#     reach_kuzushi:                                 # banded
-#       clean:    ["..."]
-#       standard: ["..."]
-#       sloppy:   ["..."]
-#     kuzushi:    {clean: [...], standard: [...], sloppy: [...]}
-#     tsukuri:    {clean: [...], standard: [...], sloppy: [...]}
-#     kake:       {clean: [...], standard: [...], sloppy: [...]}
+#     commit:    ["..."]                              # flat list (3 variants)
+#     reach_kuzushi: {clean: [...], standard: [...], sloppy: [...]}
+#     kuzushi:       {clean: [...], standard: [...], sloppy: [...]}
+#     tsukuri:       {clean: [...], standard: [...], sloppy: [...]}
+#     kake:          {clean: [...], standard: [...], sloppy: [...]}
 #     failures:
-#       SWEEP_BOUNCES_OFF: ["..."]                   # FailureOutcome enum
-#       forward_lean:      ["..."]                   # or lower-snake
+#       <failure_outcome_lowered>: ["..."]            # FailureOutcome enum, lowered
 #
-# Phase lines use {tori} and {uke} placeholders so they're stable across
-# matchups. The loader gates by quality band (clean/standard/sloppy) and
-# picks a deterministic variant per (throw, phase, seed).
+# Failure keys per throw are its FailureSpec primary/secondary/tertiary
+# (src/worked_throws.py), plus blocked_by_hip for hip-loaders and
+# tactical_drop_reset for drop variants where the engine can route there.
 #
-# This file ships intentionally empty under HAJ-221 — content authoring
-# for the 13 engine-implemented throws is HAJ-223. With no entries, the
-# coach stream falls back to a generic phase line per throw_narration.py.
+# {tori}/{uke} are substituted with live fighter names at render time
+# (throw_narration.render_line). Use them, never literal names.
+
+# ===========================================================================
+# O-SOTO-GARI — Major Outer Reap. Tori steps alongside uke, drives the
+# head/chest back over the heel, and reaps the loaded leg from outside.
+# Body parts: tori's reaping leg, tori's lapel hand driving uke's chest,
+# uke's loaded rear leg / heel, uke's collapsing posture.
+# ===========================================================================
+o_soto_gari:
+  commit:
+    - "{tori} commits to O-soto-gari."
+    - "{tori} steps deep alongside {uke}, loading for the outer reap — O-soto-gari."
+    - "{tori} drives the lapel hand up under {uke}'s chin — O-soto-gari coming."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} drives {uke}'s chest back, stacking the weight onto one heel."
+      - "{tori}'s lapel hand pushes up and back — {uke}'s head travels past his rear foot."
+      - "{tori} steps his lead foot deep past {uke}'s and tips the upper body backward."
+    standard:
+      - "{tori} pushes {uke}'s chest back, hunting the loaded leg."
+      - "{tori} steps alongside and presses {uke}'s weight rearward."
+      - "{tori} works {uke}'s posture back toward the rear heel."
+    sloppy:
+      - "{tori} shoves at {uke}'s chest but the weight stays centered."
+      - "{tori} steps in shallow, the push landing flat across the body."
+      - "{tori} reaches for the lapel without driving {uke} off the heel."
+
+  kuzushi:
+    clean:
+      - "{uke}'s weight pours onto the rear leg — that heel is now the only support."
+      - "{uke} arches back, the loaded leg stiffening as the balance breaks rearward."
+      - "{uke}'s head drops behind his heel — the posture is gone."
+    standard:
+      - "{uke}'s weight rolls back onto the rear leg."
+      - "{uke} leans away from the pressure, the back leg taking the load."
+      - "{uke}'s base shifts rearward as the chest gives ground."
+    sloppy:
+      - "{uke} sways back but keeps a foot free to post."
+      - "{uke}'s weight shifts without fully committing to the rear leg."
+      - "{uke} bends at the waist instead of tipping — base intact."
+
+  tsukuri:
+    clean:
+      - "{tori} swings his reaping leg up high and tight behind {uke}'s loaded knee."
+      - "{tori} plants his support foot past {uke} and hangs the reaping leg behind the calf."
+      - "{tori}'s hamstring lands flush against the back of {uke}'s thigh, ready to scythe."
+    standard:
+      - "{tori} brings his reaping leg up behind {uke}'s leg."
+      - "{tori} steps his support foot in and cocks the sweeping leg back."
+      - "{tori} hooks his leg in behind the loaded knee."
+    sloppy:
+      - "{tori}'s reaping leg arrives low, catching {uke} at the ankle instead of the thigh."
+      - "{tori} plants his support foot too far out, the reap stretched thin."
+      - "{tori} swings the leg in late, behind the loaded knee by a beat."
+
+  kake:
+    clean:
+      - "{tori} scythes the leg back and up — {uke}'s support is gone and he crashes flat on his back."
+      - "{tori}'s hamstring drives through the thigh, the chest-hand finishing the rotation — clean O-soto."
+      - "{tori} reaps hard, {uke}'s loaded leg whipping skyward as he slams down."
+    standard:
+      - "{tori} reaps the leg out and drives {uke} down."
+      - "{tori} sweeps the loaded leg back, {uke} toppling rearward."
+      - "{tori} drives the chest hand through as the reap lands."
+    sloppy:
+      - "{tori}'s reap drags across the calf, {uke} hopping to keep the foot down."
+      - "{tori} sweeps without the chest drive — {uke} folds but doesn't fly."
+      - "{tori}'s leg catches but the upper body stalls, the throw losing its turn."
+
+  failures:
+    tori_compromised_forward_lean:
+      - "{tori} reaps hard but his own weight chases past the support foot — he pitches forward, posture gone."
+      - "{tori}'s upper body overcommits over the reaping leg; he stumbles in over {uke}."
+      - "{tori} leans through the throw and ends up bent over his own lead foot, off balance."
+    osoto_gaeshi:
+      - "{uke} feels the reap coming, hops the loaded leg clear, and reaps {tori}'s post — O-soto-gaeshi."
+      - "{uke} rides the backward push, swings his own leg through, and counters with O-soto-gaeshi."
+      - "{uke} catches {tori}'s reaping leg mid-swing and turns it back on him."
+    stance_reset:
+      - "{uke} steps the rear leg back out of the reap and squares up — O-soto-gari fails."
+      - "{uke} recovers his heel, slides off the line, and resets to a neutral stance."
+      - "{uke} circles his weight back over both feet before the leg can be loaded."
+    blocked_by_hip:
+      - "{uke} jams his hip in and blocks the entry — {tori} can't get the reaping leg past."
+      - "{uke} turns his hip across the line; the reap finds the hip, not the leg."
+
+# ===========================================================================
+# O-UCHI-GARI — Major Inner Reap. Tori hooks from inside and reaps uke's
+# far leg out wide while driving the weight back and across.
+# Body parts: tori's reaping (hooking) leg, tori's hands steering the chest,
+# uke's far leg, uke's widening base.
+# ===========================================================================
+o_uchi_gari:
+  commit:
+    - "{tori} commits to O-uchi-gari."
+    - "{tori} steps inside and angles {uke} back — O-uchi-gari coming."
+    - "{tori} drives between {uke}'s feet, hunting the far leg — O-uchi-gari."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} drives {uke}'s weight back and across, splitting the stance open."
+      - "{tori} steps in deep between the feet, his hands carrying {uke}'s chest rearward."
+      - "{tori} angles {uke} onto the far heel, the base spreading wide."
+    standard:
+      - "{tori} steps inside and presses {uke}'s weight back."
+      - "{tori} works between the feet, pushing the chest rearward."
+      - "{tori} drives in, widening {uke}'s stance."
+    sloppy:
+      - "{tori} steps inside but the weight stays over {uke}'s lead foot."
+      - "{tori} pushes flat into the chest without splitting the base."
+      - "{tori} crowds in close, the angle never opening."
+
+  kuzushi:
+    clean:
+      - "{uke}'s far leg loads as the weight rolls back and out — the base is split."
+      - "{uke} settles onto the inside edge of the far foot, stretched wide and rearward."
+      - "{uke}'s stance spreads, the far heel pinned under his own weight."
+    standard:
+      - "{uke}'s weight shifts onto the far leg."
+      - "{uke} leans back as the stance widens."
+      - "{uke}'s base spreads, the far foot taking load."
+    sloppy:
+      - "{uke} widens but keeps his weight floating between both feet."
+      - "{uke} shifts back without loading the far leg."
+      - "{uke} absorbs the push, base wide but balanced."
+
+  tsukuri:
+    clean:
+      - "{tori} hooks his reaping leg deep around the inside of {uke}'s far knee."
+      - "{tori} slides his calf behind {uke}'s loaded leg, the hook set high and tight."
+      - "{tori}'s instep catches the inside of the far heel, ready to sweep it out wide."
+    standard:
+      - "{tori} hooks his leg inside {uke}'s far leg."
+      - "{tori} reaches the reaping leg around the loaded knee."
+      - "{tori} sets the hook behind the far leg."
+    sloppy:
+      - "{tori}'s hook lands shallow, catching the shin instead of behind the knee."
+      - "{tori} reaches the leg in late, the far foot already drifting."
+      - "{tori}'s reaping leg slips off the inside of the knee."
+
+  kake:
+    clean:
+      - "{tori} sweeps the far leg out wide and drives the chest back — {uke} sits straight down."
+      - "{tori}'s hook scythes the loaded leg away; {uke} drops backward with nothing under him."
+      - "{tori} reaps the inside leg out and rides {uke} down to the mat."
+    standard:
+      - "{tori} sweeps the far leg out and drives {uke} back."
+      - "{tori} reaps the loaded leg, {uke} dropping rearward."
+      - "{tori} hooks the leg away and follows {uke} down."
+    sloppy:
+      - "{tori}'s hook drags the far foot a few inches but {uke} hops it back under."
+      - "{tori} sweeps without the rearward drive — {uke} staggers but stays up."
+      - "{tori}'s reap loses the leg halfway, the foot sliding free."
+
+  failures:
+    tori_compromised_single_support:
+      - "{tori} commits to the hook and ends up stranded on one leg, {uke} still standing."
+      - "{tori}'s support foot is all he has left — the reap missed and he's balanced on a single leg."
+      - "{tori} hangs on the reaping leg too long; his own base collapses to one point."
+    stance_reset:
+      - "{uke} steps the far leg out of the hook and squares his stance — O-uchi-gari fails."
+      - "{uke} pulls the loaded leg free and resets over both feet."
+      - "{uke} circles off the reap and recovers a neutral base."
+    partial_throw:
+      - "{tori} drags {uke} down partway but the reap dies before the back hits — a scrambling half-throw."
+      - "{uke} goes down to a hip, not a back — the O-uchi only half lands."
+      - "{tori} gets the leg out but {uke} catches himself on a hand on the way down."
+    tactical_drop_reset:
+      - "{tori}'s entry never had the weight behind it — the inner reap was a feint, and both reset."
+      - "{tori} drops into the hook with nothing committed; {uke} reads it and they break apart."
+
+# ===========================================================================
+# KO-UCHI-GARI — Minor Inner Reap. Tori pins uke's lead foot and sweeps the
+# heel forward, collapsing the leg backward. (Ticket reference example,
+# adapted to {tori}/{uke} and engine failure keys.)
+# Body parts: tori's stepping/sweeping foot, tori's body angle, uke's lead
+# leg / heel, uke's base of support.
+# ===========================================================================
+ko_uchi_gari:
+  commit:
+    - "{tori} commits to Ko-uchi-gari."
+    - "{tori} loads to fire — Ko-uchi-gari coming."
+    - "{tori} lowers level and angles in — Ko-uchi-gari."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} shifts weight onto {uke}'s right leg, driving him backward."
+      - "{tori} steps in tight and presses {uke}'s lead foot into the mat."
+      - "{tori} angles forward, loading {uke}'s heel."
+    standard:
+      - "{tori} steps in and presses against {uke}'s stance."
+      - "{tori} closes the distance, working the lead leg."
+      - "{tori} pushes forward, looking for the back foot."
+    sloppy:
+      - "{tori} lurches forward, not fully balanced."
+      - "{tori} steps in heavy, weight on his front foot."
+      - "{tori} reaches in without setting his own base."
+
+  kuzushi:
+    clean:
+      - "{uke}'s weight rolls onto the back of his heel — balance compromised."
+      - "{uke}'s lead leg loads — the foot pinned to the mat."
+      - "{uke} lifts the rear foot to recover and exposes the front."
+    standard:
+      - "{uke}'s stance shifts as his lead leg loads."
+      - "{uke}'s weight transfers backward onto the lead foot."
+      - "{uke} adjusts his base but the lead leg is committed."
+    sloppy:
+      - "{uke} sways but stays on his base."
+      - "{uke}'s stance wobbles slightly."
+      - "{uke} shifts weight without committing the lead leg."
+
+  tsukuri:
+    clean:
+      - "{tori} slides his right foot behind {uke}'s lifted foot."
+      - "{tori}'s sweeping foot arrives at {uke}'s heel, sole flat."
+      - "{tori} places his foot perfectly — behind, low, ready to sweep."
+    standard:
+      - "{tori} steps his foot in low, between {uke}'s stance."
+      - "{tori} positions his right foot toward {uke}'s lead leg."
+      - "{tori}'s sweeping foot lines up with the target heel."
+    sloppy:
+      - "{tori}'s positioning foot doesn't quite reach behind {uke}'s heel."
+      - "{tori}'s foot lands shallow — too far in front of the target."
+      - "{tori} rushes the step-in, foot landing imprecisely."
+
+  kake:
+    clean:
+      - "{tori} sweeps the planted leg out from under {uke}."
+      - "{tori}'s sole drives the heel forward — {uke}'s leg lifts clean."
+      - "The sweep catches the heel perfectly — {uke} collapses backward."
+    standard:
+      - "{tori} sweeps the planted leg."
+      - "{tori} drives his foot through, sweeping the heel."
+      - "{tori} completes the sweep, foot following through."
+    sloppy:
+      - "{tori}'s foot drags across the mat, catching {uke}'s heel awkwardly."
+      - "{tori}'s sweep loses power before contact."
+      - "{tori} rakes the foot across without clean contact."
+
+  failures:
+    tori_sweep_bounces_off:
+      - "{tori}'s foot meets {uke}'s leg but bounces off — {uke} keeps his base."
+      - "{uke}'s lead foot is too planted — the sweep redirects off the heel."
+      - "{tori}'s sweep contacts but fails to dislodge the foot."
+    stance_reset:
+      - "{uke} shifts weight, regaining stance — Ko-uchi-gari fails."
+      - "{uke} recovers the lead foot, sliding back to neutral."
+      - "{uke} adjusts in time — the sweep finds empty space."
+    partial_throw:
+      - "{tori} clips the heel and {uke} stumbles down to a knee, not his back."
+      - "{uke} loses the foot but catches himself on a post — only half down."
+      - "The sweep half-lands; {uke} sprawls and scrambles rather than falling clean."
+    tactical_drop_reset:
+      - "{tori}'s step-in carried no real weight — the sweep was a probe, and they reset."
+      - "{tori} feints the Ko-uchi without committing; {uke} reads it and resets."
+
+# ===========================================================================
+# DE-ASHI-HARAI — Forward Foot Sweep. Pure timing: tori sweeps uke's advancing
+# foot at the instant before it's weighted, sweeping it across.
+# Body parts: tori's sweeping sole, tori's hands steering the rhythm,
+# uke's advancing foot, uke's transferring weight.
+# ===========================================================================
+de_ashi_harai:
+  commit:
+    - "{tori} commits to De-ashi-harai."
+    - "{tori} times {uke}'s step — De-ashi-harai."
+    - "{tori} reads the rhythm and loads the sweep — De-ashi-harai coming."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} steers {uke} into a step and waits for the foot to float."
+      - "{tori}'s hands draw {uke} sideways, baiting the advancing foot off the mat."
+      - "{tori} matches {uke}'s rhythm, hunting the instant the foot is unweighted."
+    standard:
+      - "{tori} works {uke} into a step, looking for the sweep."
+      - "{tori} draws {uke} sideways, watching the feet."
+      - "{tori} pulls on the rhythm, waiting for the advancing foot."
+    sloppy:
+      - "{tori} reaches for the rhythm but {uke}'s step is already planted."
+      - "{tori} tugs without setting the timing, the feet out of sync."
+      - "{tori} hunts the foot but mistimes {uke}'s cadence."
+
+  kuzushi:
+    clean:
+      - "{uke}'s advancing foot floats, unweighted for a heartbeat — the moment is there."
+      - "{uke} steps and his weight hangs between the feet, the lead foot light."
+      - "{uke}'s foot skims forward, the sole barely grazing the mat."
+    standard:
+      - "{uke}'s foot comes forward, weight in transit."
+      - "{uke} steps and his balance rides between the feet."
+      - "{uke}'s advancing foot lightens as he moves."
+    sloppy:
+      - "{uke}'s foot is already settling, the weight half-committed."
+      - "{uke} steps but plants quickly, the window closing."
+      - "{uke}'s foot touches down before the load lifts."
+
+  tsukuri:
+    clean:
+      - "{tori}'s sole arrives at {uke}'s ankle, flat and low, perfectly on time."
+      - "{tori} lays the bottom of his foot against the outside of {uke}'s advancing foot."
+      - "{tori}'s sweeping foot meets the target the instant it floats."
+    standard:
+      - "{tori} brings his sole to {uke}'s advancing foot."
+      - "{tori} sets the sweeping foot against the ankle."
+      - "{tori}'s foot lines up with the moving foot."
+    sloppy:
+      - "{tori}'s sole arrives a beat late, the foot already loading."
+      - "{tori} reaches the foot in too high, catching the shin."
+      - "{tori}'s sweeping foot lands behind the target, chasing it."
+
+  kake:
+    clean:
+      - "{tori} sweeps the foot across the mat — {uke}'s legs scissor out and he drops flat."
+      - "{tori}'s sole whips the floating foot sideways; {uke} crashes down, swept clean."
+      - "The sweep takes the foot out from under the step — {uke} lands on his side, flat."
+    standard:
+      - "{tori} sweeps the foot across, {uke} falling sideways."
+      - "{tori} brushes the foot away and {uke} goes down."
+      - "{tori} drives the sole through, sweeping the leg out."
+    sloppy:
+      - "{tori}'s sweep clips the foot late, {uke} hopping to recover."
+      - "{tori} brushes the foot but the weight's already down — no sweep."
+      - "{tori}'s sole skids off the ankle, the timing gone."
+
+  failures:
+    tori_sweep_bounces_off:
+      - "{tori}'s sole meets a planted foot and bounces — {uke} was already weighted."
+      - "The sweep hits a loaded leg and rebounds; nothing moves."
+      - "{tori}'s foot glances off {uke}'s ankle without taking it."
+    stance_reset:
+      - "{uke} plants the foot and squares up — the timing's gone, De-ashi fails."
+      - "{uke} settles his step and resets, the window closed."
+      - "{uke} catches the rhythm break and recovers his base."
+    partial_throw:
+      - "{tori} clips the foot enough to stagger {uke}, but he hops down to a knee and scrambles."
+      - "{uke} loses the foot but posts a hand — only half swept."
+      - "The sweep half-lands; {uke} sprawls instead of falling flat."
+
+# ===========================================================================
+# HARAI-GOSHI — Sweeping Hip Throw. Tori turns in, loads uke onto the hip,
+# and sweeps the thigh/leg up the front of uke's leg as the hands rotate.
+# Body parts: tori's sweeping leg/thigh, tori's pulling arms, tori's loaded hip,
+# uke's bent-forward posture, uke's near leg.
+# ===========================================================================
+harai_goshi:
+  commit:
+    - "{tori} commits to Harai-goshi."
+    - "{tori} turns in and loads the hip — Harai-goshi coming."
+    - "{tori} spins in deep, sweeping leg cocked — Harai-goshi."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} pulls {uke} up onto his toes and forward, breaking the posture over the front."
+      - "{tori}'s arms draw {uke}'s chest forward and up, lifting the weight onto the lead foot."
+      - "{tori} rotates in, dragging {uke} forward across the hip line."
+    standard:
+      - "{tori} pulls {uke} forward and turns in."
+      - "{tori} draws {uke}'s weight onto the front foot."
+      - "{tori} spins in, working {uke}'s balance forward."
+    sloppy:
+      - "{tori} turns in but {uke}'s weight stays back on the heels."
+      - "{tori} pulls without lifting, {uke} still flat-footed."
+      - "{tori} rotates in late, the forward break incomplete."
+
+  kuzushi:
+    clean:
+      - "{uke} is dragged up onto his toes, chest forward, weight pouring over the front leg."
+      - "{uke}'s posture breaks forward — he's stretched over {tori}'s hip with no base behind."
+      - "{uke} tips forward onto the lead leg, the heel lifting off the mat."
+    standard:
+      - "{uke}'s weight rolls forward onto the lead leg."
+      - "{uke} bends forward as the arms draw him in."
+      - "{uke}'s balance shifts onto the front foot."
+    sloppy:
+      - "{uke} leans forward but keeps the heels down."
+      - "{uke} bows at the waist, weight still centered."
+      - "{uke} drifts forward without fully loading the front leg."
+
+  tsukuri:
+    clean:
+      - "{tori} loads {uke} high onto his hip and lays the sweeping thigh across the front of {uke}'s leg."
+      - "{tori}'s hip drives under {uke}'s center, the sweeping leg pressed up against the thigh."
+      - "{tori} turns in tight, backside into {uke}, the reaping leg set along {uke}'s thigh."
+    standard:
+      - "{tori} loads {uke} onto the hip and brings the sweeping leg across."
+      - "{tori} sets his hip under {uke} and lays the leg in."
+      - "{tori} turns in and plants the sweeping thigh against {uke}'s leg."
+    sloppy:
+      - "{tori}'s hip lands low under {uke}, the sweeping leg reaching too far down."
+      - "{tori} turns in shallow, his backside never clearing under {uke}'s center."
+      - "{tori}'s sweeping leg arrives across the shin, not the thigh."
+
+  kake:
+    clean:
+      - "{tori} sweeps the leg up and rotates the arms over — {uke} cartwheels across the hip and slams down."
+      - "{tori}'s thigh whips {uke}'s leg skyward as the hands turn him over — clean Harai-goshi."
+      - "{tori} drives the sweep up the thigh and spins {uke} flat onto his back."
+    standard:
+      - "{tori} sweeps the leg up and turns {uke} over the hip."
+      - "{tori} drives the thigh up and rotates {uke} down."
+      - "{tori} completes the sweep, {uke} rolling over the hip."
+    sloppy:
+      - "{tori}'s sweep catches low, {uke} stepping over the leg to recover."
+      - "{tori} turns the hands but the leg sweep stalls — {uke} posts off."
+      - "{tori}'s thigh drags up the leg without lift, the rotation dying."
+
+  failures:
+    tori_compromised_single_support:
+      - "{tori} sweeps the leg up but {uke} doesn't go — now {tori}'s stranded on one leg, hip exposed."
+      - "The sweep finds air; {tori} hangs on his support leg with {uke} still planted."
+      - "{tori} commits the sweeping leg and ends up balanced on a single foot, {uke} riding it out."
+    tori_compromised_forward_lean:
+      - "{tori} over-rotates and pitches forward off the hip, posture spilling past his support."
+      - "{tori}'s upper body chases the throw past his base — he stumbles forward, bent over."
+      - "{tori} leans through the sweep and ends up folded over his own lead foot."
+    stance_reset:
+      - "{uke} steps around the sweeping leg and squares up — Harai-goshi fails."
+      - "{uke} drops his weight back off the hip and resets his base."
+      - "{uke} circles out of the load and recovers a neutral stance."
+    blocked_by_hip:
+      - "{uke} jams his own hip down and blocks the load — {tori} can't get under the center."
+      - "{uke} sinks his hips and stuffs the entry; the sweep never gets its fulcrum."
+
+# ===========================================================================
+# UCHI-MATA — Inner Thigh Throw. Tori turns in and sweeps the inner thigh of
+# uke's supporting/forward leg up and back as the hands lift and rotate.
+# Body parts: tori's sweeping leg (inner thigh contact), tori's lifting arms,
+# tori's loaded hip, uke's posture, uke's inner thigh / supporting leg.
+# ===========================================================================
+uchi_mata:
+  commit:
+    - "{tori} commits to Uchi-mata."
+    - "{tori} turns in and splits the stance — Uchi-mata coming."
+    - "{tori} spins in deep, reaping leg threading the gap — Uchi-mata."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} draws {uke} forward and around in a circle, floating the weight onto the far leg."
+      - "{tori}'s hands lift {uke} up onto the toes, swinging the balance forward and across."
+      - "{tori} rotates {uke} into the turn, the weight rising onto a single forward leg."
+    standard:
+      - "{tori} pulls {uke} forward into the turn."
+      - "{tori} draws {uke} around, lifting the weight up."
+      - "{tori} spins in, working {uke}'s balance forward."
+    sloppy:
+      - "{tori} turns in but {uke}'s weight stays flat and centered."
+      - "{tori} pulls without lift, {uke} settling rather than floating."
+      - "{tori} rotates in late, the circle never opening {uke}'s base."
+
+  kuzushi:
+    clean:
+      - "{uke} floats up onto the toes of one leg, weight stretched forward into the turn."
+      - "{uke}'s balance rises onto the supporting leg, the inner thigh open and loaded."
+      - "{uke} is lifted forward and around, the gap between his thighs wide open."
+    standard:
+      - "{uke}'s weight lifts onto the forward leg."
+      - "{uke} rises onto the toes as the turn pulls him around."
+      - "{uke}'s balance floats forward into {tori}'s back."
+    sloppy:
+      - "{uke} leans into the turn but keeps both feet weighted."
+      - "{uke} rises slightly, the thigh gap still closed."
+      - "{uke} drifts forward without floating onto one leg."
+
+  tsukuri:
+    clean:
+      - "{tori} threads his reaping leg up between {uke}'s thighs, the back of the thigh pressed high to {uke}'s inner leg."
+      - "{tori}'s sweeping leg drives deep into the gap, hamstring flush against {uke}'s inner thigh."
+      - "{tori} loads {uke} onto the hip and sets the reaping leg high inside the supporting thigh."
+    standard:
+      - "{tori} swings his reaping leg up between {uke}'s legs."
+      - "{tori} threads the sweeping leg into the inner thigh."
+      - "{tori} sets the reaping leg inside {uke}'s supporting leg."
+    sloppy:
+      - "{tori}'s reaping leg arrives low, catching the knee instead of the inner thigh."
+      - "{tori} threads the leg in shallow, contact down near the calf."
+      - "{tori}'s sweep slots in late, {uke}'s leg already drifting clear."
+
+  kake:
+    clean:
+      - "{tori} sweeps the inner thigh up and back, lifts with the hands — {uke} is launched over the hip."
+      - "{tori}'s leg whips {uke}'s supporting leg skyward; the rotation spins {uke} flat onto his back."
+      - "{tori} drives the reap up the inner thigh and turns {uke} clean over the top."
+    standard:
+      - "{tori} sweeps the inner thigh up and rotates {uke} over."
+      - "{tori} drives the reaping leg up and turns {uke} down."
+      - "{tori} lifts and sweeps, {uke} rolling over the hip."
+    sloppy:
+      - "{tori}'s sweep catches low and {uke} steps the leg down to recover."
+      - "{tori} lifts the hands but the leg reap stalls — {uke} posts out."
+      - "{tori}'s reap slides up without lift, the throw losing its turn."
+
+  failures:
+    tori_compromised_single_support:
+      - "{tori} sweeps high but {uke} stays planted — {tori}'s left hopping on his support leg."
+      - "The reaping leg finds air; {tori} hangs on one foot with {uke} still grounded."
+      - "{tori} commits the sweep and strands himself on a single support, {uke} riding it down to neither."
+    uchi_mata_sukashi:
+      - "{uke} reads the uchi-mata, slips his swept leg out, and lets {tori} spin through empty — sukashi."
+      - "{uke} pulls the inner leg clear and rides {tori}'s own rotation down — Uchi-mata-sukashi."
+      - "{uke} voids the sweep, steps around the turning hip, and {tori} corkscrews to the mat alone."
+    stance_reset:
+      - "{uke} steps the supporting leg down and squares up — Uchi-mata fails."
+      - "{uke} drops his weight off the hip and recovers his base."
+      - "{uke} circles out of the turn and resets to neutral."
+    blocked_by_hip:
+      - "{uke} sits his hips down and blocks the load — {tori} can't thread the leg under."
+      - "{uke} jams the hip across and stuffs the entry before the reap sets."
+
+# ===========================================================================
+# SEOI-NAGE — Shoulder Throw (morote). Tori drops under, loads uke across the
+# back/shoulder via the bent arm, and rotates uke over the shoulder.
+# Body parts: tori's hip-low drop, tori's pulling/lifting arm under uke's armpit,
+# tori's back as the lever, uke's bent-forward posture.
+# ===========================================================================
+seoi_nage:
+  commit:
+    - "{tori} commits to Seoi-nage."
+    - "{tori} drops his level and spins under — Seoi-nage coming."
+    - "{tori} loads the arm and turns in low — Seoi-nage."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} pulls {uke} forward and up onto the toes, breaking the posture over the front."
+      - "{tori}'s sleeve and lapel hands draw {uke}'s weight up and forward off the heels."
+      - "{tori} lifts {uke}'s chest forward, floating the balance over the lead foot."
+    standard:
+      - "{tori} pulls {uke} forward onto the front foot."
+      - "{tori} draws {uke}'s weight up and in."
+      - "{tori} breaks {uke}'s posture forward."
+    sloppy:
+      - "{tori} pulls but {uke}'s weight settles back on the heels."
+      - "{tori} draws {uke} in without lifting, the posture intact."
+      - "{tori} tugs the sleeve late, the forward break incomplete."
+
+  kuzushi:
+    clean:
+      - "{uke} is lifted onto his toes, chest folding forward over {tori}'s shoulder."
+      - "{uke}'s posture breaks forward and up — no base behind him."
+      - "{uke} pours forward onto the lead leg, weight rising off the heels."
+    standard:
+      - "{uke}'s weight rolls forward onto the front foot."
+      - "{uke} bends forward as the arms draw him up."
+      - "{uke}'s balance lifts forward over the toes."
+    sloppy:
+      - "{uke} leans in but keeps the heels planted."
+      - "{uke} folds at the waist, weight still back."
+      - "{uke} drifts forward without rising onto the toes."
+
+  tsukuri:
+    clean:
+      - "{tori} drops his hips below {uke}'s center and threads his bent arm up under the armpit."
+      - "{tori} spins under, back tight to {uke}'s chest, the loading arm hooked high beneath the shoulder."
+      - "{tori} sinks low and loads {uke} square across both shoulders, hips well under the center."
+    standard:
+      - "{tori} drops under and loads {uke} across the back."
+      - "{tori} spins in low, the arm hooking under {uke}'s shoulder."
+      - "{tori} gets his hips under and loads the shoulder."
+    sloppy:
+      - "{tori} drops in too high, his hips never clearing under {uke}'s center."
+      - "{tori} loads {uke} onto one shoulder, the back turned only halfway in."
+      - "{tori}'s arm hooks shallow, catching the biceps instead of deep under the armpit."
+
+  kake:
+    clean:
+      - "{tori} drives up through the legs and snaps the arms down — {uke} flies over the shoulder and slams flat."
+      - "{tori} straightens the hips and rotates {uke} over the top; he rotates clean onto his back."
+      - "{tori} bucks {uke} up off his back and whips him down over the shoulder."
+    standard:
+      - "{tori} drives up and turns {uke} over the shoulder."
+      - "{tori} straightens the legs and rotates {uke} down."
+      - "{tori} snaps the arms down, {uke} rolling over the back."
+    sloppy:
+      - "{tori} drives up but {uke} slides off the shoulder and posts out."
+      - "{tori} snaps the arms without the leg drive — {uke} stalls on the back."
+      - "{tori} rotates partway and {uke} steps around to recover."
+
+  failures:
+    tori_stuck_with_uke_on_back:
+      - "{tori} loads {uke} but can't finish the turn — he's stuck bent over with {uke} dead weight on his back."
+      - "The lift stalls at the top; {tori} is pinned under {uke}'s weight, unable to rotate him off."
+      - "{tori} gets {uke} up but the rotation dies — now he's carrying {uke} with nowhere to go."
+    tori_bent_forward_loaded:
+      - "{tori} bends to load but {uke} settles his weight down onto him — {tori} folds forward, loaded and stuck."
+      - "{uke} drops his weight onto the loaded back; {tori} is bent forward, pinned under the load."
+      - "{tori}'s posture collapses under the weight, folded forward over his own knees."
+    stance_reset:
+      - "{uke} steps around the turning hip and squares up — Seoi-nage fails."
+      - "{uke} pulls his weight back off the shoulder and resets his base."
+      - "{uke} circles off the load and recovers to neutral."
+    tactical_drop_reset:
+      - "{tori} drops to a knee for the Seoi but the lift was never there — both reset off the failed entry."
+      - "{tori}'s drop-Seoi carried no commitment; {uke} reads the fake and they break apart."
+    blocked_by_hip:
+      - "{uke} sits back and blocks the hip — {tori} can't get under the center to load."
+      - "{uke} jams his hips down against the entry; the shoulder load never sets."
+
+# ===========================================================================
+# TAI-OTOSHI — Body Drop. Tori turns in and lays a barrier leg across uke's
+# shin, driving the upper body forward over it so uke trips across the block.
+# Body parts: tori's blocking (extended) leg, tori's rotating arms, uke's
+# forward-tipping posture, uke's lead leg tripping over the barrier.
+# ===========================================================================
+tai_otoshi:
+  commit:
+    - "{tori} commits to Tai-otoshi."
+    - "{tori} turns in and lays the leg across — Tai-otoshi coming."
+    - "{tori} spins the hands forward, blocking leg extending — Tai-otoshi."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} pulls {uke} forward and up onto the toes, weight stacking over the lead foot."
+      - "{tori}'s arms draw {uke}'s chest forward off the heels, balance pitching ahead."
+      - "{tori} drags {uke} diagonally forward, loading the front corner."
+    standard:
+      - "{tori} pulls {uke} forward onto the front foot."
+      - "{tori} draws {uke}'s weight ahead over the toes."
+      - "{tori} works {uke}'s balance forward and across."
+    sloppy:
+      - "{tori} pulls but {uke}'s weight hangs back on the heels."
+      - "{tori} draws {uke} in flat, no forward tip."
+      - "{tori} tugs late, the forward load never sets."
+
+  kuzushi:
+    clean:
+      - "{uke} pitches forward onto the lead leg, weight stacked over the toes with no base ahead."
+      - "{uke}'s posture breaks over the front corner — he's tipping past his own foot."
+      - "{uke} is drawn up onto the toes, balance spilling forward."
+    standard:
+      - "{uke}'s weight rolls forward over the lead foot."
+      - "{uke} tips ahead as the arms draw him in."
+      - "{uke}'s balance loads onto the front leg."
+    sloppy:
+      - "{uke} leans forward but keeps the heel down."
+      - "{uke} drifts ahead, weight still centered."
+      - "{uke} folds at the waist without loading the front foot."
+
+  tsukuri:
+    clean:
+      - "{tori} turns in and lays his blocking leg across the front of {uke}'s shin, knee bent, foot planted wide."
+      - "{tori} steps across and bars his extended leg against {uke}'s lead ankle, a tripwire set low."
+      - "{tori} spins in and plants the barrier leg precisely across {uke}'s shin."
+    standard:
+      - "{tori} lays his blocking leg across {uke}'s shin."
+      - "{tori} steps across and bars the leg against the lead ankle."
+      - "{tori} sets the barrier leg in front of {uke}'s foot."
+    sloppy:
+      - "{tori}'s blocking leg lands too high, across the knee instead of the shin."
+      - "{tori} plants the barrier leg short, {uke}'s foot inside the block."
+      - "{tori} lays the leg in late, the shin already past it."
+
+  kake:
+    clean:
+      - "{tori} rotates the hands down and across — {uke} trips over the barred leg and crashes forward."
+      - "{tori} whips the arms toward the blocked foot; {uke} cartwheels over the leg and slams down."
+      - "{tori} drives {uke}'s upper body over the barrier; the lead leg can't step and {uke} drops."
+    standard:
+      - "{tori} rotates {uke} over the blocking leg."
+      - "{tori} drives the hands down, {uke} tripping over the bar."
+      - "{tori} turns {uke} across the leg and down."
+    sloppy:
+      - "{tori} rotates the hands but {uke} steps over the low bar and recovers."
+      - "{tori} drives forward without the block set — {uke} posts and stays up."
+      - "{tori}'s rotation stalls, {uke} pulling his foot back over the leg."
+
+  failures:
+    tori_compromised_forward_lean:
+      - "{tori} drives the hands forward but overcommits past his own block — he pitches forward, posture gone."
+      - "{tori}'s weight spills over the barrier leg; he stumbles forward off balance."
+      - "{tori} leans through the throw and folds over his own extended leg."
+    kaeshi_waza_generic:
+      - "{uke} rides the forward pull, steps over the bar, and turns the throw back on {tori}."
+      - "{uke} reads the body drop, clears the blocked leg, and counters as {tori} overextends."
+      - "{uke} uses {tori}'s forward drive against him, redirecting into a counter."
+    stance_reset:
+      - "{uke} steps over the blocking leg and squares up — Tai-otoshi fails."
+      - "{uke} pulls his foot back across the bar and resets his base."
+      - "{uke} recovers the lead leg and circles back to neutral."
+    tactical_drop_reset:
+      - "{tori} lays the leg across but the forward pull was a feint — both reset off it."
+      - "{tori}'s Tai-otoshi entry carried no commitment; {uke} reads it and they break apart."
+
+# ===========================================================================
+# O-GOSHI — Major Hip Throw. Tori wraps the back, drops the hips under uke's
+# center, and rotates uke over the loaded hip.
+# Body parts: tori's wrapping arm around uke's waist, tori's loaded hip/backside,
+# tori's lifting back, uke's bent-forward posture.
+# ===========================================================================
+o_goshi:
+  commit:
+    - "{tori} commits to O-goshi."
+    - "{tori} wraps the waist and turns in — O-goshi coming."
+    - "{tori} drops the hips under and loads — O-goshi."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} pulls {uke} forward into him, the waist wrap drawing the hips together."
+      - "{tori}'s arm hooks around {uke}'s back and draws the weight forward onto the toes."
+      - "{tori} breaks {uke} forward, chest to chest, weight rolling onto the front foot."
+    standard:
+      - "{tori} pulls {uke} forward and wraps the waist."
+      - "{tori} draws {uke}'s weight onto the front foot."
+      - "{tori} works {uke} forward into the hip."
+    sloppy:
+      - "{tori} wraps the waist but {uke}'s weight stays back on the heels."
+      - "{tori} pulls without lifting, {uke} flat-footed."
+      - "{tori} draws {uke} in late, the forward break incomplete."
+
+  kuzushi:
+    clean:
+      - "{uke} is drawn forward chest to chest, weight floating onto the toes over {tori}'s hip."
+      - "{uke}'s posture breaks forward and up — the hips pressed together, no base behind."
+      - "{uke} pours forward onto the lead leg, balance over the front of {tori}'s hip."
+    standard:
+      - "{uke}'s weight rolls forward onto the front foot."
+      - "{uke} bends forward into the waist wrap."
+      - "{uke}'s balance lifts forward over the hip."
+    sloppy:
+      - "{uke} leans in but keeps the heels down."
+      - "{uke} folds at the waist, weight still centered."
+      - "{uke} drifts forward without loading the front leg."
+
+  tsukuri:
+    clean:
+      - "{tori} drops his hips well below {uke}'s belt and rotates his backside square under the center."
+      - "{tori} sinks low and loads {uke}'s hips high onto the shelf of his own hip."
+      - "{tori} turns in deep, both hips under {uke}, the wrap pinning the waist tight."
+    standard:
+      - "{tori} drops his hips under {uke} and loads the waist."
+      - "{tori} turns his backside in under {uke}'s center."
+      - "{tori} sets the hip under and pins the waist."
+    sloppy:
+      - "{tori}'s hips load too high, the hip below {uke}'s but not under the center."
+      - "{tori} turns in shallow, only one hip clearing under {uke}."
+      - "{tori} loads {uke} onto the side of the hip, not square across it."
+
+  kake:
+    clean:
+      - "{tori} straightens the legs, lifts {uke} clear off the mat, and rotates him over the hip onto his back."
+      - "{tori} bucks the hips up and turns the waist — {uke} rolls over the top and slams flat."
+      - "{tori} lifts and twists, {uke} cartwheeling over the loaded hip."
+    standard:
+      - "{tori} lifts and rotates {uke} over the hip."
+      - "{tori} drives the hips up and turns {uke} down."
+      - "{tori} straightens up, {uke} rolling over the back."
+    sloppy:
+      - "{tori} lifts but {uke} slides off the hip and posts down."
+      - "{tori} turns the waist without the leg drive — {uke} stalls on the hip."
+      - "{tori} rotates partway and {uke} steps around to recover."
+
+  failures:
+    tori_bent_forward_loaded:
+      - "{tori} loads {uke} but the lift dies — he's bent forward, {uke}'s weight pinning him down."
+      - "{uke} settles his weight onto the loaded hip; {tori} folds forward, stuck under the load."
+      - "{tori}'s back can't straighten under the weight — he's bent over, {uke} riding the hip."
+    kaeshi_waza_generic:
+      - "{uke} rides the load, drops his hips lower than {tori}'s, and turns the throw back."
+      - "{uke} counters the lift, sagging his weight and reversing over {tori}'s hip."
+      - "{uke} reads the hip throw and redirects {tori}'s lift into a counter."
+    stance_reset:
+      - "{uke} steps back off the hip and squares up — O-goshi fails."
+      - "{uke} pulls his weight off the loaded hip and resets his base."
+      - "{uke} circles out of the wrap and recovers to neutral."
+    blocked_by_hip:
+      - "{uke} sits his hips back and blocks the load — {tori} can't get under the center."
+      - "{uke} jams his hips down against the turn; the load never sets."
+
+# ===========================================================================
+# HARAI-GOSHI (classical) — Lever form of the sweeping hip throw. Same hip
+# fulcrum and sweeping leg as harai_goshi, authored as the classical
+# pull-lift-sweep (Kodokan lever) rather than the competitive couple form.
+# ===========================================================================
+harai_goshi_classical:
+  commit:
+    - "{tori} commits to Harai-goshi."
+    - "{tori} turns in classical, hip set as the fulcrum — Harai-goshi coming."
+    - "{tori} loads the hip and cocks the sweeping leg — Harai-goshi."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} lifts {uke} forward and up with both hands, breaking the posture over the lead foot."
+      - "{tori}'s pull draws {uke} onto the toes, the weight rising forward off the heels."
+      - "{tori} rotates in, lifting {uke}'s chest forward across the hip line."
+    standard:
+      - "{tori} pulls {uke} forward and turns in."
+      - "{tori} lifts {uke}'s weight onto the front foot."
+      - "{tori} spins in, drawing {uke}'s balance forward."
+    sloppy:
+      - "{tori} turns in but {uke}'s weight stays on the heels."
+      - "{tori} pulls without the lift, {uke} flat-footed."
+      - "{tori} rotates in late, the forward break thin."
+
+  kuzushi:
+    clean:
+      - "{uke} is lifted onto his toes, posture stretched forward over {tori}'s hip with no base behind."
+      - "{uke}'s weight pours over the lead leg, the heel lifting clear of the mat."
+      - "{uke} tips forward and up, balance hung over the hip fulcrum."
+    standard:
+      - "{uke}'s weight rolls forward onto the front foot."
+      - "{uke} bends forward as the lift draws him in."
+      - "{uke}'s balance lifts forward over the toes."
+    sloppy:
+      - "{uke} leans forward but keeps the heels down."
+      - "{uke} bows at the waist, weight still centered."
+      - "{uke} drifts forward without loading the lead leg."
+
+  tsukuri:
+    clean:
+      - "{tori} sets his hip square under {uke} as the fulcrum and lays the sweeping leg up the thigh."
+      - "{tori} drops the hip under {uke}'s center, sweeping leg pressed high against the front of the thigh."
+      - "{tori} turns in deep, backside as the lever, the reaping leg flush along {uke}'s leg."
+    standard:
+      - "{tori} sets his hip under {uke} and brings the sweeping leg across."
+      - "{tori} loads {uke} onto the hip and lays the leg in."
+      - "{tori} turns the hip in and plants the sweeping thigh."
+    sloppy:
+      - "{tori}'s hip lands low, the sweeping leg reaching down to the shin."
+      - "{tori} turns in shallow, the hip never squaring under {uke}'s center."
+      - "{tori}'s sweeping leg arrives across the calf, not the thigh."
+
+  kake:
+    clean:
+      - "{tori} levers {uke} over the hip and sweeps the leg up — {uke} rotates clean over the top and slams down."
+      - "{tori}'s sweeping thigh whips {uke}'s leg skyward as the hands turn him over the fulcrum."
+      - "{tori} drives the sweep up the thigh and rolls {uke} flat over the loaded hip."
+    standard:
+      - "{tori} sweeps the leg up and turns {uke} over the hip."
+      - "{tori} levers {uke} over and drives the thigh up."
+      - "{tori} completes the sweep, {uke} rolling over the fulcrum."
+    sloppy:
+      - "{tori}'s sweep catches low, {uke} stepping over the leg to recover."
+      - "{tori} turns the hands but the leg sweep stalls — {uke} posts off."
+      - "{tori}'s thigh drags up without lift, the rotation dying."
+
+  failures:
+    tori_bent_forward_loaded:
+      - "{tori} levers {uke} up but the rotation dies — he's bent forward, {uke}'s weight pinning the hip."
+      - "{uke} sags his weight onto the loaded hip; {tori} folds forward, stuck under the lever."
+      - "{tori}'s back can't finish the turn — he's bent over, {uke} riding the fulcrum."
+    kaeshi_waza_generic:
+      - "{uke} rides the lift, drops below the hip, and turns the lever back on {tori}."
+      - "{uke} counters the fulcrum, sagging his weight and reversing over the hip."
+      - "{uke} reads the classical entry and redirects the lift into a counter."
+    stance_reset:
+      - "{uke} steps around the sweeping leg and squares up — Harai-goshi fails."
+      - "{uke} drops his weight off the hip and resets his base."
+      - "{uke} circles out of the load and recovers to neutral."
+    blocked_by_hip:
+      - "{uke} sits his hips down and blocks the load — {tori} can't set the fulcrum."
+      - "{uke} jams the hip across and stuffs the entry; the lever never sets."
+
+# ===========================================================================
+# TOMOE-NAGE — Circle / Sacrifice Throw. Tori sits/drops under, plants a foot
+# on uke's hip/belly, and rolls backward, sending uke over the top in a circle.
+# Body parts: tori's planted foot on uke's hip, tori's pulling hands, tori's
+# back rolling under, uke's forward-driven momentum.
+# ===========================================================================
+tomoe_nage:
+  commit:
+    - "{tori} commits to Tomoe-nage."
+    - "{tori} drops under and plants the foot — Tomoe-nage coming."
+    - "{tori} sacrifices, rolling under for the circle throw — Tomoe-nage."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} pulls {uke} forward into a driving step, loading the forward momentum he needs."
+      - "{tori}'s hands draw {uke} onto the toes, the weight pitching forward over {tori}."
+      - "{tori} breaks {uke} forward and down, momentum flowing into the sacrifice."
+    standard:
+      - "{tori} pulls {uke} forward into a step."
+      - "{tori} draws {uke}'s weight ahead over the toes."
+      - "{tori} works {uke}'s momentum forward."
+    sloppy:
+      - "{tori} pulls but {uke}'s weight hangs back, no forward momentum."
+      - "{tori} draws {uke} in flat, the drive never building."
+      - "{tori} tugs late, {uke}'s step already stalled."
+
+  kuzushi:
+    clean:
+      - "{uke} is drawn forward onto the toes, momentum pitching over {tori} with nothing to check it."
+      - "{uke}'s weight floods forward and up, the base left behind as he's pulled over."
+      - "{uke} pours forward into the space {tori} is dropping into."
+    standard:
+      - "{uke}'s weight rolls forward over the toes."
+      - "{uke} steps in, momentum carrying ahead."
+      - "{uke}'s balance pitches forward into the pull."
+    sloppy:
+      - "{uke} leans forward but plants his weight, momentum checked."
+      - "{uke} drifts ahead without committing the step."
+      - "{uke} keeps the heels down, the forward drive missing."
+
+  tsukuri:
+    clean:
+      - "{tori} drops under {uke} and plants the sole of his foot square on {uke}'s hip."
+      - "{tori} sits low and sets his foot precisely on {uke}'s belt line, knee tucked to spring."
+      - "{tori} rolls under, the planted foot loading high on {uke}'s hip as the hands pull through."
+    standard:
+      - "{tori} drops under and plants his foot on {uke}'s hip."
+      - "{tori} sits low and sets the foot against the belt line."
+      - "{tori} rolls under, foot to {uke}'s hip."
+    sloppy:
+      - "{tori}'s foot lands low on the thigh, not up on the hip."
+      - "{tori} drops under too early, the foot reaching for the hip."
+      - "{tori} plants the foot off-center, the spring angle wrong."
+
+  kake:
+    clean:
+      - "{tori} extends the leg and rolls back — {uke} is launched over the top in a full circle and slams down."
+      - "{tori}'s foot drives {uke}'s hips skyward as the hands steer; {uke} wheels over and crashes flat."
+      - "{tori} springs the leg straight and {uke} cartwheels clean over the sacrifice."
+    standard:
+      - "{tori} extends the leg and rolls {uke} over the top."
+      - "{tori} drives the foot up, {uke} wheeling over."
+      - "{tori} rolls back and sends {uke} over in a circle."
+    sloppy:
+      - "{tori} extends the leg but {uke} posts a hand and stalls over the top."
+      - "{tori} rolls back without the foot loaded — {uke} steps across him."
+      - "{tori}'s spring fires off-center, {uke} tumbling to the side instead of over."
+
+  failures:
+    uke_voluntary_newaza:
+      - "{uke} rides the roll down but lands on top, following {tori} to the mat into ne-waza."
+      - "{uke} posts out of the circle and drops into {tori}'s guard rather than over the top."
+      - "{uke} drops his weight into the sacrifice and the exchange settles to the ground, no throw scored."
+    kaeshi_waza_generic:
+      - "{uke} reads the sacrifice, steps over the planted foot, and counters {tori} on his back."
+      - "{uke} stuffs the roll and passes the leg, turning the throw back on {tori}."
+      - "{uke} rides {tori}'s drop and reverses, ending on top."
+    stance_reset:
+      - "{uke} pulls his hips back off the foot and squares up — Tomoe-nage fails."
+      - "{uke} steps clear of the drop and resets to a standing base."
+      - "{uke} disengages from the sacrifice and recovers to neutral."
+
+# ===========================================================================
+# O-GURUMA — Major Wheel. Lever form: tori bars an extended leg across the
+# front of uke's body and wheels uke over it like a spoke around an axle.
+# Body parts: tori's extended barrier leg (across the thighs/belt), tori's
+# rotating hands, uke's forward-pitched posture wheeling over the leg.
+# ===========================================================================
+o_guruma:
+  commit:
+    - "{tori} commits to O-guruma."
+    - "{tori} bars the leg across and turns in — O-guruma coming."
+    - "{tori} extends the wheel leg across {uke}'s front — O-guruma."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} pulls {uke} forward and up onto the toes, the weight pitching over the front."
+      - "{tori}'s hands draw {uke}'s chest forward off the heels, balance riding ahead."
+      - "{tori} rotates {uke} forward across the line, loading the front corner."
+    standard:
+      - "{tori} pulls {uke} forward onto the front foot."
+      - "{tori} draws {uke}'s weight ahead over the toes."
+      - "{tori} works {uke}'s balance forward into the turn."
+    sloppy:
+      - "{tori} pulls but {uke}'s weight stays back on the heels."
+      - "{tori} draws {uke} in flat, no forward pitch."
+      - "{tori} tugs late, the forward load thin."
+
+  kuzushi:
+    clean:
+      - "{uke} pitches forward onto the toes, weight wheeling ahead over the lead leg."
+      - "{uke}'s posture breaks forward and up, balance spilling across the front."
+      - "{uke} is drawn up and forward, the base left behind the toes."
+    standard:
+      - "{uke}'s weight rolls forward over the lead foot."
+      - "{uke} tips ahead as the hands draw him in."
+      - "{uke}'s balance loads onto the front leg."
+    sloppy:
+      - "{uke} leans forward but keeps the heel down."
+      - "{uke} drifts ahead, weight still centered."
+      - "{uke} folds at the waist without loading the front foot."
+
+  tsukuri:
+    clean:
+      - "{tori} bars his extended leg high across the front of {uke}'s thighs, a long axle to wheel over."
+      - "{tori} sweeps the straight leg across {uke}'s belt line and sets it as the spoke."
+      - "{tori} plants the wheel leg precisely across {uke}'s hips, body turned away."
+    standard:
+      - "{tori} bars his leg across the front of {uke}'s thighs."
+      - "{tori} lays the extended leg across {uke}'s hips."
+      - "{tori} sets the wheel leg against {uke}'s front."
+    sloppy:
+      - "{tori}'s wheel leg lands low, across the shins instead of the thighs."
+      - "{tori} bars the leg short, {uke}'s hips inside the axle."
+      - "{tori} lays the leg in late, the wheel angle lost."
+
+  kake:
+    clean:
+      - "{tori} rotates the hands over the barred leg — {uke} wheels over the axle and slams flat on his back."
+      - "{tori} drives {uke}'s upper body across the extended leg; {uke} cartwheels over the spoke and crashes down."
+      - "{tori} turns the wheel hard, {uke} rolling clean over the leg onto his back."
+    standard:
+      - "{tori} wheels {uke} over the barred leg."
+      - "{tori} rotates {uke} across the extended leg and down."
+      - "{tori} drives {uke} over the axle to the mat."
+    sloppy:
+      - "{tori} rotates the hands but {uke} steps over the low bar and recovers."
+      - "{tori} drives forward without the leg set — {uke} posts and stays up."
+      - "{tori}'s wheel stalls, {uke} pulling his hips back over the leg."
+
+  failures:
+    tori_bent_forward_loaded:
+      - "{tori} commits to the wheel but the rotation dies — he's bent forward over his own barred leg."
+      - "{uke} sags his weight onto the axle; {tori} folds forward, the wheel jammed."
+      - "{tori}'s posture spills over the extended leg, bent and loaded, the turn stalled."
+    kaeshi_waza_generic:
+      - "{uke} rides the wheel, steps over the barred leg, and turns the throw back on {tori}."
+      - "{uke} reads the axle, clears the leg, and counters as {tori} overcommits the rotation."
+      - "{uke} uses {tori}'s wheeling drive against him, redirecting into a counter."
+    stance_reset:
+      - "{uke} steps over the wheel leg and squares up — O-guruma fails."
+      - "{uke} pulls his hips back across the bar and resets his base."
+      - "{uke} circles off the axle and recovers to neutral."
+    blocked_by_hip:
+      - "{uke} sits his hips back and blocks the bar — {tori} can't set the axle across the front."
+      - "{uke} jams the hip down against the wheel leg; the spoke never seats."
+
+# ===========================================================================
+# SUMI-GAESHI — Corner Reversal. Sacrifice throw: tori drops under, hooks a
+# foot inside uke's thigh, and rolls backward, throwing uke over the corner.
+# Body parts: tori's hooking instep inside uke's thigh, tori's pulling hands,
+# tori's back rolling under, uke's forward-driven weight over the corner.
+# ===========================================================================
+sumi_gaeshi:
+  commit:
+    - "{tori} commits to Sumi-gaeshi."
+    - "{tori} drops under and hooks inside — Sumi-gaeshi coming."
+    - "{tori} sacrifices for the corner, hooking the thigh — Sumi-gaeshi."
+
+  reach_kuzushi:
+    clean:
+      - "{tori} draws {uke} forward into him, loading the forward weight over the corner."
+      - "{tori}'s hands pull {uke}'s chest down and in, momentum flowing toward the drop."
+      - "{tori} breaks {uke} forward over the hooking side, weight pitching ahead."
+    standard:
+      - "{tori} pulls {uke} forward and in."
+      - "{tori} draws {uke}'s weight over the corner."
+      - "{tori} works {uke}'s momentum forward into the drop."
+    sloppy:
+      - "{tori} pulls but {uke}'s weight stays back, no forward load."
+      - "{tori} draws {uke} in flat, the corner never loaded."
+      - "{tori} tugs late, {uke}'s weight uncommitted."
+
+  kuzushi:
+    clean:
+      - "{uke} is drawn forward and down over the corner, weight pouring onto the hooked side."
+      - "{uke}'s posture breaks forward over the hooking leg, the base trailing behind."
+      - "{uke} pitches forward into {tori}, weight flooding over the corner."
+    standard:
+      - "{uke}'s weight rolls forward over the hooked side."
+      - "{uke} bends forward into the pull."
+      - "{uke}'s balance loads onto the corner."
+    sloppy:
+      - "{uke} leans forward but holds his base, weight checked."
+      - "{uke} drifts in without committing the weight."
+      - "{uke} keeps upright, the corner load missing."
+
+  tsukuri:
+    clean:
+      - "{tori} drops under and hooks his instep deep inside {uke}'s thigh, the foot loaded to lift."
+      - "{tori} sits low and threads the hooking foot inside the thigh, knee tucked to spring the corner."
+      - "{tori} rolls under, the instep set high inside {uke}'s leg, hands steering the corner."
+    standard:
+      - "{tori} drops under and hooks inside {uke}'s thigh."
+      - "{tori} threads the hooking foot inside the leg."
+      - "{tori} sits low, instep set inside the thigh."
+    sloppy:
+      - "{tori}'s hook lands low on the knee, not up inside the thigh."
+      - "{tori} drops under early, the hooking foot reaching for the thigh."
+      - "{tori} sets the hook shallow, the corner angle off."
+
+  kake:
+    clean:
+      - "{tori} lifts the hooked leg and rolls back — {uke} is thrown over the corner and slams onto his back."
+      - "{tori}'s instep drives {uke}'s thigh up as the hands turn him; {uke} flips over the corner and lands flat."
+      - "{tori} springs the hook and wheels {uke} clean over the corner to the mat."
+    standard:
+      - "{tori} lifts the hook and rolls {uke} over the corner."
+      - "{tori} drives the instep up, {uke} turning over."
+      - "{tori} rolls back and throws {uke} over the corner."
+    sloppy:
+      - "{tori} lifts the hook but {uke} posts a hand and stalls over the corner."
+      - "{tori} rolls back without the hook loaded — {uke} sprawls across him."
+      - "{tori}'s spring fires off-line, {uke} tumbling to the side."
+
+  failures:
+    uke_voluntary_newaza:
+      - "{uke} rides the roll down and lands on top, following {tori} into ne-waza."
+      - "{uke} posts out of the corner and settles into {tori}'s guard rather than over it."
+      - "{uke} drops his weight into the sacrifice and the exchange goes to the ground, no throw scored."
+    kaeshi_waza_generic:
+      - "{uke} reads the corner, frees the hooked leg, and reverses {tori} onto his back."
+      - "{uke} stuffs the roll, passes the hook, and turns the throw back on {tori}."
+      - "{uke} rides {tori}'s drop and counters, ending on top."
+    stance_reset:
+      - "{uke} pulls the hooked leg free and squares up — Sumi-gaeshi fails."
+      - "{uke} steps clear of the drop and resets to a standing base."
+      - "{uke} disengages from the corner and recovers to neutral."
