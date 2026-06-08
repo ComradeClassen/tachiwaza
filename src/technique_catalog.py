@@ -8,7 +8,7 @@
 #   - load_catalog              — YAML/JSON → dict[technique_id, TechniqueDefinition]
 #   - load_naming_overlays      — YAML/JSON → dict[(dojo_id, technique_id), overlay]
 #
-# Schema is locked by design-notes/triage/technique-vocabulary-system.md v1.2.
+# Schema is locked by design-notes/triage/technique-vocabulary-system.md v1.3.
 # Section 2 defines TechniqueDefinition and TechniqueNamingOverlay.
 # Section 5 defines TechniqueRecord and its bidirectional ledger.
 #
@@ -18,6 +18,13 @@
 # judoka, not authored explicitly). kuzushi_vector split into admissible
 # (required, gates Stage 2 selection) + primary (optional, scoring/prose).
 # Admissible accepts the `any` wildcard for omnidirectional techniques.
+#
+# HAJ-214 schema revision (v1.3): counter-throw firing mode. Optional fields
+# fires_as_counter (bool) + counter_class / counter_window /
+# counter_against_mechanical_class describe throws that fire from the attacker's
+# compromised commit state. All default to none/false; existing entries stay
+# valid. counter_against_mechanical_class is scalar-or-list (normalised to list).
+# The fires_as_counter ⇒ trio-required cross-check lives in catalog_validator.py.
 #
 # Validation here is intentionally basic: required fields, enum membership,
 # grip-signature internal shape, kuzushi-vector parsing, sensible eras.
@@ -92,6 +99,76 @@ class FailedThrowConsequence(Enum):
     TORI_TO_KNEES      = "tori_to_knees"
     UKE_LANDS_STOMACH  = "uke_lands_stomach"
     TORI_THROWN        = "tori_thrown"
+
+
+class CounterClass(Enum):
+    """HAJ-214 — the three counter-throw mechanisms.
+
+    Per `Judo_Biomechanics_for_Simulation` Section 4.5, counter throws fire
+    from the *attacker's* compromised commit state (not from uke's grip/footwork
+    kuzushi like a primary attack). The mechanism distinguishes how the counter
+    couples to that committed state:
+
+      - sukashi              — void counter: uke removes the expected load, tori's
+                               committed couple acts only on tori (self-throw).
+      - kaeshi               — redirection counter: uke adds a small moment along
+                               tori's already-committed momentum vector.
+      - makikomi_wraparound  — uke commits along with the attacker and uses sutemi
+                               to wrap.
+    """
+    SUKASHI             = "sukashi"
+    KAESHI              = "kaeshi"
+    MAKIKOMI_WRAPAROUND = "makikomi_wraparound"
+
+
+class CounterCommitWindow(Enum):
+    """HAJ-214 — which of tori's two commit-phase vulnerability windows a counter
+    exploits (`Judo_Biomechanics_for_Simulation` Section 4.4).
+
+    Distinct from `counter_windows.CounterWindow` (the engine's runtime sen-sen /
+    sen / go-no-sen *timing* model). This enum is a catalog-side invariant of the
+    counter technique: which phase of the attacker's commit the counter keys off.
+
+      - turn_in            — the instant tori begins the turn-in (weight on the
+                             pivot foot, other foot airborne, CoM often outside the
+                             eventual base). Sukashi and lift/wrap counters live here.
+      - stuffed_completion — the instant after tori completes the turn but fails to
+                             raise uke ("stuffed") and begins to reverse. The kaeshi
+                             redirection window.
+    """
+    TURN_IN            = "turn_in"
+    STUFFED_COMPLETION = "stuffed_completion"
+
+
+class MechanicalClass(Enum):
+    """HAJ-214 — small attacker-throw taxonomy a counter declares it fires against.
+
+    References the Sacripanti Couple/Lever framework in
+    `Judo_Biomechanics_for_Simulation` Section 4, grouped by commit geometry so the
+    resolver can match a counter against the attacker's *currently-committed* throw
+    class without hand-authoring named pairs. utsuri-goshi declares
+    `hip_throw_forward` and thereby picks up hane-goshi, harai-goshi, and uchi-mata
+    as targets without naming any of them.
+
+    This is the enum-as-reference only (HAJ-214 scope). Techniques do not yet carry
+    their own `mechanical_class` field — that is the tachiwaza couple_type
+    calibration sweep (see catalog-authoring-notes.md).
+
+      - hip_throw_forward     — forward turn-in hip/thigh couple throws (o-goshi,
+                                uki-goshi, koshi-guruma, tsurikomi-goshi, harai-goshi,
+                                hane-goshi, uchi-mata).
+      - shoulder_throw_forward — forward turn-in shoulder/arm lever throws
+                                (seoi-nage family, tai-otoshi).
+      - forward_foot_sweep    — foot sweeps timed to uke's step (deashi-harai and the
+                                ashi-barai family).
+      - rear_outer_reap       — rear couple, outer reap (osoto-gari family).
+      - rear_inner_reap       — rear couple, inner reap (ouchi-gari / kouchi-gari).
+    """
+    HIP_THROW_FORWARD      = "hip_throw_forward"
+    SHOULDER_THROW_FORWARD = "shoulder_throw_forward"
+    FORWARD_FOOT_SWEEP     = "forward_foot_sweep"
+    REAR_OUTER_REAP        = "rear_outer_reap"
+    REAR_INNER_REAP        = "rear_inner_reap"
 
 
 class ProficiencyTier(Enum):
@@ -231,6 +308,20 @@ class TechniqueDefinition:
 
     # Optional Stage 2 — primary (scoring/prose); defaults to admissible.
     primary_kuzushi_vectors: list[str] = field(default_factory=list)
+
+    # Counter-throw firing mode (HAJ-214). Default false → primary attack.
+    # When `fires_as_counter` is true the technique fires from the attacker's
+    # compromised commit state, and the three companion fields below describe
+    # the mechanism, the commit-phase window, and the attacker throw classes it
+    # keys off. The validator (catalog_validator.py) requires the trio be
+    # populated whenever fires_as_counter is true. `counter_against_mechanical_class`
+    # accepts a scalar or a list in YAML and is normalised to a list here
+    # (mirrors admissible_kuzushi_vectors' scalar-or-list shape) — yoko-wakare
+    # genuinely counters more than one mechanical class.
+    fires_as_counter: bool = False
+    counter_class: Optional[CounterClass] = None
+    counter_window: Optional[CounterCommitWindow] = None
+    counter_against_mechanical_class: list[MechanicalClass] = field(default_factory=list)
 
     pedagogical_prerequisites: list[str] = field(default_factory=list)
     minimum_belt_for_competition_use: Optional[str] = None
@@ -491,6 +582,29 @@ def _parse_primary_kuzushi(
     return list(raw)
 
 
+def _parse_counter_against(raw: Any, context: str) -> list[MechanicalClass]:
+    """Parse counter_against_mechanical_class (HAJ-214).
+
+    Accepts either a single class token or a list of them, normalising to a
+    list of MechanicalClass (mirrors admissible_kuzushi_vectors' scalar-or-list
+    ergonomics). Returns `[]` when omitted/null; the validator enforces that a
+    counter technique actually populates it. Empty-list authoring is rejected
+    here as almost certainly a mistake.
+    """
+    if raw is None:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    if isinstance(raw, list) and not raw:
+        raise CatalogValidationError(
+            f"{context}: counter_against_mechanical_class list is empty; omit the "
+            "field entirely or name at least one mechanical class"
+        )
+    return [
+        _coerce_enum(MechanicalClass, item, context=f"{context}[{i}]")
+        for i, item in enumerate(items)
+    ]
+
+
 def _validate_era(raw: Any, context: str, field_name: str) -> Optional[int]:
     if raw is None:
         return None
@@ -568,6 +682,29 @@ def _parse_definition(raw: Any) -> TechniqueDefinition:
         f"{ctx}.primary_kuzushi_vectors",
     )
 
+    # Counter-throw fields (HAJ-214). Enum membership is enforced here; the
+    # cross-field rule (fires_as_counter ⇒ the trio is required) is a
+    # catalog_validator.py check so existing entries stay loader-valid.
+    fires_as_counter_raw = raw.get("fires_as_counter", False)
+    if not isinstance(fires_as_counter_raw, bool):
+        raise CatalogValidationError(
+            f"{ctx}.fires_as_counter: expected boolean, got {type(fires_as_counter_raw).__name__}"
+        )
+    counter_class_raw = raw.get("counter_class")
+    counter_class = (
+        _coerce_enum(CounterClass, counter_class_raw, context=f"{ctx}.counter_class")
+        if counter_class_raw is not None else None
+    )
+    counter_window_raw = raw.get("counter_window")
+    counter_window = (
+        _coerce_enum(CounterCommitWindow, counter_window_raw, context=f"{ctx}.counter_window")
+        if counter_window_raw is not None else None
+    )
+    counter_against = _parse_counter_against(
+        raw.get("counter_against_mechanical_class"),
+        f"{ctx}.counter_against_mechanical_class",
+    )
+
     return TechniqueDefinition(
         technique_id=technique_id,
         name_japanese=_require_field(raw, "name_japanese", ctx),
@@ -583,6 +720,10 @@ def _parse_definition(raw: Any) -> TechniqueDefinition:
         ),
         admissible_kuzushi_vectors=admissible,
         primary_kuzushi_vectors=primary,
+        fires_as_counter=fires_as_counter_raw,
+        counter_class=counter_class,
+        counter_window=counter_window,
+        counter_against_mechanical_class=counter_against,
         couple_type=_require_field(raw, "couple_type", ctx),
         posture_requirements=_coerce_enum(
             UkePostureRequirement,

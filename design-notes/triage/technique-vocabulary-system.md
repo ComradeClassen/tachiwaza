@@ -1,6 +1,6 @@
 # Technique Vocabulary System
 
-**Status:** Draft v1.2 — 2026-05-17
+**Status:** Draft v1.3 — 2026-06-08
 **Scope:** Supersedes the v2 worldgen spec's treatment of "signature strength" as a base resolver dimension. Establishes the full per-judoka technique vocabulary substrate.
 **Related:** `ring-2-worldgen-spec-v2.md`, `physics-substrate.md`, `grip-as-cause.md`, `Judo_Biomechanics_for_Simulation__Kuzushi__Couples__and_Levers.md`, `ne-waza-substrate.md`
 
@@ -79,6 +79,37 @@ The v1.2 decisions:
 - **Mirroring is engine-handled, not catalog-authored.** `mirror_eligible: true` (default) declares that the engine should auto-mirror at Stage 1 filter time based on judoka stance. The judoka stance attribute lives in the judoka substrate, not in the catalog. This keeps the catalog the size of "variants that actually differ" rather than 2× that.
 - **Kuzushi semantics split: admissible (required) + primary (optional).** Admissible drives Stage 2 selection; primary drives scoring and prose. Defaulting primary to admissible keeps the common case ergonomic.
 - **`any` wildcard for admissible kuzushi.** Foot sweeps and similarly omnidirectional techniques get to declare their nature compactly rather than listing all nine directions.
+
+### Counter-throw fields (v1.3)
+
+A **counter throw** fires when the *attacking* judoka has put themselves into a specific compromised state during their own commit — distinct from a primary throw, which fires when uke is in a compromised state from grip work or footwork. The v1.2 schema could not express this: counters were authored with `admissible_kuzushi_vectors` listing all four cardinal/diagonal directions as a workaround (which made the field non-discriminating for the whole counter class), and the counter relationship lived only in YAML comments — invisible to the resolver. v1.3 adds four optional fields, all defaulting to none/false so every existing entry stays valid:
+
+- `fires_as_counter` (boolean, default `false`) — when `true`, this entry fires from the attacker's compromised commit state rather than as a primary attack. The Stage 1 availability filter (HAJ-207) reads this to keep counter-class throws out of primary-attack selection.
+- `counter_class` — the counter mechanism, from `Judo_Biomechanics_for_Simulation` Section 4.5. One of:
+  - `sukashi` (void counter) — uke removes the expected load; tori's committed couple acts only on tori → self-throw (uchi-mata-sukashi, tsubame-gaeshi, yoko-wakare).
+  - `kaeshi` (redirection counter) — uke adds a small moment along tori's already-committed momentum vector; uke generates no new force, only redirects (the gaeshi family; the lift counters ushiro-goshi / ura-nage / utsuri-goshi).
+  - `makikomi_wraparound` — uke commits along with the attacker and uses sutemi to wrap (the makikomi counters).
+- `counter_window` — which of tori's two commit-phase vulnerability windows the counter exploits (`Judo_Biomechanics_for_Simulation` Section 4.4). One of:
+  - `turn_in` — the instant tori begins the turn-in (weight on the pivot foot, other foot airborne, CoM often outside the eventual base). Sukashi and the lift/wrap counters live here.
+  - `stuffed_completion` — the instant after tori completes the turn but fails to raise uke ("stuffed") and begins to reverse. The kaeshi redirection window.
+  - The window is a catalog-side invariant of the *counter* technique. Uchi-mata-sukashi exploits `turn_in` (the reaping leg meets empty space mid-commit); uchi-mata-gaeshi exploits `stuffed_completion` (uke redirects already-committed momentum). It is therefore independent of `counter_class` — assign per technique by mechanics, not by a class rule.
+  - This is a different axis from `counter_windows.CounterWindow` in the engine (the runtime sen-sen-no-sen / sen-no-sen / go-no-sen *timing* model). The dataclass enum is named `CounterCommitWindow` to keep the two distinct.
+- `counter_against_mechanical_class` — the attacker throw class(es) this counter fires against, from a small enum referencing the Sacripanti Couple/Lever taxonomy (`Judo_Biomechanics_for_Simulation` Section 4), grouped by commit geometry: `hip_throw_forward`, `shoulder_throw_forward`, `forward_foot_sweep`, `rear_outer_reap`, `rear_inner_reap`. The resolver matches this against the attacker's *currently-committed* throw class. This avoids the named-pair problem: utsuri-goshi declares `counter_against_mechanical_class: hip_throw_forward` and thereby picks up hane-goshi, harai-goshi, and uchi-mata as targets without naming any of them. **Named pairings emerge from substrate matching rather than being hand-authored.** Accepts a scalar or a list in YAML and is normalised to a list (mirrors `admissible_kuzushi_vectors`' scalar-or-list shape); yoko-wakare genuinely counters both `hip_throw_forward` (uki-goshi, o-goshi) and `shoulder_throw_forward` (seoi-nage), so the list form is load-bearing, not cosmetic.
+
+This is the enum-as-reference only. Entries do **not** yet carry their own top-level `mechanical_class` field — that belongs to the end-of-tachiwaza couple_type calibration sweep (see `catalog-authoring-notes.md`). Only `counter_against_mechanical_class` is needed here.
+
+The validator (`catalog_validator.py`) enforces one cross-field rule: if `fires_as_counter` is `true`, all three companion fields must be populated (else the counter is half-specified and the resolver can't match it). The mirror case — counter metadata set while `fires_as_counter` is `false` — is a warning, since the metadata is inert and usually signals a dual-use entry that should have been split.
+
+**Dual-use techniques** (osoto-makikomi, uchi-mata-makikomi, harai-makikomi can each be thrown proactively *or* as a counter) are handled by authoring **two entries** that share most fields: one with `fires_as_counter: false` for the primary attack mode (id `<x>_makikomi`), one with `fires_as_counter: true` for the counter mode (id `<x>_makikomi_counter`). Splitting is preferred over a single-entry `firing_modes: [...]` list because the two modes have different prerequisites the resolver needs to see, and it reads cleaner in the resolver.
+
+### Schema-revision rationale (v1.3)
+
+Authoring the Shinmeisho counters (HAJ-205) surfaced the gap above: the v1.2 `admissible_kuzushi_vectors` field had stopped doing useful filtering for the counter class (all four directions listed = "any direction"), and the counter relationship was comment-only. The same pattern as the v1.2 grip/kuzushi revision — a field being overloaded to express something the schema should name explicitly. The v1.3 decisions:
+
+- **Counter firing mode is a first-class boolean, not an inference.** The resolver should not have to guess from a four-direction kuzushi list that a throw is a counter. `fires_as_counter` makes it explicit and lets Stage 1 filter the counter class out of primary selection.
+- **Substrate matching over named pairs.** `counter_against_mechanical_class` references a mechanical class, not a list of named throws, so a counter automatically picks up every attacker throw in that class — present and future — without re-authoring. This mirrors the design principle behind grip signatures and kuzushi vectors: describe the mechanics, let the relationships emerge.
+- **Window is per-technique, not per-class.** Sukashi and kaeshi do not map cleanly onto the two commit windows (lift counters are kaeshi-class but fire at `turn_in`), so `counter_window` is authored independently.
+- **Split dual-use rather than list firing modes.** Two entries with shared fields are simpler than a `firing_modes` sub-structure and keep each mode's prerequisites legible.
 
 ### Difficulty and pedagogical fields
 

@@ -28,6 +28,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from technique_catalog import (
     AcquisitionSource,
     CatalogValidationError,
+    CounterClass,
+    CounterCommitWindow,
     FailedThrowConsequence,
     GripDepth,
     GripHand,
@@ -36,6 +38,7 @@ from technique_catalog import (
     GripTargetRegion,
     KodokanStatus,
     KUZUSHI_ANY_TOKEN,
+    MechanicalClass,
     NamingType,
     PROFICIENCY_ORDER,
     ProficiencyTier,
@@ -456,6 +459,164 @@ def test_kuzushi_any_wildcard_as_scalar(tmp_path):
     assert definition.admissible_kuzushi_vectors == [KUZUSHI_ANY_TOKEN]
     # primary defaults to a copy of admissible — keeps the wildcard sentinel
     assert definition.primary_kuzushi_vectors == [KUZUSHI_ANY_TOKEN]
+
+
+# ---------------------------------------------------------------------------
+# HAJ-214 — counter-throw fields
+# ---------------------------------------------------------------------------
+def _counter_yaml(counter_block: str) -> str:
+    """A counter-shaped technique with the given trailing counter_block lines.
+
+    `counter_block` is dedented then re-indented to the entry's field column
+    (4 spaces) so callers can write it at any source indentation.
+    """
+    base = textwrap.dedent("""
+        techniques:
+          - technique_id: a_counter
+            name_japanese: C
+            name_english: C
+            family: koshi_waza
+            subfamily: rear_throw
+            kodokan_status: shinmeisho_no_waza
+            canonical_grip_signatures:
+              - tori_required_grips:
+                  - hand: tori_right
+                    target_region: uke_lapel_high
+                    minimum_depth: controlled
+            admissible_kuzushi_vectors: [forward_pure]
+            couple_type: placeholder
+            posture_requirements: upright_or_forward_compromised
+            base_difficulty: 75
+    """).strip()
+    block = "\n".join(
+        ("    " + line) if line.strip() else line
+        for line in textwrap.dedent(counter_block).strip().splitlines()
+    )
+    return base + "\n" + block
+
+
+def test_counter_fields_parse_with_scalar_class(tmp_path):
+    path = tmp_path / "counter.yaml"
+    path.write_text(_counter_yaml("""
+        fires_as_counter: true
+        counter_class: kaeshi
+        counter_window: turn_in
+        counter_against_mechanical_class: hip_throw_forward
+    """), encoding="utf-8")
+    d = load_catalog(path)["a_counter"]
+    assert d.fires_as_counter is True
+    assert d.counter_class is CounterClass.KAESHI
+    assert d.counter_window is CounterCommitWindow.TURN_IN
+    # Scalar normalises to a single-element list (mirrors admissible kuzushi).
+    assert d.counter_against_mechanical_class == [MechanicalClass.HIP_THROW_FORWARD]
+
+
+def test_counter_against_accepts_list(tmp_path):
+    # yoko-wakare counters both a hip throw and a shoulder throw.
+    path = tmp_path / "counter_list.yaml"
+    path.write_text(_counter_yaml("""
+        fires_as_counter: true
+        counter_class: sukashi
+        counter_window: turn_in
+        counter_against_mechanical_class:
+          - hip_throw_forward
+          - shoulder_throw_forward
+    """), encoding="utf-8")
+    d = load_catalog(path)["a_counter"]
+    assert d.counter_against_mechanical_class == [
+        MechanicalClass.HIP_THROW_FORWARD,
+        MechanicalClass.SHOULDER_THROW_FORWARD,
+    ]
+
+
+def test_counter_fields_default_when_omitted(tmp_path):
+    # A primary attack omits all four fields and stays valid.
+    path = tmp_path / "primary.yaml"
+    path.write_text(MINIMAL_YAML, encoding="utf-8")
+    d = load_catalog(path)["minimal_throw"]
+    assert d.fires_as_counter is False
+    assert d.counter_class is None
+    assert d.counter_window is None
+    assert d.counter_against_mechanical_class == []
+
+
+def test_invalid_counter_class_is_rejected(tmp_path):
+    path = tmp_path / "bad.yaml"
+    path.write_text(_counter_yaml("""
+        fires_as_counter: true
+        counter_class: bogus_class
+        counter_window: turn_in
+        counter_against_mechanical_class: hip_throw_forward
+    """), encoding="utf-8")
+    with pytest.raises(CatalogValidationError, match="bogus_class"):
+        load_catalog(path)
+
+
+def test_invalid_counter_window_is_rejected(tmp_path):
+    path = tmp_path / "bad.yaml"
+    path.write_text(_counter_yaml("""
+        fires_as_counter: true
+        counter_class: kaeshi
+        counter_window: mid_air_backflip
+        counter_against_mechanical_class: hip_throw_forward
+    """), encoding="utf-8")
+    with pytest.raises(CatalogValidationError, match="mid_air_backflip"):
+        load_catalog(path)
+
+
+def test_invalid_counter_against_mechanical_class_is_rejected(tmp_path):
+    path = tmp_path / "bad.yaml"
+    path.write_text(_counter_yaml("""
+        fires_as_counter: true
+        counter_class: kaeshi
+        counter_window: turn_in
+        counter_against_mechanical_class: spinning_pile_driver
+    """), encoding="utf-8")
+    with pytest.raises(CatalogValidationError, match="spinning_pile_driver"):
+        load_catalog(path)
+
+
+def test_empty_counter_against_list_is_rejected(tmp_path):
+    path = tmp_path / "bad.yaml"
+    path.write_text(_counter_yaml("""
+        fires_as_counter: true
+        counter_class: kaeshi
+        counter_window: turn_in
+        counter_against_mechanical_class: []
+    """), encoding="utf-8")
+    with pytest.raises(CatalogValidationError, match="counter_against_mechanical_class"):
+        load_catalog(path)
+
+
+def test_non_boolean_fires_as_counter_is_rejected(tmp_path):
+    path = tmp_path / "bad.yaml"
+    path.write_text(_counter_yaml("""
+        fires_as_counter: "yes"
+    """), encoding="utf-8")
+    with pytest.raises(CatalogValidationError, match="fires_as_counter"):
+        load_catalog(path)
+
+
+def test_sample_catalog_counter_entries_load():
+    # The authored Shinmeisho/Gokyo counters carry the HAJ-214 fields; the
+    # split makikomi entries coexist (proactive + counter).
+    catalog = load_catalog(SAMPLE_CATALOG)
+
+    sukashi = catalog["uchi_mata_sukashi"]
+    assert sukashi.fires_as_counter is True
+    assert sukashi.counter_class is CounterClass.SUKASHI
+    assert sukashi.counter_window is CounterCommitWindow.TURN_IN
+    assert MechanicalClass.HIP_THROW_FORWARD in sukashi.counter_against_mechanical_class
+
+    # uchi-mata-gaeshi keys off the stuffed-completion window, contrasting with
+    # uchi-mata-sukashi's turn-in void (the design-doc distinction).
+    assert catalog["uchi_mata_gaeshi"].counter_window is CounterCommitWindow.STUFFED_COMPLETION
+
+    # Dual-use makikomi is split: proactive entry is a primary attack.
+    assert catalog["osoto_makikomi"].fires_as_counter is False
+    counter = catalog["osoto_makikomi_counter"]
+    assert counter.fires_as_counter is True
+    assert counter.counter_class is CounterClass.MAKIKOMI_WRAPAROUND
 
 
 # ---------------------------------------------------------------------------

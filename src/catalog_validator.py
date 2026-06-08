@@ -346,6 +346,70 @@ def _check_habukareta_has_restricted(definition: TechniqueDefinition) -> list[Va
     return []
 
 
+def _check_counter_fields(definition: TechniqueDefinition) -> list[ValidationIssue]:
+    """Counter-throw field consistency (HAJ-214).
+
+    A counter technique fires from the attacker's compromised commit state, so
+    the resolver needs all three descriptors to gate it: the mechanism
+    (`counter_class`), the commit-phase window (`counter_window`), and the
+    attacker throw class(es) it keys off (`counter_against_mechanical_class`).
+    If `fires_as_counter` is true, all three must be populated — otherwise the
+    counter is half-specified and the resolver can't match it.
+
+    The mirror case — counter metadata populated while `fires_as_counter` is
+    false — is flagged at warning level: the metadata is inert (the resolver
+    only reads it for counter-mode entries), which is almost always a dual-use
+    entry that was meant to be split (the counter half left with
+    fires_as_counter unset).
+    """
+    issues: list[ValidationIssue] = []
+    if definition.fires_as_counter:
+        required = (
+            ("counter_class", definition.counter_class),
+            ("counter_window", definition.counter_window),
+            ("counter_against_mechanical_class", definition.counter_against_mechanical_class),
+        )
+        for field_name, value in required:
+            # None for the enum fields, empty list for the mechanical-class field.
+            if value is None or value == []:
+                issues.append(ValidationIssue(
+                    severity=Severity.ERROR,
+                    code="counter_missing_required_field",
+                    technique_id=definition.technique_id,
+                    field=field_name,
+                    message=(
+                        f"fires_as_counter is true but '{field_name}' is not set; "
+                        "counter throws require counter_class, counter_window, and "
+                        "counter_against_mechanical_class"
+                    ),
+                ))
+        return issues
+
+    # fires_as_counter is false — counter metadata is inert.
+    orphan = [
+        field_name
+        for field_name, value in (
+            ("counter_class", definition.counter_class),
+            ("counter_window", definition.counter_window),
+            ("counter_against_mechanical_class", definition.counter_against_mechanical_class),
+        )
+        if not (value is None or value == [])
+    ]
+    if orphan:
+        issues.append(ValidationIssue(
+            severity=Severity.WARNING,
+            code="counter_metadata_without_flag",
+            technique_id=definition.technique_id,
+            field=orphan[0],
+            message=(
+                f"counter metadata ({', '.join(orphan)}) is set but "
+                "fires_as_counter is false, so the resolver will not fire this "
+                "entry as a counter; set fires_as_counter: true or drop the metadata"
+            ),
+        ))
+    return issues
+
+
 def _compute_family_counts(
     catalog: dict[str, TechniqueDefinition],
 ) -> tuple[dict[TechniqueFamily, int], list[ValidationIssue]]:
@@ -425,6 +489,7 @@ def validate_catalog(
             definition, known_ids, ne_waza_known_ids,
         ))
         issues.extend(_check_habukareta_has_restricted(definition))
+        issues.extend(_check_counter_fields(definition))
 
     issues.extend(_check_no_prereq_cycles(catalog))
 

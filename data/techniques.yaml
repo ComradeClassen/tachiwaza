@@ -1,12 +1,14 @@
 # Technique catalog — HAJ-205 authoring in progress against v1.2 schema.
 #
 # HAJ-204 established the schema + loader; HAJ-213 revised it (multi-grip,
-# admissible-vs-primary kuzushi); HAJ-211 added the validator. HAJ-205 is
+# admissible-vs-primary kuzushi); HAJ-214 added counter-throw fields
+# (fires_as_counter + counter_class / counter_window /
+# counter_against_mechanical_class); HAJ-211 added the validator. HAJ-205 is
 # the 40–60-entry authoring pass against Kodokan Judo (Kano) and Judo
 # Unleashed (Ohlenkamp). Difficulty values are first-pass and will be
 # recalibrated as a ladder pass once all ~40 throws are in.
 #
-# Schema reference: design-notes/triage/technique-vocabulary-system.md v1.2
+# Schema reference: design-notes/triage/technique-vocabulary-system.md v1.3
 # (Section 2). Loader: src/technique_catalog.py. Validator: src/catalog_validator.py.
 #
 # Schema notes:
@@ -23,6 +25,14 @@
 #   - gokyo_kyo (1–5) records which kyo group a Gokyo no Waza technique
 #     belongs to. Source-book ordering preserved for curriculum logic
 #     and in-game lore surfacing.
+#   - fires_as_counter (default false) marks a counter throw — one that fires
+#     from the ATTACKER's compromised commit state, not from uke's kuzushi.
+#     When true, counter_class (sukashi | kaeshi | makikomi_wraparound),
+#     counter_window (turn_in | stuffed_completion), and
+#     counter_against_mechanical_class (hip_throw_forward |
+#     shoulder_throw_forward | forward_foot_sweep | rear_outer_reap |
+#     rear_inner_reap; scalar or list) are all required. Dual-use throws are
+#     authored as two entries: <x>_makikomi (proactive) + <x>_makikomi_counter.
 
 # Gokyo no Waza techniques, in order of appearance in the 1895 Gokyo. 
 
@@ -811,7 +821,7 @@ techniques:
     era_introduced: 1895
     gokyo_kyo: 4
 
-  - technique_id: utsuri_goshi # This is a go no sen technique to go against an incoming right hane-goshi.
+  - technique_id: utsuri_goshi # Go-no-sen lift-and-shift counter to incoming forward hip throws (canonically right hane-goshi). HAJ-214 example: counter_against_mechanical_class hip_throw_forward picks up hane/harai/uchi-mata without naming them.
     name_japanese: Utsuri-goshi
     name_english: Hip Shift
     family: koshi_waza
@@ -829,11 +839,18 @@ techniques:
           - hand: tori_right
             target_region: uke_sleeve_lower
             minimum_depth: deep
+    # Counter mode: uke (the attacker) is committed forward into the turn-in;
+    # tori lifts and shifts hips in. The forward vectors are what the lift
+    # actually requires of the attacker's committed momentum.
     admissible_kuzushi_vectors:
       - forward_right_diagonal
       - forward_pure
     couple_type: forward_rotation_about_hip_axis_with_shifting_action
     posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: turn_in
+    counter_against_mechanical_class: hip_throw_forward
     base_difficulty: 70
     pedagogical_prerequisites:
       - harai_goshi # Utsuri-goshi is often taught before harai-goshi, but the latter's kuzushi is a useful stepping stone.
@@ -944,11 +961,13 @@ techniques:
             target_region: uke_lapel_high
             minimum_depth: controlled
         uke_disqualifying_grips: []
+    # Rear wheel of the osoto family: uke is wheeled backward over the barring
+    # leg from the rear corner (ushiro-migi), like osoto-gari but can also take
+    # uke straight back over the bar — hence the rear pair, not all four
+    # directions. Forward vectors contradict the extended_backward posture.
     admissible_kuzushi_vectors:
       - rear_right_diagonal
       - rear_pure
-      - forward_right_diagonal
-      - forward_pure
     couple_type: reverse_rotation_about_shoulder_axis_with_wheeling_action
     posture_requirements: extended_backward
     base_difficulty: 70
@@ -984,7 +1003,7 @@ techniques:
     era_introduced: 1895
     gokyo_kyo: 5
 
-  - technique_id: yoko_wakare # Technique used mainly to counter uki-goshi, o-goshi, and seoi-nage  
+  - technique_id: yoko_wakare # Sutemi void counter: tori drops to the side as the attacker turns in, removing the load. Counters uki-goshi/o-goshi (hip_throw_forward) AND seoi-nage (shoulder_throw_forward) — hence the multi-class counter_against list.
     name_japanese: Yoko-wakare
     name_english: Side Separation
     family: sutemi_waza
@@ -999,11 +1018,18 @@ techniques:
             target_region: uke_lapel_high
             minimum_depth: controlled
         uke_disqualifying_grips: []
+    # The attacker is committed forward into a turn-in throw when tori separates.
     admissible_kuzushi_vectors:
       - forward_right_diagonal
       - forward_pure
     couple_type: lever_inverted_commit_with_dropping_action
     posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: sukashi
+    counter_window: turn_in
+    counter_against_mechanical_class:
+      - hip_throw_forward
+      - shoulder_throw_forward
     base_difficulty: 70
     pedagogical_prerequisites:
       - deashi_harai
@@ -1040,7 +1066,7 @@ techniques:
     era_introduced: 1895
     gokyo_kyo: 5
 
-  - technique_id: ushiro_goshi # Counter to most Hip Throws
+  - technique_id: ushiro_goshi # Lift counter to most forward hip throws: tori gets under the attacker's turn-in, lifts, and drops them. HAJ-214 — was authored with the four-direction "any direction" workaround; narrowed to the rear drop the lift actually produces.
     name_japanese: Ushiro-goshi
     name_english: Back Hip Throw
     family: koshi_waza
@@ -1058,13 +1084,16 @@ techniques:
           - hand: tori_right
             target_region: uke_sleeve_lower
             minimum_depth: deep
+    # Tori lifts the attacker off their hip-throw entry and drops them rearward.
     admissible_kuzushi_vectors:
       - rear_right_diagonal
       - rear_pure
-      - forward_right_diagonal
-      - forward_pure
     couple_type: forward_rotation_about_hip_axis_from_rear_position
     posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: turn_in
+    counter_against_mechanical_class: hip_throw_forward
     base_difficulty: 70
     pedagogical_prerequisites:
       - harai_goshi # Ushiro-goshi is often taught before harai-goshi, but the latter's kuzushi is a useful stepping stone.
@@ -1075,7 +1104,7 @@ techniques:
     era_introduced: 1895
     gokyo_kyo: 5
 
-  - technique_id: ura-nage # counter to Right hip throws
+  - technique_id: ura-nage # Lift-and-arch counter to right forward hip throws: as the attacker turns in, tori arches backward and throws them over the rear. HAJ-214 — narrowed from the four-direction workaround to the rear arc.
     name_japanese: Ura-nage
     name_english: Back Throw
     family: sutemi_waza
@@ -1093,13 +1122,16 @@ techniques:
           - hand: tori_right
             target_region: uke_sleeve_lower
             minimum_depth: deep
+    # The attacker is arched over tori's rear as tori sacrifices backward.
     admissible_kuzushi_vectors:
       - rear_right_diagonal
       - rear_pure
-      - forward_right_diagonal
-      - forward_pure
     couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
     posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: turn_in
+    counter_against_mechanical_class: hip_throw_forward
     base_difficulty: 70
     pedagogical_prerequisites:
       - harai_goshi # Ura-nage is often taught before harai-goshi, but the latter's kuzushi is a useful stepping stone.
@@ -1273,6 +1305,12 @@ techniques:
       - forward_right_diagonal
     couple_type: forward_rotation_about_ankle_axis_with_slipping_action
     posture_requirements: upright_or_forward_compromised
+    # Void counter: uke's reaping leg meets empty space mid-commit (turn_in);
+    # the attacker's committed uchi-mata couple acts only on themselves.
+    fires_as_counter: true
+    counter_class: sukashi
+    counter_window: turn_in
+    counter_against_mechanical_class: hip_throw_forward
     base_difficulty: 65
     pedagogical_prerequisites:
       - deashi_harai
@@ -1300,6 +1338,12 @@ techniques:
       - forward_right_diagonal
     couple_type: forward_rotation_about_ankle_axis_with_slipping_action
     posture_requirements: upright_or_forward_compromised
+    # Void counter to deashi-harai: uke withdraws the swept foot at the instant
+    # of the sweep's commit (turn_in) and sweeps the attacker's own foot back.
+    fires_as_counter: true
+    counter_class: sukashi
+    counter_window: turn_in
+    counter_against_mechanical_class: forward_foot_sweep
     base_difficulty: 65
     pedagogical_prerequisites:
       - deashi_harai
@@ -1344,16 +1388,20 @@ techniques:
             target_region: uke_lapel_high
             minimum_depth: controlled
         uke_disqualifying_grips: []
+    # Redirection counter: the attacker's stuffed osoto-gari is sent on rearward
+    # along its already-committed momentum (HAJ-214 — was four-direction workaround).
     admissible_kuzushi_vectors:
       - rear_right_diagonal
       - rear_pure
-      - forward_right_diagonal
-      - forward_pure
     couple_type: reverse_rotation_about_shoulder_axis_with_wheeling_action_from_rear_position
     posture_requirements: extended_backward
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: stuffed_completion
+    counter_against_mechanical_class: rear_outer_reap
     base_difficulty: 75
     pedagogical_prerequisites:
-      - osoto_gari 
+      - osoto_gari
     minimum_belt_for_competition_use: green
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1920
@@ -1373,13 +1421,17 @@ techniques:
             target_region: uke_lapel_high
             minimum_depth: controlled
         uke_disqualifying_grips: []
+    # Redirection counter: the stuffed ouchi-gari is driven on rearward along its
+    # committed momentum (HAJ-214 — was four-direction workaround).
     admissible_kuzushi_vectors:
       - rear_right_diagonal
       - rear_pure
-      - forward_right_diagonal
-      - forward_pure
     couple_type: reverse_rotation_about_shoulder_axis_with_wheeling_action_from_rear_position
     posture_requirements: extended_backward
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: stuffed_completion
+    counter_against_mechanical_class: rear_inner_reap
     base_difficulty: 75
     pedagogical_prerequisites:
       - ouchi_gari
@@ -1405,16 +1457,20 @@ techniques:
           - hand: tori_right
             target_region: uke_sleeve_lower
             minimum_depth: deep
+    # Redirection counter: the attacker's stuffed hip-spring is sent on forward
+    # along its committed rotation (HAJ-214 — was four-direction workaround).
     admissible_kuzushi_vectors:
-      - rear_right_diagonal
-      - rear_pure
       - forward_right_diagonal
       - forward_pure
     couple_type: forward_rotation_about_hip_axis_with_springing_action_from_rear_position
     posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: stuffed_completion
+    counter_against_mechanical_class: hip_throw_forward
     base_difficulty: 75
     pedagogical_prerequisites:
-      - hane_goshi 
+      - hane_goshi
     minimum_belt_for_competition_use: green
     failed_throw_consequence: uke_lands_stomach
     ne_waza_followup_preferences:
@@ -1435,13 +1491,17 @@ techniques:
           - hand: tori_right
             target_region: uke_lapel_high
             minimum_depth: controlled
+    # Redirection counter: the stuffed hip-sweep is sent on forward along its
+    # committed rotation (HAJ-214 — was four-direction workaround).
     admissible_kuzushi_vectors:
-      - rear_right_diagonal
-      - rear_pure
       - forward_right_diagonal
       - forward_pure
     couple_type: forward_rotation_about_hip_axis_with_sweeping_action_from_rear_position
     posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: stuffed_completion
+    counter_against_mechanical_class: hip_throw_forward
     base_difficulty: 75
     pedagogical_prerequisites:
       - harai_goshi
@@ -1466,13 +1526,18 @@ techniques:
             target_region: uke_lapel_high
             minimum_depth: controlled
         uke_disqualifying_grips: []
+    # Redirection counter: the attacker's stuffed uchi-mata commit is redirected
+    # on forward (HAJ-214 — was four-direction workaround). Exploits the
+    # stuffed-completion window, contrasting with uchi-mata-sukashi's turn-in void.
     admissible_kuzushi_vectors:
-      - rear_right_diagonal
-      - rear_pure
       - forward_right_diagonal
       - forward_pure
     couple_type: forward_rotation_about_ankle_axis_with_slipping_action_from_rear_position
     posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: kaeshi
+    counter_window: stuffed_completion
+    counter_against_mechanical_class: hip_throw_forward
     base_difficulty: 75
     pedagogical_prerequisites:
       - uchi_mata
@@ -1526,7 +1591,12 @@ techniques:
     base_difficulty: 80
     era_introduced: 1920
 
-  - technique_id: osoto_makikomi # From tori attempting osoto-gari, release grip and pivot to tori's left to wrap around uke and throw — counter to right osoto-gari, but can also be executed proactively as a regular attack.
+  # Dual-use wraparound throws (HAJ-214). Each makikomi is split into a
+  # proactive-attack entry (fires_as_counter omitted/false) and a counter entry
+  # (fires_as_counter: true), per the ticket recommendation — the two firing
+  # modes have different prerequisites the resolver needs to see, and the counter
+  # mode keys off the attacker's committed throw class rather than uke's kuzushi.
+  - technique_id: osoto_makikomi # Proactive wraparound attack: tori commits forward and wraps uke. (Counter mode is osoto_makikomi_counter.)
     name_japanese: Osoto-makikomi
     name_english: Large Outside Wraparound Throw
     family: sutemi_waza
@@ -1544,21 +1614,53 @@ techniques:
           - hand: tori_right
             target_region: uke_sleeve_lower
             minimum_depth: deep
+    # Proactive forward wrap (matches soto_makikomi's discriminating direction).
     admissible_kuzushi_vectors:
-      - rear_right_diagonal
-      - rear_pure
       - forward_right_diagonal
-      - forward_pure
     couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
     posture_requirements: upright_or_forward_compromised
     base_difficulty: 75
     pedagogical_prerequisites:
-      - osoto_gari 
+      - osoto_gari
     minimum_belt_for_competition_use: green
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1920
 
-  - technique_id: uchi_mata_makikomi # From tori attempting right uchi-mata, release grip and pivot to tori's left to wrap around uke and throw — counter to right uchi-mata, but can also be executed proactively as a regular attack.
+  - technique_id: osoto_makikomi_counter # Counter mode: from a stuffed/committed osoto-gari, release the grip, pivot, and wrap uke into a sutemi.
+    name_japanese: Osoto-makikomi
+    name_english: Large Outside Wraparound Counter
+    family: sutemi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    # Wraparound counter: uke commits along with the attacker and wraps forward.
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: makikomi_wraparound
+    counter_window: turn_in
+    counter_against_mechanical_class: rear_outer_reap
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - osoto_makikomi
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
+
+  - technique_id: uchi_mata_makikomi # Proactive wraparound attack: tori commits forward and wraps uke. (Counter mode is uchi_mata_makikomi_counter.)
     name_japanese: Uchi-mata-makikomi
     name_english: Inner Thigh Wraparound Throw
     family: sutemi_waza
@@ -1577,20 +1679,50 @@ techniques:
             target_region: uke_sleeve_lower
             minimum_depth: deep
     admissible_kuzushi_vectors:
-      - rear_right_diagonal
-      - rear_pure
       - forward_right_diagonal
-      - forward_pure
     couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
     posture_requirements: upright_or_forward_compromised
     base_difficulty: 75
     pedagogical_prerequisites:
-      - uchi_mata 
+      - uchi_mata
     minimum_belt_for_competition_use: green
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1920
 
-  - technique_id: harai_makikomi # From tori attempting right harai-goshi, release grip and pivot to tori's left to wrap around uke and throw — counter to right harai-goshi, but can also be executed proactively as a regular attack.
+  - technique_id: uchi_mata_makikomi_counter # Counter mode: from a committed uchi-mata, release the grip, pivot, and wrap uke into a sutemi.
+    name_japanese: Uchi-mata-makikomi
+    name_english: Inner Thigh Wraparound Counter
+    family: sutemi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: makikomi_wraparound
+    counter_window: turn_in
+    counter_against_mechanical_class: hip_throw_forward
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - uchi_mata_makikomi
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
+
+  - technique_id: harai_makikomi # Proactive wraparound attack: tori commits forward and wraps uke. (Counter mode is harai_makikomi_counter.)
     name_japanese: Harai-makikomi
     name_english: Hip Sweep Wraparound Throw
     family: sutemi_waza
@@ -1609,15 +1741,45 @@ techniques:
             target_region: uke_sleeve_lower
             minimum_depth: deep
     admissible_kuzushi_vectors:
-      - rear_right_diagonal
-      - rear_pure
       - forward_right_diagonal
-      - forward_pure
     couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
     posture_requirements: upright_or_forward_compromised
     base_difficulty: 75
     pedagogical_prerequisites:
-      - harai_goshi 
+      - harai_goshi
+    minimum_belt_for_competition_use: green
+    failed_throw_consequence: tori_falls_to_back
+    era_introduced: 1920
+
+  - technique_id: harai_makikomi_counter # Counter mode: from a committed harai-goshi, release the grip, pivot, and wrap uke into a sutemi.
+    name_japanese: Harai-makikomi
+    name_english: Hip Sweep Wraparound Counter
+    family: sutemi_waza
+    subfamily: rear_throw
+    kodokan_status: shinmeisho_no_waza
+    canonical_grip_signatures:
+      - tori_required_grips:
+          - hand: tori_left
+            target_region: uke_sleeve_upper
+            minimum_depth: controlled
+          - hand: tori_right
+            target_region: uke_lapel_high
+            minimum_depth: controlled
+        uke_disqualifying_grips:
+          - hand: tori_right
+            target_region: uke_sleeve_lower
+            minimum_depth: deep
+    admissible_kuzushi_vectors:
+      - forward_right_diagonal
+    couple_type: lever_inverted_commit_with_wheeling_action_from_rear_position
+    posture_requirements: upright_or_forward_compromised
+    fires_as_counter: true
+    counter_class: makikomi_wraparound
+    counter_window: turn_in
+    counter_against_mechanical_class: hip_throw_forward
+    base_difficulty: 75
+    pedagogical_prerequisites:
+      - harai_makikomi
     minimum_belt_for_competition_use: green
     failed_throw_consequence: tori_falls_to_back
     era_introduced: 1920

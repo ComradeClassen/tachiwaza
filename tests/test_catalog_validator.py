@@ -32,6 +32,8 @@ from catalog_validator import (  # noqa: E402
     validate_catalog_file,
 )
 from technique_catalog import (  # noqa: E402
+    CounterClass,
+    CounterCommitWindow,
     FailedThrowConsequence,
     GripDepth,
     GripHand,
@@ -39,6 +41,7 @@ from technique_catalog import (  # noqa: E402
     GripSpec,
     GripTargetRegion,
     KodokanStatus,
+    MechanicalClass,
     TechniqueDefinition,
     TechniqueFamily,
     UkePostureRequirement,
@@ -395,6 +398,74 @@ def test_non_habukareta_without_era_restricted_is_fine():
     catalog = _make_balanced_catalog()
     report = validate_catalog(catalog)
     assert "habukareta_missing_era_restricted" not in _codes(report.errors)
+
+
+# ---------------------------------------------------------------------------
+# HAJ-214 — counter-throw field consistency
+# ---------------------------------------------------------------------------
+def _make_counter(technique_id: str, **overrides) -> TechniqueDefinition:
+    """A complete counter definition; tests blank out fields to introduce defects."""
+    d = _make_definition(technique_id)
+    d.fires_as_counter = True
+    d.counter_class = CounterClass.KAESHI
+    d.counter_window = CounterCommitWindow.TURN_IN
+    d.counter_against_mechanical_class = [MechanicalClass.HIP_THROW_FORWARD]
+    for k, v in overrides.items():
+        setattr(d, k, v)
+    return d
+
+
+def test_complete_counter_validates_clean():
+    catalog = _make_balanced_catalog()
+    catalog["a_counter"] = _make_counter("a_counter")
+    report = validate_catalog(catalog)
+    assert "counter_missing_required_field" not in _codes(report.errors)
+    assert "counter_metadata_without_flag" not in _codes(report.warnings)
+
+
+def test_counter_missing_all_three_fields_is_error():
+    catalog = _make_balanced_catalog()
+    catalog["bad_counter"] = _make_counter(
+        "bad_counter",
+        counter_class=None,
+        counter_window=None,
+        counter_against_mechanical_class=[],
+    )
+    report = validate_catalog(catalog)
+    missing = [i for i in report.errors if i.code == "counter_missing_required_field"]
+    # One error per absent field.
+    assert {i.field for i in missing} == {
+        "counter_class", "counter_window", "counter_against_mechanical_class",
+    }
+
+
+def test_counter_missing_one_field_is_error():
+    catalog = _make_balanced_catalog()
+    catalog["bad_counter"] = _make_counter("bad_counter", counter_window=None)
+    report = validate_catalog(catalog)
+    missing = [i for i in report.errors if i.code == "counter_missing_required_field"]
+    assert len(missing) == 1
+    assert missing[0].field == "counter_window"
+
+
+def test_counter_metadata_without_flag_is_warning():
+    # Counter metadata populated while fires_as_counter is false — inert, and
+    # almost always a dual-use entry that should have been split.
+    catalog = _make_balanced_catalog()
+    orphan = _make_definition("orphan")
+    orphan.fires_as_counter = False
+    orphan.counter_class = CounterClass.KAESHI
+    report = validate_catalog(catalog | {"orphan": orphan})
+    assert "counter_metadata_without_flag" in _codes(report.warnings)
+    # Not an error — the entry still loads and behaves as a primary attack.
+    assert "counter_missing_required_field" not in _codes(report.errors)
+
+
+def test_real_catalog_counter_entries_validate_clean():
+    # The authored counters in data/techniques.yaml must pass the cross-check.
+    report = validate_catalog_file(REPO_ROOT / "data" / "techniques.yaml")
+    assert "counter_missing_required_field" not in _codes(report.errors)
+    assert "counter_metadata_without_flag" not in _codes(report.warnings)
 
 
 # ---------------------------------------------------------------------------
