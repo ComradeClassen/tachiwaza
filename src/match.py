@@ -2163,38 +2163,14 @@ class Match:
             if ev.event_type == "ESCAPE_SUCCESS":
                 # HAJ-185 — atomic ne-waza reset on escape so the next
                 # standing engagement doesn't carry ghost state.
-                self.ne_waza_resolver.reset(self.osaekomi)
-                # HAJ-129 — escape resets to STANDING_DISTANT with the same
-                # post-score-style recovery bonus so getting up off the mat
-                # eats real time before the next grip can seat. Drops any
-                # stale throws_in_progress (a multi-tick standing throw
-                # could have been parked when ne-waza started) so the
-                # standing tick after escape doesn't fire a "grips
-                # collapsed" abort line for a throw the user already
-                # forgot about.
-                # HAJ-152 — escape from a post-score chase is the
-                # "tachi-waza resumes without matte" exit (AC#7). Clear
-                # the follow-up bookkeeping so the next exchange starts
-                # clean; no explicit matte fires here.
-                self._throws_in_progress.clear()
-                self._post_score_follow_up = None
-                self._reset_dyad_to_distant(
-                    tick, recovery_bonus=POST_SCORE_RECOVERY_TICKS,
-                )
-                self.ne_waza_top_id = None
+                self._reset_to_standing_after_newaza(tick)
                 break
             if ev.event_type == "SUBMISSION_RELEASED":
                 # HAJ-220 — catalog-mode submission abandoned after the
                 # failed-effectiveness threshold. Reset the dyad through
                 # the same recovery path escape takes; the SUBMISSION_RELEASED
                 # event itself carries the "Matte" narrative cue.
-                self.ne_waza_resolver.reset(self.osaekomi)
-                self._throws_in_progress.clear()
-                self._post_score_follow_up = None
-                self._reset_dyad_to_distant(
-                    tick, recovery_bonus=POST_SCORE_RECOVERY_TICKS,
-                )
-                self.ne_waza_top_id = None
+                self._reset_to_standing_after_newaza(tick)
                 break
 
     # -----------------------------------------------------------------------
@@ -6056,6 +6032,40 @@ class Match:
         # before hajime overwrote it. Stretching to 3 ticks gives the
         # matte banner a real beat where coach instructions could land
         # later, and a clean hajime restart after.
+        self._pending_hajime_tick = tick + MATTE_TO_HAJIME_PAUSE_TICKS
+
+    def _reset_to_standing_after_newaza(self, tick: int) -> None:
+        """HAJ-185 / HAJ-228 — atomic reset to standing after a ne-waza exit
+        that is NOT a submission victory: escape-to-standing (ESCAPE_SUCCESS)
+        or catalog submission released/abandoned (SUBMISSION_RELEASED).
+
+        Resets the ne-waza resolver, drops any standing throw parked when
+        ne-waza began (so the next standing tick doesn't fire a stale
+        "grips collapsed" abort), closes any post-score follow-up window,
+        and seats the dyad at STANDING_DISTANT with the post-score recovery
+        bonus — getting up off the mat eats real time before the next grip
+        can seat.
+
+        HAJ-228 — schedules the restart Hajime (and the HAJ-235 matte→hajime
+        freeze) the same way a referee-called matte does. Pre-fix this reset
+        seated the dyad at distance and the narrator emitted the ne_waza→
+        closing phase line "Matte — they're back on their feet", but no
+        Hajime was ever scheduled, so the match silently resumed with no
+        restart call (2026-06-04 triage, Cluster 2.2, t013).
+
+        HAJ-152 AC#7 — the post-score-chase escape still "resumes tachi-waza
+        without matte" in the sense that no POST_SCORE_FOLLOW_UP_MATTE
+        consequence is queued; clearing `_post_score_follow_up` here keeps
+        that bookkeeping clean. The restart Hajime is the symmetric beat for
+        the "Matte — back on their feet" line, not a post-score-end matte.
+        """
+        self.ne_waza_resolver.reset(self.osaekomi)
+        self._throws_in_progress.clear()
+        self._post_score_follow_up = None
+        self._reset_dyad_to_distant(
+            tick, recovery_bonus=POST_SCORE_RECOVERY_TICKS,
+        )
+        self.ne_waza_top_id = None
         self._pending_hajime_tick = tick + MATTE_TO_HAJIME_PAUSE_TICKS
 
     def _post_score_reset(self, tick: int, reason: str) -> list[Event]:
