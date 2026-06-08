@@ -556,6 +556,17 @@ GOLDEN_SCORE_CARDIO_BASE_MULT:   float = 1.5
 GOLDEN_SCORE_CARDIO_RAMP_MULT:   float = 1.5   # plus base = 3.0x at full ramp
 GOLDEN_SCORE_RAMP_TICKS:         int   = 120
 
+# HAJ-234 — golden-score termination policy: a CAPPED window with an
+# explicit decision/draw fallback (chosen over unlimited sudden death so the
+# headless calibration harness always terminates deterministically). The
+# window runs `GOLDEN_SCORE_MAX_TICKS` ticks from GOLDEN_SCORE_START; first
+# score or third shido ends it earlier. The escalating cardio drain
+# (`golden_score_cardio_multiplier`, full 3.0x ramp by tick 120) is what
+# forces an organic decision well inside this window in practice — the cap is
+# the backstop. If the window expires with scores still level, the match is
+# decided on shido count (fewer shidos wins); a level shido count is a draw.
+GOLDEN_SCORE_MAX_TICKS:          int   = 360
+
 
 def golden_score_cardio_multiplier(
     elapsed_gs_ticks: int, cardio_efficiency: int = 5,
@@ -1121,6 +1132,7 @@ class Match:
         stream: str = "both",
         renderer: Optional["Renderer"] = None,
         regulation_ticks: Optional[int] = None,
+        golden_score_ticks: Optional[int] = None,
         technique_catalog: Optional[dict] = None,
         ne_waza_catalog: Optional["object"] = None,
         debug_kuzushi: bool = False,
@@ -1139,6 +1151,13 @@ class Match:
         # so the match clock has room to continue past the boundary.
         self.regulation_ticks = (
             regulation_ticks if regulation_ticks is not None else max_ticks
+        )
+        # HAJ-234 — length of the golden-score window, measured in ticks from
+        # golden_score_start_tick. Bounds sudden death so the match always
+        # terminates even if neither fighter scores; see GOLDEN_SCORE_MAX_TICKS.
+        self.golden_score_ticks = (
+            golden_score_ticks if golden_score_ticks is not None
+            else GOLDEN_SCORE_MAX_TICKS
         )
         self.seed      = seed
         self._debug = debug
@@ -1202,7 +1221,8 @@ class Match:
         # win_method strings (see _end_match): "ippon", "two waza-ari",
         # "decision", "hansoku-make", "draw", "ippon (pin)",
         # "ippon (submission)", and golden-score variants
-        # "waza-ari (golden score)", "ippon (golden score)".
+        # "waza-ari (golden score)", "ippon (golden score)",
+        # "decision (golden score)" (HAJ-234 GS time-cap shido tiebreak).
         self.win_method: str = ""
         self.ticks_run   = 0
         # HAJ-93 — golden-score state. golden_score flips at the regulation
@@ -1549,8 +1569,22 @@ class Match:
 
     def is_done(self) -> bool:
         """True when the match has ended (score, time-up, or external
-        signal such as the viewer window closing)."""
-        return self.match_over or self.ticks_run >= self.max_ticks
+        signal such as the viewer window closing).
+
+        HAJ-234 — once golden score is live the regulation/max_ticks clock no
+        longer bounds the match: sudden death runs until a score, a third
+        shido, or the GS cap. `_resolve_golden_score_cap` ends the match (sets
+        match_over) when the cap is reached, so the GS branch here is a
+        backstop using the same threshold in case that check is ever skipped.
+        """
+        if self.match_over:
+            return True
+        if self.golden_score:
+            if self.golden_score_start_tick is None:
+                return False
+            elapsed = self.ticks_run - self.golden_score_start_tick
+            return elapsed >= self.golden_score_ticks
+        return self.ticks_run >= self.max_ticks
 
     def _renderer_drives_loop(self) -> bool:
         """Optional capability check on the renderer protocol. Defaults
@@ -1947,6 +1981,18 @@ class Match:
                 and not self.golden_score
                 and tick >= self.regulation_ticks):
             self._check_regulation_end(tick, events)
+
+        # HAJ-234 — golden-score cap. Sudden death normally ends on a score
+        # or third shido (those route through _end_match elsewhere). If the
+        # GS window expires with the match still live, fall back to a decision
+        # on shido count (or a draw if level). Fires after the regulation-end
+        # gate so a fresh GOLDEN_SCORE_START tick never also trips the cap.
+        if (not self.match_over
+                and self.golden_score
+                and self.golden_score_start_tick is not None
+                and tick - self.golden_score_start_tick
+                    >= self.golden_score_ticks):
+            self._resolve_golden_score_cap(tick, events)
 
         # HAJ-147 — run the mat-side narrator over this tick's events +
         # BPE slice. The narrator filter applies the five promotion rules
@@ -6809,6 +6855,54 @@ class Match:
         winner = a if a_wa > b_wa else b
         self._end_match(winner, "decision", tick, events)
 
+    def _resolve_golden_score_cap(self, tick: int, events: list[Event]) -> None:
+        """HAJ-234 — golden-score window expired with no score.
+
+        Termination policy (capped GS, documented on GOLDEN_SCORE_MAX_TICKS):
+        decide on shido count — the fighter carrying fewer shidos out of
+        regulation+GS is the more positively-contesting one and takes the
+        decision. A level shido count is a genuine draw. Both paths route
+        through `_end_match` so consumers get the usual MATCH_ENDED signal.
+        """
+        if self.match_over or not self.golden_score:
+            return
+        a, b = self.fighter_a, self.fighter_b
+        a_sh = a.state.shidos
+        b_sh = b.state.shidos
+        if a_sh != b_sh:
+            winner = a if a_sh < b_sh else b
+            events.append(Event(
+                tick=tick,
+                event_type="GOLDEN_SCORE_DECISION",
+                description=(
+                    f"[ref: {self.referee.name}] Golden score time cap — "
+                    f"decision to {winner.identity.name} on fewer shidos "
+                    f"({min(a_sh, b_sh)} to {max(a_sh, b_sh)})."
+                ),
+                data={
+                    "winner":   winner.identity.name,
+                    "a_shidos": a_sh,
+                    "b_shidos": b_sh,
+                    "tick":     tick,
+                },
+            ))
+            self._end_match(winner, "decision (golden score)", tick, events)
+        else:
+            events.append(Event(
+                tick=tick,
+                event_type="GOLDEN_SCORE_DRAW",
+                description=(
+                    f"[ref: {self.referee.name}] Golden score time cap — "
+                    f"scores and shidos level. Match drawn."
+                ),
+                data={
+                    "a_shidos": a_sh,
+                    "b_shidos": b_sh,
+                    "tick":     tick,
+                },
+            ))
+            self._end_match(None, "draw", tick, events)
+
     def _resolve_match(self) -> None:
         # Resolve a draw / decision into self.winner / self.win_method first
         # so the narrative composer has consistent state to read.
@@ -6851,7 +6945,14 @@ class Match:
 
         if self.win_method == "draw":
             wa = a.state.score["waza_ari"]
-            return [f"Match drawn {wa}-{wa}. Golden score pending (Phase 3)."]
+            # HAJ-234 — a draw is now reachable only via the golden-score cap
+            # (regulation ties enter golden score, they no longer draw).
+            if self.golden_score:
+                return [
+                    f"Match drawn {wa}-{wa} — golden score reached the time "
+                    f"cap with scores and shidos level."
+                ]
+            return [f"Match drawn {wa}-{wa}."]
 
         winner = self.winner
         loser  = b if winner is a else a
@@ -6903,6 +7004,11 @@ class Match:
         if method == "decision":
             return (f"{wn} won the decision {wa_w}-{wa_l} on waza-ari — "
                     f"neither fighter found ippon.")
+        if method == "decision (golden score)":
+            wn_sh = winner.state.shidos
+            ln_sh = loser.state.shidos
+            return (f"{wn} won in golden score on the time cap — decided on "
+                    f"fewer shidos ({wn_sh} to {ln_sh}).")
         return f"{wn} won by {method}."
 
     def _compose_causal_hook(self, loser, ln) -> str:

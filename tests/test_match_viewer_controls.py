@@ -41,6 +41,13 @@ def _new_match(*, max_ticks=12, seed=1, renderer=None):
     return Match(
         fighter_a=t, fighter_b=s, referee=build_suzuki(),
         max_ticks=max_ticks, seed=seed, renderer=renderer,
+        # HAJ-234 — these are loop-plumbing tests written before golden-score
+        # resolution existed; they assert the match is bounded by max_ticks.
+        # A scoreless regulation now opens a golden-score window, so disable
+        # that window here (golden_score_ticks=0 -> a level regulation end
+        # resolves immediately) to keep the original regulation-bounded
+        # contract these tests were written against.
+        golden_score_ticks=0,
     )
 
 

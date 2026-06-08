@@ -38,6 +38,9 @@ EVENT_CLASS_BASE: dict[str, int] = {
     "SUBMISSION_VICTORY":         10,
     "MATCH_OVER":                 10,
     "TIME_EXPIRED":                9,
+    # HAJ-234 — golden-score terminators decide the match; render everywhere.
+    "GOLDEN_SCORE_DECISION":       9,
+    "GOLDEN_SCORE_DRAW":           9,
     # --- Score events (render at all altitudes) ---
     "SCORE_AWARDED":               9,
     "THROW_LANDING":               7,

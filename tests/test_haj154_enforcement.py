@@ -186,6 +186,11 @@ def test_no_modifier_reveal_prose_on_commit_tick() -> None:
     m = Match(
         fighter_a=t, fighter_b=s, referee=build_suzuki(),
         max_ticks=80, seed=20, stream="debug",
+        # HAJ-234 — this is a regulation-length log scan tuned to seed 20.
+        # Golden-score resolution now extends a scoreless match past the
+        # boundary, shifting the rng path; disable the GS window so the scan
+        # stays the original 80-tick exchange it was calibrated for.
+        golden_score_ticks=0,
     )
     captured_events: list = []
     m._print_events = lambda evts: captured_events.extend(evts)
