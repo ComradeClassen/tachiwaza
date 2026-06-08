@@ -226,11 +226,16 @@ def test_matte_clears_pending_throw_resolution_consequences() -> None:
             "defender_name": s.identity.name,
             "throw_class": "SACRIFICE",
         }),
-        # An unrelated consequence kind that should NOT be dropped.
+        # HAJ-235 — GRIP_INIT_RECOMPUTE is now ALSO dropped on matte: once
+        # the dyad resets to STANDING_DISTANT a pending grip-initiative
+        # recompute is stale, and pre-fix it fired in the matte→hajime
+        # freeze and emitted a [grip_init] line in the dead window.
         _Consequence(due_tick=40, kind="GRIP_INIT_RECOMPUTE", payload={
             "survivor_name": s.identity.name,
             "failed_attacker_name": t.identity.name,
         }),
+        # A consequence kind that is NOT exchange-scoped and should survive.
+        _Consequence(due_tick=41, kind="POST_SCORE_DECISION", payload={}),
     ])
     # Also seed an in-progress throw entry so we can verify it's cleared.
     from match import _ThrowInProgress
@@ -246,12 +251,14 @@ def test_matte_clears_pending_throw_resolution_consequences() -> None:
     for dropped in (
         "RESOLVE_KAKE_N1", "RESOLVE_DRIVE_THROW",
         "FIRE_COMMIT_FROM_INTENT", "NEWAZA_TRANSITION_AFTER_STUFF",
+        # HAJ-235 — grip-init recompute is exchange-scoped, dropped too.
+        "GRIP_INIT_RECOMPUTE",
     ):
         assert dropped not in surviving, (
             f"{dropped} should be dropped on matte (still in {surviving})"
         )
-    # Unrelated consequence kinds survive.
-    assert "GRIP_INIT_RECOMPUTE" in surviving
+    # Non-exchange-scoped consequence kinds survive.
+    assert "POST_SCORE_DECISION" in surviving
     # In-progress entry cleared.
     assert not m._throws_in_progress
 

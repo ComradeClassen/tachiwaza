@@ -439,6 +439,11 @@ class MatteReason(Enum):
     # always preceded by this matte so the log carries the visible
     # matte beat even when both fighters disengaged cleanly.
     POST_SCORE_FOLLOW_UP_END = auto()
+    # HAJ-235 — penalty ceremony. A passivity/non-combativity shido is
+    # bracketed matte → shido announcement → hajime (real-judo flow)
+    # rather than emitted inline mid-exchange. This matte reason carries
+    # the stoppage that precedes the shido call.
+    PENALTY = auto()
 
 
 # ---------------------------------------------------------------------------

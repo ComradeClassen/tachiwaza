@@ -328,11 +328,16 @@ def test_match_length_neutral() -> None:
     exactly 60 ticks. Bumping or shrinking the tick budget would be a
     calibration regression."""
     import contextlib, io
-    random.seed(5)
+    # HAJ-235 — the matte→hajime freeze removes live-action ticks during the
+    # pause, shifting seeded trajectories. Seed 5 now ties at the regulation
+    # boundary and enters golden score, which by design runs past the tick
+    # budget; re-pinned to a seed that still resolves inside the 60-tick
+    # window so the budget-neutrality assertion stays meaningful.
+    random.seed(6)
     t, s = _pair()
     m = Match(
         fighter_a=t, fighter_b=s, referee=build_suzuki(),
-        max_ticks=60, seed=5, stream="debug",
+        max_ticks=60, seed=6, stream="debug",
     )
     with contextlib.redirect_stdout(io.StringIO()):
         m.run()

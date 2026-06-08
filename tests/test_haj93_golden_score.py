@@ -217,6 +217,12 @@ def test_third_shido_in_golden_score_ends_match_for_opponent() -> None:
     finally:
         m.referee.update_passivity = real
 
+    # HAJ-235 — passivity detection now queues the penalty; the award
+    # (and the third-shido hansoku-make) lands in the matte→shido→hajime
+    # ceremony resolved from _post_tick.
+    assert m._pending_penalty is not None
+    m._award_pending_penalty(tick=score_tick, events=events)
+
     assert t.state.shidos == 3
     assert m.match_over is True
     assert m.winner is s

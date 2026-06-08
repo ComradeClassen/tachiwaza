@@ -375,7 +375,7 @@ def test_kumi_kata_shido_issued_at_30_ticks() -> None:
     """
     import random as _r
     _r.seed(7)
-    from match import Match, KUMI_KATA_SHIDO_TICKS
+    from match import Match, KUMI_KATA_SHIDO_TICKS, MATTE_TO_HAJIME_PAUSE_TICKS
     from referee import build_suzuki
 
     t = main_module.build_tanaka()
@@ -396,8 +396,15 @@ def test_kumi_kata_shido_issued_at_30_ticks() -> None:
     events: list = []
     for tick in range(1, KUMI_KATA_SHIDO_TICKS + 2):
         m._update_grip_passivity(tick, events)
+    # HAJ-235 — detection queues the penalty; the award is the
+    # matte→shido→hajime ceremony resolved from _post_tick.
+    assert m._pending_penalty is not None
+    m._award_pending_penalty(tick, events)
     assert t.state.shidos > before
     assert any(ev.event_type == "SHIDO_AWARDED" for ev in events)
+    # The shido is bracketed: a matte precedes it, a hajime restart follows.
+    assert any(ev.event_type == "MATTE_CALLED" for ev in events)
+    assert m._pending_hajime_tick == tick + MATTE_TO_HAJIME_PAUSE_TICKS
 
 
 def test_unconventional_shido_issued_at_5_ticks() -> None:
@@ -422,8 +429,12 @@ def test_unconventional_shido_issued_at_5_ticks() -> None:
     before = t.state.shidos
     events: list = []
     m._update_grip_passivity(tick=1, events=events)
-    assert t.state.shidos == before + 1
+    # HAJ-235 — detection resets the clock and queues the penalty; the
+    # shido itself lands in the matte→shido→hajime ceremony.
     assert pistol.unconventional_clock == 0
+    assert m._pending_penalty is not None
+    m._award_pending_penalty(tick=1, events=events)
+    assert t.state.shidos == before + 1
 
 
 # ---------------------------------------------------------------------------

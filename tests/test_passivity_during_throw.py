@@ -138,4 +138,7 @@ def test_kumi_kata_shido_still_fires_outside_a_throw() -> None:
     events: list = []
     for tick in range(1, KUMI_KATA_SHIDO_TICKS + 2):
         m._update_grip_passivity(tick, events)
+    # HAJ-235 — detection queues the penalty; resolving it emits the shido.
+    assert m._pending_penalty is not None
+    m._award_pending_penalty(tick, events)
     assert any(e.event_type == "SHIDO_AWARDED" for e in events)

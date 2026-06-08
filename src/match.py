@@ -1232,12 +1232,25 @@ class Match:
         self.golden_score: bool = False
         self.golden_score_start_tick: Optional[int] = None
 
-        # HAJ-160 — restart-hajime emission. Set to (matte_tick + 1) when
-        # _handle_matte fires, so the next tick opens with a HAJIME_CALLED
-        # event that mirrors the match-start announcement at every restart.
-        # The viewer's hajime banner reads off these events; the engine
-        # itself doesn't otherwise depend on the timing.
+        # HAJ-160 — restart-hajime emission. Set to
+        # (matte_tick + MATTE_TO_HAJIME_PAUSE_TICKS) when _handle_matte
+        # fires, so a later tick opens with a HAJIME_CALLED event that
+        # mirrors the match-start announcement at every restart. The
+        # viewer's hajime banner reads off these events.
+        # HAJ-235 — the engine now ALSO gates off this slot: every tick
+        # strictly before _pending_hajime_tick is a freeze (no action
+        # selection / grip / throw staging). The pause is no longer purely
+        # cosmetic — it is the matte→hajime dead time.
         self._pending_hajime_tick: Optional[int] = None
+
+        # HAJ-235 — pending penalty shido. Passivity/non-combativity
+        # detection runs in the tick body (_update_grip_passivity,
+        # _update_passivity) but the award is deferred to _post_tick so it
+        # lands as a real-judo ceremony: matte → shido announcement →
+        # hajime restart, reusing the _pending_hajime_tick freeze. Stores
+        # {"fighter": Judoka, "reason": str}; at most one penalty is
+        # bracketed per tick (one matte per stoppage).
+        self._pending_penalty: Optional[dict] = None
 
         # Passivity tracking
         self._last_attack_tick: dict[str, int] = {
@@ -1608,10 +1621,13 @@ class Match:
             self._intent_force[name] = (0.0, 0.0)
             self._actual_force[name] = (0.0, 0.0)
 
-        # HAJ-160 — restart-hajime emission. Fires on the tick after a
-        # matte resolved, marking the start of the next exchange so the
-        # viewer's hajime banner mirrors the match-start announcement.
-        # No engine state is gated by this; it's purely a visible beat.
+        # HAJ-160 — restart-hajime emission. Fires MATTE_TO_HAJIME_PAUSE_TICKS
+        # after a matte resolved, marking the start of the next exchange so
+        # the viewer's hajime banner mirrors the match-start announcement.
+        # HAJ-235 — clearing the slot here is what un-freezes the dyad: the
+        # freeze gate below tests `tick < _pending_hajime_tick`, so once this
+        # runs (slot → None) the hajime tick proceeds with a full update and
+        # fighters resume.
         if self._pending_hajime_tick == tick:
             events.append(self.referee.announce_hajime(tick))
             self._pending_hajime_tick = None
@@ -1649,6 +1665,22 @@ class Match:
         # The match clock keeps ticking; this just gates the ladder.
         if (self._post_score_follow_up is not None
                 and self._post_score_follow_up.get("stage") == "STANDING"):
+            self._post_tick(tick, events)
+            return
+
+        # HAJ-235 — matte→hajime freeze. On every tick strictly between a
+        # Matte call and its paired Hajime restart the dyad is parked at
+        # STANDING_DISTANT and neither fighter may act. _handle_matte sets
+        # _pending_hajime_tick = matte_tick + MATTE_TO_HAJIME_PAUSE_TICKS;
+        # the hajime tick itself clears that slot at the top of this method
+        # (so it is NOT frozen — fighters resume on hajime). The window in
+        # between is a render beat (the matte banner sits on screen, coach
+        # prose lands), not live wrestling time. Suppressing the whole
+        # standing update here is what stops the [move]/grip work the
+        # post-223 log showed leaking into the t077-t078 gap. The clock
+        # still advances and _post_tick still renders the pause.
+        if (self._pending_hajime_tick is not None
+                and tick < self._pending_hajime_tick):
             self._post_tick(tick, events)
             return
 
@@ -1954,6 +1986,15 @@ class Match:
         # before the matte check so an OOB matte still wins priority.
         if self.sub_loop_state == SubLoopState.STANDING and not self.match_over:
             self._update_edge_zone_counters_and_shido(tick, events)
+
+        # HAJ-235 — bracket a passivity / non-combativity shido detected in
+        # the tick body. The award is a matte → shido announcement → hajime
+        # ceremony (real judo) rather than an inline mid-exchange line. This
+        # calls _handle_matte itself, so the standard matte check below sees
+        # a freshly-reset dyad and won't double-fire (should_call_matte
+        # returns None on a clean STANDING_DISTANT reset).
+        if self._pending_penalty is not None and not self.match_over:
+            self._award_pending_penalty(tick, events)
 
         # Referee: Matte?
         if not self.match_over:
@@ -5983,6 +6024,14 @@ class Match:
         NEWAZA_TRANSITION_AFTER_STUFF: once the dyad has reset, neither
         the commit nor the ne-waza door should fire from the prior
         exchange's intent.
+
+        HAJ-235 — also drop GRIP_INIT_RECOMPUTE. It is queued when an
+        attack fails so grip initiative is recomputed a tick or two later;
+        but if a matte intervenes (e.g. the stuffed-throw reset that
+        *follows* the same failed attack), the dyad is already broken back
+        to STANDING_DISTANT and a pending recompute is stale. Pre-fix it
+        fired during the matte→hajime freeze and emitted a `[grip_init]`
+        line in the dead window (seed 1, t076).
         """
         self._throws_in_progress.clear()
         self._post_score_follow_up = None
@@ -5992,6 +6041,7 @@ class Match:
             "RESOLVE_DRIVE_THROW",
             "FIRE_COMMIT_FROM_INTENT",
             "NEWAZA_TRANSITION_AFTER_STUFF",
+            "GRIP_INIT_RECOMPUTE",
         }
         self._consequence_queue = [
             c for c in self._consequence_queue
@@ -6458,20 +6508,71 @@ class Match:
             if reason is None:
                 continue
 
-            fighter.state.shidos += 1
-            events.append(Event(
-                tick=tick,
-                event_type="SHIDO_AWARDED",
-                description=(
-                    f"[ref: {self.referee.name}] Shido — "
-                    f"{name} ({reason}). "
-                    f"Total: {fighter.state.shidos}."
-                ),
-            ))
-            if fighter.state.shidos >= 3:
-                opponent = (self.fighter_b if fighter is self.fighter_a
-                            else self.fighter_a)
-                self._end_match(opponent, "hansoku-make", tick, events)
+            # HAJ-235 — defer the award to the matte→shido→hajime ceremony
+            # resolved in _post_tick instead of emitting it inline mid-
+            # exchange. Detection (and the clock resets above) stays here;
+            # the stoppage, shido announcement, and hajime restart land
+            # together. One penalty is bracketed per tick, so stop here.
+            self._queue_penalty_shido(fighter, reason)
+            break
+
+    def _queue_penalty_shido(self, fighter: Judoka, reason: str) -> None:
+        """HAJ-235 — stash a passivity / non-combativity shido for the
+        matte→shido→hajime ceremony resolved in `_award_pending_penalty`
+        from `_post_tick`.
+
+        Detection sites (`_update_grip_passivity`, `_update_passivity`)
+        run in the tick body and call this in place of emitting the shido
+        inline. At most one penalty is bracketed per tick — a stoppage can
+        carry only one matte — so the first detected this tick wins.
+        """
+        if self._pending_penalty is None:
+            self._pending_penalty = {"fighter": fighter, "reason": reason}
+
+    def _award_pending_penalty(self, tick: int, events: list[Event]) -> None:
+        """HAJ-235 — resolve a deferred penalty shido as a real-judo
+        ceremony: Matte (stop the action) → shido announcement → Hajime
+        (restart). Called from `_post_tick` after a tick whose body queued
+        a penalty via `_queue_penalty_shido`.
+
+        The matte announcement + `_handle_matte` reset reuse the Part 1
+        freeze: `_handle_matte` sets `_pending_hajime_tick`, so the dyad
+        is frozen at STANDING_DISTANT through the pause and Hajime fires at
+        the end of it. A third shido is hansoku-make — the match ends and
+        no restart is queued.
+        """
+        penalty = self._pending_penalty
+        self._pending_penalty = None
+        if penalty is None:
+            return
+        fighter = penalty["fighter"]
+        reason  = penalty["reason"]
+        name    = fighter.identity.name
+
+        # Matte first — the action stops before the penalty is announced.
+        events.append(self.referee.announce_matte(MatteReason.PENALTY, tick))
+        # Then the shido itself.
+        fighter.state.shidos += 1
+        events.append(Event(
+            tick=tick,
+            event_type="SHIDO_AWARDED",
+            description=(
+                f"[ref: {self.referee.name}] Shido — "
+                f"{name} ({reason}). "
+                f"Total: {fighter.state.shidos}."
+            ),
+            data={"fighter": name, "reason": reason, "ceremony": True},
+        ))
+        # Third shido = hansoku-make: the match ends here, no restart.
+        if fighter.state.shidos >= 3:
+            opponent = (self.fighter_b if fighter is self.fighter_a
+                        else self.fighter_a)
+            self._end_match(opponent, "hansoku-make", tick, events)
+            return
+        # Otherwise reset the dyad and queue the Hajime restart (the
+        # Part 1 freeze covers the matte→hajime gap).
+        events.append(self._build_matte_context_event(tick))
+        self._handle_matte(tick)
 
     def _update_edge_zone_counters_and_shido(
         self, tick: int, events: list[Event],
@@ -6561,20 +6662,11 @@ class Match:
                 fighter.identity.name, was_active, tick
             )
             if shido:
-                fighter.state.shidos += 1
-                events.append(Event(
-                    tick=tick,
-                    event_type="SHIDO_AWARDED",
-                    description=(
-                        f"[ref: {self.referee.name}] Shido — "
-                        f"{fighter.identity.name} ({shido.reason}). "
-                        f"Total: {fighter.state.shidos}."
-                    ),
-                ))
-                if fighter.state.shidos >= 3:
-                    opponent = (self.fighter_b if fighter is self.fighter_a
-                                else self.fighter_a)
-                    self._end_match(opponent, "hansoku-make", tick, events)
+                # HAJ-235 — defer to the matte→shido→hajime ceremony
+                # (_award_pending_penalty in _post_tick) rather than
+                # emitting inline. One penalty is bracketed per tick.
+                self._queue_penalty_shido(fighter, shido.reason)
+                break
 
     # -----------------------------------------------------------------------
     # OUTPUT

@@ -364,6 +364,7 @@ class Referee:
             MatteReason.INJURY:                "injury",
             MatteReason.OSAEKOMI_DECISION:     "osaekomi decision",
             MatteReason.POST_SCORE_FOLLOW_UP_END: "post-score reset",
+            MatteReason.PENALTY:                "penalty",
         }.get(reason, reason.name)
         return Event(
             tick=tick,
