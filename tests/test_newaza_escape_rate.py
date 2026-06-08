@@ -195,7 +195,11 @@ def test_escape_resets_to_distant_with_recovery_bonus() -> None:
         commit_actual=0.6, commit_execution_quality=0.6,
         last_sub_event=SubEvent.REACH_KUZUSHI,
     )
-    # Force escape on the next ne-waza tick.
+    # Force escape on the next ne-waza tick. Advance past the HAJ-231
+    # settle gate first so the escape roll is actually allowed to fire.
+    m.ne_waza_resolver._ground_ticks = (
+        m.ne_waza_resolver.MIN_GROUND_TICKS_BEFORE_ESCAPE + 1
+    )
     m.ne_waza_resolver._roll_escape = lambda *a, **kw: True
     m._tick_newaza(tick=10, events=[])
     assert m.position == Position.STANDING_DISTANT
@@ -218,6 +222,10 @@ def test_post_escape_no_stale_throw_aborts() -> None:
         schedule={0: [SubEvent.REACH_KUZUSHI]},
         commit_actual=0.6, commit_execution_quality=0.6,
         last_sub_event=SubEvent.REACH_KUZUSHI,
+    )
+    # Advance past the HAJ-231 settle gate so the forced escape can fire.
+    m.ne_waza_resolver._ground_ticks = (
+        m.ne_waza_resolver.MIN_GROUND_TICKS_BEFORE_ESCAPE + 1
     )
     m.ne_waza_resolver._roll_escape = lambda *a, **kw: True
     aborts = []
@@ -269,6 +277,73 @@ def test_ne_waza_entry_drops_other_fighter_throws() -> None:
     # Attacker's entry preserved for the caller to clean up; defender's gone.
     assert t.identity.name in m._throws_in_progress
     assert s.identity.name not in m._throws_in_progress
+
+
+# ---------------------------------------------------------------------------
+# 6. HAJ-231 — settle gate + guard position-difficulty direction.
+# ---------------------------------------------------------------------------
+def test_no_escape_on_first_ground_tick() -> None:
+    """Even with the escape roll rigged to always succeed, the bottom
+    fighter cannot escape on the entry tick — the settle gate suppresses
+    every roll until _ground_ticks passes MIN_GROUND_TICKS_BEFORE_ESCAPE."""
+    t, s, m = _pair_match()
+    _enter_ne_waza(m, top=t, bottom=s, position=Position.GUARD_TOP)
+    m.ne_waza_resolver.on_ground_entry(Position.GUARD_TOP)
+    m.ne_waza_resolver._roll_escape = lambda *a, **kw: True
+    gate = m.ne_waza_resolver.MIN_GROUND_TICKS_BEFORE_ESCAPE
+    # Through the entire settle window: no ESCAPE_SUCCESS may fire.
+    for tick in range(1, gate + 1):
+        events: list = []
+        m._tick_newaza(tick=tick, events=events)
+        assert not any(e.event_type == "ESCAPE_SUCCESS" for e in events), (
+            f"escape fired on ground tick {tick} (inside settle window)"
+        )
+        if m.sub_loop_state != SubLoopState.NE_WAZA:
+            raise AssertionError(
+                f"left ne-waza on tick {tick} before settle window elapsed"
+            )
+    # The first tick past the gate is allowed to escape.
+    events = []
+    m._tick_newaza(tick=gate + 1, events=events)
+    assert any(e.event_type == "ESCAPE_SUCCESS" for e in events), (
+        "escape never fired on the first tick past the settle window"
+    )
+
+
+def test_ground_ticks_reset_on_ground_entry() -> None:
+    """on_ground_entry restarts the settle counter so a fresh ground entry
+    re-arms the gate (a previous exchange's tick count can't leak in)."""
+    resolver = NewazaResolver()
+    resolver._ground_ticks = 99
+    resolver.on_ground_entry(Position.SIDE_CONTROL)
+    assert resolver._ground_ticks == 0
+
+
+def test_guard_top_not_easier_to_escape_than_side_control() -> None:
+    """HAJ-231 — guard-top must not multiply escape probability above side
+    control. We compare sampled escape rates for an elite bottom fighter in
+    each position; guard-top must be <= side control."""
+    t = main_module.build_tanaka()
+    s = main_module.build_sato()
+    s.capability.ne_waza_skill = 10
+    resolver = NewazaResolver()
+    # Push the counter past the gate so _roll_escape isn't relevant here —
+    # we sample the raw roll directly, which has no gate of its own.
+    def _rate(position: Position) -> float:
+        _r.seed(0)
+        fires = sum(
+            1 for _ in range(4000)
+            if resolver._roll_escape(s, t, position)
+        )
+        return fires / 4000
+    guard = _rate(Position.GUARD_TOP)
+    side  = _rate(Position.SIDE_CONTROL)
+    assert guard <= side + 1e-9, (
+        f"guard-top escape rate {guard:.3f} exceeds side control {side:.3f}"
+    )
+    # And dominant pins remain harder to escape than side control.
+    assert _rate(Position.MOUNT) < side
+    assert _rate(Position.BACK_CONTROL) < side
 
 
 if __name__ == "__main__":

@@ -212,7 +212,11 @@ def test_match_reaches_decision_within_240_ticks() -> None:
     # boundary and runs into golden score (which by design exceeds the
     # 240-tick budget); re-pinned to a seed that still resolves within
     # regulation so the "decision within 240 ticks" guarantee holds.
-    random.seed(7)
+    # HAJ-231 — the ne-waza escape settle gate again shifts seeded
+    # trajectories (escape rolls no longer fire on the entry tick, so the
+    # RNG stream diverges); seed 7 then ran into golden score. Re-pinned to
+    # seed 0, which resolves by submission well inside regulation (~t68).
+    random.seed(0)
     t, s = _pair()
     m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki(), max_ticks=240)
     m._print_events = lambda evs: None

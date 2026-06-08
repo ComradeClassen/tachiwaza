@@ -182,9 +182,22 @@ class NewazaResolver:
     # matte after a stalemate window. Post-fix base 0.025 + 0.008/skill →
     # roughly 0.10 escape prob for an elite, 0.04 for a median fighter,
     # which mostly times out into matte rather than into a re-engagement.
+    #
+    # HAJ-231 — the per-tick rates above are calibrated for a *settled*
+    # ground position. Pre-fix, _roll_escape ran from the very first ground
+    # tick, so a fighter could pop straight back to standing on the tick
+    # they hit the mat (triage 2026-06-04, Cluster 4.1: GUARD_TOP at t012 →
+    # standing at t013). MIN_GROUND_TICKS_BEFORE_ESCAPE is a settle gate:
+    # no escape roll fires until the dyad has been on the ground for more
+    # than this many ticks, so an escape is never resolved on the entry
+    # tick and ground exchanges last a believable number of ticks. The gate
+    # lives at the tick_resolve call sites (not inside _roll_escape) so the
+    # roll itself stays a pure per-tick probability that unit tests can
+    # sample directly.
     BASE_ESCAPE_PROB:        float = 0.025  # per-tick baseline escape probability
     SKILL_ESCAPE_BONUS:      float = 0.008  # bonus per point of ne_waza_skill
     CARDIO_ESCAPE_MULT:      float = 0.6    # escape prob scales with cardio
+    MIN_GROUND_TICKS_BEFORE_ESCAPE: int = 3  # settle window; no escape until past it
     CHOKE_BASE_TIGHTEN_PROB: float = 0.7    # per-tick chance choke advances
     ARMBAR_BASE_EXTEND_PROB: float = 0.65
     TECHNIQUE_ATTEMPT_PROB:  float = 0.25   # chance top fighter initiates a technique
@@ -202,6 +215,10 @@ class NewazaResolver:
         self._last_ground_position: Optional[Position] = None
         self._dominant_position_id: Optional[str] = None
         self._submission_attempt = None
+        # HAJ-231 — ticks the dyad has spent on the ground since entry.
+        # Incremented once per tick_resolve; gates the escape roll behind
+        # MIN_GROUND_TICKS_BEFORE_ESCAPE. Reset on ground entry and reset().
+        self._ground_ticks: int = 0
         # Pending log events from the most recent commit_pin /
         # commit_submission decision. tick_resolve drains and emits them
         # so the caller's events list stays the single emission point.
@@ -222,7 +239,12 @@ class NewazaResolver:
         """Called by Match when sub_loop_state transitions to NE_WAZA.
         Initializes the baseline ConnectionEdge set for the entered
         position so Stage 1 has something to filter against on the very
-        first ne-waza tick. No-op in legacy mode."""
+        first ne-waza tick. No-op in legacy mode.
+
+        The settle counter is reset here unconditionally (before the
+        legacy-mode early return) so the HAJ-231 escape gate restarts on
+        every fresh ground entry in both the legacy and catalog paths."""
+        self._ground_ticks = 0
         if self._ne_waza_catalog is None:
             return
         from ne_waza_consumption import baseline_graph_for
@@ -265,6 +287,7 @@ class NewazaResolver:
         self._dominant_position_id = None
         self._last_ground_position = None
         self._pending_catalog_events = []
+        self._ground_ticks = 0
         if self._connection_graph is not None:
             self._connection_graph.clear()
 
@@ -354,6 +377,11 @@ class NewazaResolver:
         if top_fighter is None:
             return events
 
+        # HAJ-231 — count ground ticks for the escape settle gate. Done here,
+        # before the catalog dispatch, so both resolution paths share one
+        # counter (the catalog path reads self._ground_ticks too).
+        self._ground_ticks += 1
+
         if self._ne_waza_catalog is not None:
             return self._tick_resolve_catalog(
                 position, graph, fighters, osaekomi, current_tick,
@@ -364,8 +392,12 @@ class NewazaResolver:
         counter = self._pick_counter_action(bottom_fighter)
         counter_success = self._resolve_counter(counter, bottom_fighter, top_fighter)
 
-        # --- Escape attempt ---
-        escaped = self._roll_escape(bottom_fighter, top_fighter, position)
+        # --- Escape attempt (gated by the HAJ-231 settle window so a
+        #     fighter can't pop back to standing on the entry tick) ---
+        escaped = (
+            self._ground_ticks > self.MIN_GROUND_TICKS_BEFORE_ESCAPE
+            and self._roll_escape(bottom_fighter, top_fighter, position)
+        )
         if escaped:
             if osaekomi.active:
                 ticks_held = osaekomi.ticks_held  # read before break_pin() resets it
@@ -519,8 +551,12 @@ class NewazaResolver:
             counter, bottom_fighter, top_fighter,
         )
 
-        # --- Escape attempt ---
-        escaped = self._roll_escape(bottom_fighter, top_fighter, position)
+        # --- Escape attempt (gated by the HAJ-231 settle window so a
+        #     fighter can't pop back to standing on the entry tick) ---
+        escaped = (
+            self._ground_ticks > self.MIN_GROUND_TICKS_BEFORE_ESCAPE
+            and self._roll_escape(bottom_fighter, top_fighter, position)
+        )
         if escaped:
             if osaekomi.active:
                 ticks_held = osaekomi.ticks_held
@@ -845,13 +881,22 @@ class NewazaResolver:
             float(bottom.capability.composure_ceiling), 1.0
         )
 
-        # Position difficulty: back control is hardest to escape
+        # Position difficulty multiplies the escape probability, so a LOWER
+        # value means a harder escape. The axis is top-fighter dominance:
+        # the more control the top fighter has, the lower the multiplier.
+        # Back control is hardest to escape; side control is the 1.0
+        # reference. HAJ-231 — guard was previously 1.5, which *raised*
+        # escape odds and made guard-top easier to escape than side control
+        # (the opposite of intent). The top fighter inside guard is the
+        # least dominant top position, so guard is pinned at the side-control
+        # reference (1.0): no easier to escape than side control, never the
+        # cheapest escape on the board.
         position_difficulty = {
             Position.SIDE_CONTROL: 1.0,
             Position.MOUNT:        0.7,
             Position.BACK_CONTROL: 0.5,
-            Position.GUARD_TOP:    1.5,
-            Position.GUARD_BOTTOM: 1.5,
+            Position.GUARD_TOP:    1.0,
+            Position.GUARD_BOTTOM: 1.0,
             Position.TURTLE_TOP:   0.8,
             Position.TURTLE_BOTTOM: 1.2,
         }.get(position, 1.0)
