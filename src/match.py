@@ -87,6 +87,11 @@ from grip_initiative import (
     RESP_CONTEST, RESP_MATCH, RESP_PURSUE_OWN, RESP_DEFENSIVE, RESP_DISENGAGE,
     RESP_ACCEPT_BAIT,
 )
+from cross_grip import (
+    select_lead_grip, select_defensive_frame, lead_grip_placement,
+    lead_grip_coach_prose, defensive_frame_coach_prose,
+    PLAN_ORTHODOX,
+)
 from chase_decision import (
     ChaseDecision, ChaseDecisionResult, make_chase_decision,
 )
@@ -2185,21 +2190,11 @@ class Match:
         # stalemate-ticks branch never tripped during ne-waza no matter
         # how long the fighters sat in a non-progressing position.
         # Progress = active sub/choke technique, active pin, or any tick
-        # event that signals real movement: technique initiated, pin
-        # started, submission landed, a FULL escape to standing.
-        #
-        # NOTE: COUNTER_ACTION ("partial success" shrimp/frame/hip-out) is
-        # deliberately NOT progress. A bottom fighter half-escaping every
-        # tick without changing position or advancing toward a score is the
-        # exact stall the matte exists to break — counting those as progress
-        # reset the counter every tick, so the threshold was never reached
-        # and the referee never stood a deadlocked guard battle up (seed
-        # 1148955923: ~360 ticks of partial-success escapes, no matte). A
-        # full ESCAPE_SUCCESS still resets, since that genuinely ends the
-        # ground exchange.
+        # event that signals movement (technique initiated, pin started,
+        # submission landed, escape, counter-action partial success).
         progress_event_types = {
             "OSAEKOMI_BEGIN", "OSAEKOMI_BROKEN", "OSAEKOMI_TO_SUBMISSION",
-            "SUBMISSION_VICTORY", "ESCAPE_SUCCESS",
+            "SUBMISSION_VICTORY", "ESCAPE_SUCCESS", "COUNTER_ACTION",
         }
         had_progress_event = any(
             ev.event_type in progress_event_types
@@ -2603,7 +2598,16 @@ class Match:
         # lapel). The off-hand sleeve follows OFF_HAND_SEAT_LAG_TICKS later,
         # leaving a contestable window in between. Pre-HAJ-224 this seated
         # both hands atomically, which read as an instantaneous double grip.
-        new_edges = self._seat_grips_for(leader, follower, tick, hands="lead")
+        #
+        # HAJ-238 — in kenka-yotsu the leader may reach across for a CROSS or
+        # clamp a PISTOL sleeve-cuff instead of the orthodox tsurite. The
+        # election reads the live matchup + grip-war state; orthodox is the
+        # heavy default (MATCHED always returns orthodox).
+        lead_choice = self._elect_lead_grip(leader, follower, matchup, tick)
+        new_edges = self._seat_grips_for(
+            leader, follower, tick, hands="lead", lead_plan=lead_choice.plan,
+        )
+        self._emit_lead_grip_narration(leader, lead_choice, tick, events)
         for edge in new_edges:
             ev = Event(
                 tick=tick, event_type="GRIP_ESTABLISH",
@@ -2728,6 +2732,7 @@ class Match:
     def _seat_grips_for(
         self, attacker: Judoka, defender: Judoka, tick: int,
         hands: str = "both",
+        lead_plan: str = PLAN_ORTHODOX,
     ) -> list[GripEdge]:
         """Seat the standard sleeve-and-lapel grip pair for one fighter
         only. Mirrors grip_graph.attempt_engagement's per-fighter logic
@@ -2737,6 +2742,11 @@ class Match:
           - "both" (default): lead lapel + off-hand sleeve, atomically.
           - "lead": dominant-hand lapel only (the first grip a leader wins).
           - "off":  off-hand sleeve only (the second beat, seated later).
+
+        HAJ-238 — `lead_plan` (cross_grip.PLAN_*) chooses the *lead-hand* grip:
+        the orthodox opposite-lapel tsurite (default), a CROSS reach across to
+        the same-side lapel, or a PISTOL sleeve-cuff clamp. The off-hand sleeve
+        is unchanged — the unconventional grip is the dominant-hand election.
         """
         from enums import DominantSide as _DS
         dom = attacker.identity.dominant_side
@@ -2745,11 +2755,11 @@ class Match:
         new_edges: list[GripEdge] = []
 
         if hands in ("both", "lead"):
+            grip_v2, lapel_target, dom_hand_key = lead_grip_placement(
+                lead_plan, dom,
+            )
             dom_hand_part = (BodyPart.RIGHT_HAND if is_right
                              else BodyPart.LEFT_HAND)
-            dom_hand_key  = "right_hand" if is_right else "left_hand"
-            lapel_target  = (GripTarget.LEFT_LAPEL if is_right
-                             else GripTarget.RIGHT_LAPEL)
             dom_strength  = min(
                 1.0, attacker.effective_body_part(dom_hand_key) / 10.0,
             )
@@ -2758,7 +2768,7 @@ class Match:
                 grasper_part=dom_hand_part,
                 target_id=target_name,
                 target_location=lapel_target,
-                grip_type_v2=GripTypeV2.LAPEL_HIGH,
+                grip_type_v2=grip_v2,
                 strength=dom_strength,
                 current_tick=tick,
             ))
@@ -2782,6 +2792,68 @@ class Match:
                 current_tick=tick,
             ))
         return new_edges
+
+    # -----------------------------------------------------------------------
+    # HAJ-238 — CROSS / PISTOL lead-grip election (kenka-yotsu)
+    # -----------------------------------------------------------------------
+    def _elect_lead_grip(
+        self, fighter: Judoka, opponent: Judoka, matchup: StanceMatchup,
+        tick: int,
+    ):
+        """Decide which lead-hand grip `fighter` reaches for — orthodox lapel,
+        the cross, or a pistol sleeve-cuff — given the live kenka-yotsu matchup,
+        how badly they're losing the grip war (the disruptor signal), and
+        whether the opponent already holds an unconventional grip (the
+        experienced-counter signal). Seeded off its own RNG stream so the
+        election never perturbs initiative / response rolls."""
+        grip_pressure = self.grip_graph.compute_grip_delta(
+            opponent, fighter, matchup,
+        )
+        facing_unconventional = any(
+            e.grip_type_v2.is_unconventional()
+            for e in self.grip_graph.edges_owned_by(opponent.identity.name)
+        )
+        rng = random.Random(
+            f"haj238:leadgrip:{fighter.identity.name}:{self.seed}:{tick}"
+        )
+        return select_lead_grip(
+            fighter, opponent,
+            matchup=matchup,
+            grip_pressure=grip_pressure,
+            facing_unconventional=facing_unconventional,
+            rng=rng,
+        )
+
+    def _emit_lead_grip_narration(
+        self, fighter: Judoka, choice, tick: int, events: list[Event],
+    ) -> None:
+        """Surface a kenka-yotsu lead-grip election as the CROSS_GRIP event
+        (§4.3 narration family). Orthodox elections with no conversion are
+        silent — the standard cascade prose already covers them."""
+        if choice.plan == PLAN_ORTHODOX and not choice.converts:
+            return
+        prose = lead_grip_coach_prose(fighter.identity.name, choice)
+        if prose is None:
+            return
+        tag = ""
+        if choice.disruptor:
+            tag = " (disruptor)"
+        elif choice.converts:
+            tag = " (converts)"
+        events.append(Event(
+            tick=tick, event_type="CROSS_GRIP",
+            description=(
+                f"[kenka] {fighter.identity.name} elects {choice.plan} grip{tag}"
+            ),
+            data={
+                "fighter": fighter.identity.name,
+                "plan": choice.plan,
+                "disruptor": choice.disruptor,
+                "converts": choice.converts,
+                "prose_silent": True,
+                "coach_prose": prose,
+            },
+        ))
 
     def _resolve_grip_cascade(self, tick: int, events: list[Event]) -> None:
         """Follower picks one of six responses. v0.1 mechanical outcomes:
@@ -2869,6 +2941,7 @@ class Match:
         else:
             self._apply_engaged_response(
                 leader, follower, choice.kind, tick, events,
+                matchup=cascade["stance_matchup"],
             )
 
         # Familiarity tally — leader "won" the lead grip race; follower
@@ -2894,6 +2967,7 @@ class Match:
     def _apply_engaged_response(
         self, leader: Judoka, follower: Judoka, kind: str, tick: int,
         events: list[Event],
+        matchup: StanceMatchup = StanceMatchup.MATCHED,
     ) -> None:
         """Apply MATCH / PURSUE_OWN / CONTEST / DEFENSIVE / ACCEPT_BAIT
         outcomes. Disengage is a sibling path — see _apply_disengage_response.
@@ -2902,7 +2976,13 @@ class Match:
         leader edge is contested or stripped; the follower seats a single grip
         on the leader's committed (lead-grip) arm. It is the only engaged
         response that grips the leader's loaded arm rather than seating the
-        follower's own offensive grip pair."""
+        follower's own offensive grip pair.
+
+        HAJ-238 — in kenka-yotsu the follower's grip can go unconventional too:
+        MATCH / PURSUE_OWN / CONTEST may seat a CROSS or PISTOL lead grip (the
+        dominated follower's disruptor, or the skilled follower routing back to
+        their preferred grip), and the DEFENSIVE frame can be a strip-resistant
+        PISTOL sode-tori frame instead of the plain sleeve."""
         # Reset disengage streaks — engagement actually completed (or
         # at least the follower didn't disengage).
         self._disengage_streak[leader.identity.name] = 0
@@ -2916,6 +2996,10 @@ class Match:
             # *some* defensive structure so leader can't fire throws
             # unopposed. v0.1 mechanical proxy for "posture broken
             # forward, A's kuzushi opportunities reduced."
+            #
+            # HAJ-238 — a kenka-yotsu-capable follower frames with a PISTOL
+            # (sode-tori) clamp instead: strip-resistant, it denies the entry
+            # without conceding the inside (§4.5 defensive role).
             from enums import DominantSide as _DS
             dom = follower.identity.dominant_side
             is_right = dom == _DS.RIGHT
@@ -2927,15 +3011,39 @@ class Match:
             sleeve_strength = min(
                 1.0, follower.effective_body_part(sleeve_key) / 10.0,
             )
+            frame_rng = random.Random(
+                f"haj238:frame:{follower.identity.name}:{self.seed}:{tick}"
+            )
+            frame_grip = select_defensive_frame(
+                follower, matchup=matchup, rng=frame_rng,
+            )
             sleeve_edge = self.grip_graph._new_pocket_edge(
                 attacker=follower,
                 grasper_part=sleeve_part,
                 target_id=leader.identity.name,
                 target_location=sleeve_target,
-                grip_type_v2=GripTypeV2.SLEEVE_HIGH,
+                grip_type_v2=frame_grip,
                 strength=sleeve_strength,
                 current_tick=tick,
             )
+            frame_prose = defensive_frame_coach_prose(
+                follower.identity.name, frame_grip,
+            )
+            if frame_prose is not None:
+                events.append(Event(
+                    tick=tick, event_type="CROSS_GRIP",
+                    description=(
+                        f"[kenka] {follower.identity.name} frames with a "
+                        f"{frame_grip.name} grip"
+                    ),
+                    data={
+                        "fighter": follower.identity.name,
+                        "plan": frame_grip.name,
+                        "defensive_frame": True,
+                        "prose_silent": True,
+                        "coach_prose": frame_prose,
+                    },
+                ))
             ev = Event(
                 tick=tick, event_type="GRIP_ESTABLISH",
                 description=(
@@ -3006,22 +3114,31 @@ class Match:
             )
             return
 
+        # HAJ-238 — the follower's lead-grip election. The follower lost the
+        # initiative race and the leader holds a grip, so the follower is the
+        # *dominated* fighter here — the disruptor cross is theirs to throw, and
+        # a skilled follower facing the leader's cross routes back to their
+        # preferred grip (the `converts` flag).
+        lead_choice = self._elect_lead_grip(follower, leader, matchup, tick)
+
         # MATCH / PURSUE_OWN seat the follower's full grip pair.
         new_edges: list[GripEdge] = []
         if kind in (RESP_MATCH, RESP_PURSUE_OWN):
-            new_edges = self._seat_grips_for(follower, leader, tick)
+            new_edges = self._seat_grips_for(
+                follower, leader, tick, lead_plan=lead_choice.plan,
+            )
         elif kind == RESP_CONTEST:
-            # Contested race: follower's dominant-hand lapel grip seats
+            # Contested race: follower's dominant-hand lead grip seats
             # (the reach that interposed on the leader's lead path);
-            # the off-hand sleeve drop is dropped.
+            # the off-hand sleeve drop is dropped. The lead grip honors the
+            # kenka-yotsu election — a contested cross is the disruptor reach.
+            grip_v2, lapel_target, dom_hand_key = lead_grip_placement(
+                lead_choice.plan, follower.identity.dominant_side,
+            )
             from enums import DominantSide as _DS
-            dom = follower.identity.dominant_side
-            is_right = dom == _DS.RIGHT
+            is_right = follower.identity.dominant_side == _DS.RIGHT
             dom_hand_part = (BodyPart.RIGHT_HAND if is_right
                              else BodyPart.LEFT_HAND)
-            dom_hand_key  = "right_hand" if is_right else "left_hand"
-            lapel_target  = (GripTarget.LEFT_LAPEL if is_right
-                             else GripTarget.RIGHT_LAPEL)
             dom_strength  = min(
                 1.0, follower.effective_body_part(dom_hand_key) / 10.0,
             )
@@ -3030,10 +3147,12 @@ class Match:
                 grasper_part=dom_hand_part,
                 target_id=leader.identity.name,
                 target_location=lapel_target,
-                grip_type_v2=GripTypeV2.LAPEL_HIGH,
+                grip_type_v2=grip_v2,
                 strength=dom_strength,
                 current_tick=tick,
             ))
+
+        self._emit_lead_grip_narration(follower, lead_choice, tick, events)
 
         for edge in new_edges:
             ev = Event(
@@ -7271,19 +7390,6 @@ class Match:
                     "tick":       tick,
                 },
             ))
-            # Regulation→golden-score is a stop-and-restart, not a
-            # continuous roll. Pre-fix this only flipped `golden_score`
-            # True, so if the bell caught the fighters in ne-waza the GS
-            # clock simply started under them and the ground scramble ran
-            # on with no break (seed 1148955923: t242 time expires mid-
-            # scramble, ne-waza rolls straight into GS for ~360 ticks).
-            # Route through the standard matte reset so GS always opens
-            # from a clean STANDING_DISTANT dyad: the TIME_EXPIRED "Time!"
-            # line above is the stop beat, _handle_matte breaks the dyad
-            # back to standing (clearing any ne-waza / osaekomi state), and
-            # the scheduled Hajime (MATTE_TO_HAJIME_PAUSE_TICKS freeze)
-            # restarts the contest. Matte → golden score → Hajime.
-            self._handle_matte(tick)
             return
         winner = a if a_wa > b_wa else b
         self._end_match(winner, "decision", tick, events)

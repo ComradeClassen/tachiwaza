@@ -72,6 +72,8 @@ EVENT_CLASS_BASE: dict[str, int] = {
     "GRIP_STRIPPED":               4,    # a kill is meaningful
     "GRIP_BREAK":                  4,
     "GRIPS_RESET":                 3,
+    # HAJ-238 — kenka-yotsu cross/pistol grip election (stands-visible beat).
+    "CROSS_GRIP":                  4,
     # --- Sub-events (debug-stream noise) ---
     "SUB_REACH_KUZUSHI":           1,
     "SUB_KUZUSHI_ACHIEVED":        1,
