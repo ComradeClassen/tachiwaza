@@ -2190,11 +2190,21 @@ class Match:
         # stalemate-ticks branch never tripped during ne-waza no matter
         # how long the fighters sat in a non-progressing position.
         # Progress = active sub/choke technique, active pin, or any tick
-        # event that signals movement (technique initiated, pin started,
-        # submission landed, escape, counter-action partial success).
+        # event that signals real movement: technique initiated, pin
+        # started, submission landed, a FULL escape to standing.
+        #
+        # NOTE: COUNTER_ACTION ("partial success" shrimp/frame/hip-out) is
+        # deliberately NOT progress. A bottom fighter half-escaping every
+        # tick without changing position or advancing toward a score is the
+        # exact stall the matte exists to break — counting those as progress
+        # reset the counter every tick, so the threshold was never reached
+        # and the referee never stood a deadlocked guard battle up (seed
+        # 1148955923: ~360 ticks of partial-success escapes, no matte). A
+        # full ESCAPE_SUCCESS still resets, since that genuinely ends the
+        # ground exchange.
         progress_event_types = {
             "OSAEKOMI_BEGIN", "OSAEKOMI_BROKEN", "OSAEKOMI_TO_SUBMISSION",
-            "SUBMISSION_VICTORY", "ESCAPE_SUCCESS", "COUNTER_ACTION",
+            "SUBMISSION_VICTORY", "ESCAPE_SUCCESS",
         }
         had_progress_event = any(
             ev.event_type in progress_event_types
@@ -7390,6 +7400,19 @@ class Match:
                     "tick":       tick,
                 },
             ))
+            # Regulation→golden-score is a stop-and-restart, not a
+            # continuous roll. Pre-fix this only flipped `golden_score`
+            # True, so if the bell caught the fighters in ne-waza the GS
+            # clock simply started under them and the ground scramble ran
+            # on with no break (seed 1148955923: t242 time expires mid-
+            # scramble, ne-waza rolls straight into GS for ~360 ticks).
+            # Route through the standard matte reset so GS always opens
+            # from a clean STANDING_DISTANT dyad: the TIME_EXPIRED "Time!"
+            # line above is the stop beat, _handle_matte breaks the dyad
+            # back to standing (clearing any ne-waza / osaekomi state) and
+            # schedules the restart Hajime (MATTE_TO_HAJIME_PAUSE_TICKS
+            # freeze). Matte → golden score → Hajime.
+            self._handle_matte(tick)
             return
         winner = a if a_wa > b_wa else b
         self._end_match(winner, "decision", tick, events)
