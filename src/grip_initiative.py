@@ -1,12 +1,14 @@
 # grip_initiative.py
-# HAJ-151 — grip-race initiative scoring + five-response cascade.
+# HAJ-151 — grip-race initiative scoring + response cascade.
+# HAJ-226 — added the sixth response kind, ACCEPT_BAIT (the counter-fighter
+# who deliberately does not strip). The model below is now six-branch.
 #
 # Each grip-fight phase opens with both fighters computing an *initiative
 # score* — a weighted combination of aggressive↔patient facet, body
 # archetype, fight_iq, composure, height-derived reach proxy, fatigue,
 # and intra-match familiarity. The fighter with the higher score reaches
-# first; the other perceives via HAJ-149 and picks one of five response
-# types (contest / match / pursue-own / defensive / disengage).
+# first; the other perceives via HAJ-149 and picks one of six response
+# types (contest / match / pursue-own / defensive / disengage / accept-bait).
 #
 # Three weight tables are active:
 #   - MATCHED stance — base weights. Aggressive is the largest factor.
@@ -35,14 +37,18 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # RESPONSE KINDS
 # ---------------------------------------------------------------------------
-RESP_CONTEST:    str = "CONTEST"      # frame the bicep / parry the hand / slap-down
-RESP_MATCH:      str = "MATCH"        # mirror leader's reach (sleeve-and-lapel symmetric)
-RESP_PURSUE_OWN: str = "PURSUE_OWN"   # commit to own preferred grip; ignore leader
-RESP_DEFENSIVE:  str = "DEFENSIVE"    # frame-and-deny; no own grip seated
-RESP_DISENGAGE:  str = "DISENGAGE"    # backstep; reset to STANDING_DISTANT
+RESP_CONTEST:     str = "CONTEST"      # frame the bicep / parry the hand / slap-down
+RESP_MATCH:       str = "MATCH"        # mirror leader's reach (sleeve-and-lapel symmetric)
+RESP_PURSUE_OWN:  str = "PURSUE_OWN"   # commit to own preferred grip; ignore leader
+RESP_DEFENSIVE:   str = "DEFENSIVE"    # frame-and-deny; no own grip seated
+RESP_DISENGAGE:   str = "DISENGAGE"    # backstep; reset to STANDING_DISTANT
+RESP_ACCEPT_BAIT: str = "ACCEPT_BAIT"  # HAJ-226 — counter-fighter who deliberately
+#                                        does NOT strip; lets the leader's grip stand
+#                                        and loads a counter off the committed arm.
 
 ALL_RESPONSE_KINDS: tuple[str, ...] = (
     RESP_CONTEST, RESP_MATCH, RESP_PURSUE_OWN, RESP_DEFENSIVE, RESP_DISENGAGE,
+    RESP_ACCEPT_BAIT,
 )
 
 
@@ -250,7 +256,7 @@ def clock_pressure_roles(
 
 
 # ---------------------------------------------------------------------------
-# FIVE-RESPONSE SELECTION
+# RESPONSE SELECTION (six branches — HAJ-151 five + HAJ-226 ACCEPT_BAIT)
 # ---------------------------------------------------------------------------
 @dataclass
 class GripResponseChoice:
@@ -265,11 +271,16 @@ class GripResponseChoice:
 # so the modulation steps below carry the per-fighter signature; v0.2
 # can tighten them after calibration.
 _BASE_RESPONSE_WEIGHTS: dict[str, float] = {
-    RESP_CONTEST:    1.0,
-    RESP_MATCH:      1.5,
-    RESP_PURSUE_OWN: 1.0,
-    RESP_DEFENSIVE:  0.7,
-    RESP_DISENGAGE:  0.5,
+    RESP_CONTEST:     1.0,
+    RESP_MATCH:       1.5,
+    RESP_PURSUE_OWN:  1.0,
+    RESP_DEFENSIVE:   0.7,
+    RESP_DISENGAGE:   0.5,
+    # HAJ-226 — ACCEPT_BAIT is a specialist read: low base weight, lifted
+    # hard by counter-archetype / patience / fight_iq / composure in the
+    # modulation step and damped by clock pressure and fatigue. Lowest of
+    # the six by design — only the right fighter in the right moment picks it.
+    RESP_ACCEPT_BAIT: 0.4,
 }
 
 
@@ -286,25 +297,37 @@ def _modulate_response_weights(
     arch = follower.identity.body_archetype
 
     # Archetype biases.
+    #
+    # HAJ-226 — ACCEPT_BAIT splits the archetypes into "proactive" (GRIP_FIGHTER
+    # contests, MOTOR pressures — they take the grip war to the opponent and
+    # rarely concede a grip on purpose) and "counter-leaning" (LEVER counters
+    # off the opponent's commitment, EXPLOSIVE waits to capitalize, and
+    # GROUND_SPECIALIST is happy to be gripped on the way to the mat). The
+    # latter group is where "give them the grip, take the reaction" lives.
     if arch == BodyArchetype.GRIP_FIGHTER:
-        w[RESP_CONTEST]    *= 1.6   # GRIP_FIGHTER prefers contest
-        w[RESP_MATCH]      *= 1.2
-        w[RESP_DEFENSIVE]  *= 0.8
-        w[RESP_DISENGAGE]  *= 0.7
+        w[RESP_CONTEST]     *= 1.6   # GRIP_FIGHTER prefers contest
+        w[RESP_MATCH]       *= 1.2
+        w[RESP_DEFENSIVE]   *= 0.8
+        w[RESP_DISENGAGE]   *= 0.7
+        w[RESP_ACCEPT_BAIT] *= 0.5   # contests the grip; rarely concedes it
     elif arch == BodyArchetype.EXPLOSIVE:
-        w[RESP_PURSUE_OWN] *= 1.8   # EXPLOSIVE pursues their own setup
-        w[RESP_CONTEST]    *= 0.7
-        w[RESP_MATCH]      *= 0.8
+        w[RESP_PURSUE_OWN]  *= 1.8   # EXPLOSIVE pursues their own setup
+        w[RESP_CONTEST]     *= 0.7
+        w[RESP_MATCH]       *= 0.8
+        w[RESP_ACCEPT_BAIT] *= 1.8   # patient build → capitalize on the commit
     elif arch == BodyArchetype.MOTOR:
-        w[RESP_CONTEST]    *= 1.3
-        w[RESP_DISENGAGE]  *= 0.6
+        w[RESP_CONTEST]     *= 1.3
+        w[RESP_DISENGAGE]   *= 0.6
+        w[RESP_ACCEPT_BAIT] *= 0.5   # pressures forward; doesn't sit on a counter
     elif arch == BodyArchetype.LEVER:
-        w[RESP_PURSUE_OWN] *= 1.2
-        w[RESP_DEFENSIVE]  *= 1.1
+        w[RESP_PURSUE_OWN]  *= 1.2
+        w[RESP_DEFENSIVE]   *= 1.1
+        w[RESP_ACCEPT_BAIT] *= 1.5   # counters off the opponent's commitment
     elif arch == BodyArchetype.GROUND_SPECIALIST:
-        w[RESP_DEFENSIVE]  *= 1.4
-        w[RESP_PURSUE_OWN] *= 1.1
-        w[RESP_CONTEST]    *= 0.8
+        w[RESP_DEFENSIVE]   *= 1.4
+        w[RESP_PURSUE_OWN]  *= 1.1
+        w[RESP_CONTEST]     *= 0.8
+        w[RESP_ACCEPT_BAIT] *= 1.4   # accepts the grip on the way to the mat
 
     # Aggressive facet — high aggressive prefers contest/match; low aggressive prefers defensive/disengage.
     aggr = _aggressive_frac(follower)
@@ -312,6 +335,10 @@ def _modulate_response_weights(
     w[RESP_MATCH]     *= 0.7 + 0.6 * aggr
     w[RESP_DEFENSIVE] *= 1.5 - aggr
     w[RESP_DISENGAGE] *= 1.5 - aggr
+    # HAJ-226 — accepting the bait is a patient read, not a passive one: the
+    # counter-fighter is calm, not rushing to contest. Patient profiles favor
+    # it (×1.3 at aggressive=0), aggressive ones shun it (×0.7 at aggressive=10).
+    w[RESP_ACCEPT_BAIT] *= 0.7 + 0.6 * (1.0 - aggr)
 
     # Loyal-to-plan — high loyal_to_plan prefers disengage when the
     # engagement is unfavorable (don't get drawn into a grip war you
@@ -331,9 +358,11 @@ def _modulate_response_weights(
         w[RESP_MATCH] *= 1.5
         w[RESP_DISENGAGE] *= 0.5   # novices don't read engagement well enough
         w[RESP_DEFENSIVE] *= 0.7
+        w[RESP_ACCEPT_BAIT] *= 0.4  # HAJ-226 — baiting needs a read novices lack
     elif iq > 0.7:
         w[RESP_CONTEST] *= 1.2
         w[RESP_DISENGAGE] *= 1.2   # elite reads when to bail
+        w[RESP_ACCEPT_BAIT] *= 1.4  # HAJ-226 — and reads when to invite the grip
 
     # Composure — low composure (panicked) reaches for the safe MATCH /
     # DEFENSIVE; high composure reads more freely.
@@ -342,6 +371,12 @@ def _modulate_response_weights(
         w[RESP_MATCH]     *= 1.3
         w[RESP_DEFENSIVE] *= 1.2
         w[RESP_CONTEST]   *= 0.8
+        # HAJ-226 — inviting the grip while loading a counter takes nerve;
+        # a rattled fighter strips or frames on reflex instead.
+        w[RESP_ACCEPT_BAIT] *= 0.6
+    elif comp > 0.7:
+        # Composed fighters can afford the patient counter posture.
+        w[RESP_ACCEPT_BAIT] *= 1.3
 
     # Mirrored-stance bias — patience-rewarded variant: contest is
     # less preferred (crossing-grip contest is messy), defensive and
@@ -350,6 +385,11 @@ def _modulate_response_weights(
         w[RESP_CONTEST]    *= 0.8
         w[RESP_DEFENSIVE]  *= 1.2
         w[RESP_PURSUE_OWN] *= 1.2
+        # HAJ-226 — the patience-rewarded variant rewards the bait too:
+        # letting the cross stand and countering off it is a patient read,
+        # and crossing-grip contest is messy enough to make accepting it
+        # the cleaner counter.
+        w[RESP_ACCEPT_BAIT] *= 1.3
 
     # Clock-pressure modifier on response selection (per the spec's
     # "leading fighter gets defensive-bias modifier on response-type
@@ -361,6 +401,16 @@ def _modulate_response_weights(
     elif clock_pressure_role == "trailing":
         w[RESP_CONTEST]   *= 1.3
         w[RESP_DISENGAGE] *= 0.5
+    # HAJ-226 — either way, the clock kills the patient counter: a leader
+    # protecting a lead won't gift a grip, and a trailing fighter needs the
+    # grip now, not a reaction two beats later.
+    if clock_pressure_role in ("leading", "trailing"):
+        w[RESP_ACCEPT_BAIT] *= 0.5
+
+    # HAJ-226 — fatigue damps the bait: loading a counter off a conceded grip
+    # is metabolically expensive, and a gassed fighter strips/frames instead.
+    fatigue_frac = _fatigue_frac(follower)
+    w[RESP_ACCEPT_BAIT] *= max(0.3, 1.0 - 0.6 * fatigue_frac)
 
     # Perception specificity — vague perception (high tori disguise)
     # pushes the perceiver toward the *safer* responses.
@@ -369,6 +419,9 @@ def _modulate_response_weights(
         w[RESP_DEFENSIVE] *= 1.2
         w[RESP_DISENGAGE] *= 1.2
         w[RESP_CONTEST]   *= 0.6
+        # HAJ-226 — you can't bait a commit you can't read; vague perception
+        # makes the accept-and-counter posture a gamble, so down it goes.
+        w[RESP_ACCEPT_BAIT] *= 0.6
 
     return w
 
@@ -382,7 +435,7 @@ def select_response(
     perception_specificity: float = 0.5,
     rng: Optional[random.Random] = None,
 ) -> GripResponseChoice:
-    """Pick one of the five response kinds via weighted random.
+    """Pick one of the six response kinds via weighted random.
 
     Weights are computed by `_modulate_response_weights`; the weighted
     pick is over the (kind, weight) pairs. Returns a GripResponseChoice

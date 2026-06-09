@@ -38,7 +38,7 @@ Selection is a weighted draw off base weights `{CONTEST:1.0, MATCH:1.5, PURSUE_O
 
 **The addition: `ACCEPT_BAIT`** — deliberately do not strip or disengage; allow the leader's grips to stand while loading a counter. Base weight low; modulated *up* by counter skill, composure, and counter-archetype, *down* by clock pressure and fatigue. Per §1.2. This is the only response the war is missing.
 
-**Documentation debt — now scoped to transcription.** This construct has no design doc; it lives only in the module header plus match wiring. The audit handed us its full behavior. The task is therefore not "design it" but "**transcribe the existing behavior into a design doc, then add `ACCEPT_BAIT`.**" See Task list, item A-1. Naming discipline: keep **"grip war"** as the design concept (the whole contested phenomenon) and name the code construct **"grip response selection"** (the follower's per-tick choice). They are different scopes; collapsing the names blurs the war into one of its mechanisms.
+**Documentation debt — resolved (HAJ-226).** This construct now has a design doc: [grip-response-selection.md](grip-response-selection.md) transcribes the full behavior and documents the sixth branch, `ACCEPT_BAIT`, which is now built. (Originally this construct lived only in the module header plus match wiring; the audit handed us its full behavior, so the task was transcription + one new branch, not design from scratch. See Task list, item A-1.) Naming discipline: keep **"grip war"** as the design concept (the whole contested phenomenon) and name the code construct **"grip response selection"** (the follower's per-tick choice). They are different scopes; collapsing the names blurs the war into one of its mechanisms.
 
 ---
 
@@ -118,7 +118,7 @@ Each item now carries a **status** drawn from the audit. Buckets reordered by wh
 
 ### Bucket A — Grip war (design)
 
-- **A-1 — Transcribe grip response selection into a design doc, add `ACCEPT_BAIT`.** *Status:* construct fully exists in `grip_initiative.py`; audit quoted its full behavior. Task is transcription + one new branch (§1.2/1.3), not design from scratch.
+- **A-1 — Transcribe grip response selection into a design doc, add `ACCEPT_BAIT`.** *Status:* **done (HAJ-226).** The response model is transcribed into [grip-response-selection.md](grip-response-selection.md), and the sixth branch `ACCEPT_BAIT` (the counter-fighter who deliberately doesn't strip, §1.2/1.3) is built in `grip_initiative.py` (selectable, archetype/facet-modulated, logged in the cascade) and wired in `match.py` (`_apply_engaged_response` seats the counter-loading grip on the leader's committed arm without stripping it).
 - **A-2 — Calibration: is the leader's grab too uncontested?** *Status:* addressed in HAJ-224. Three calibration changes landed: (1) strips degrade by a margin-scaled number of steps so a grip can be broken from any depth, not only after a forced four-step walk-down; (2) a universal archetype-weighted strip propensity in the driving rung so every fighter strips mid-exchange (GRIP_FIGHTER most), not only in the pre-deepen opening; (3) the leader seats a single lead grip at engagement with the off-hand following a later, contestable beat (`OFF_HAND_SEAT_LAG_TICKS`). Strip/partial-strip narration is the sibling ticket HAJ-225.
 
 ### Bucket B — The one-model migration (the real spine work — was "build", now "migrate")

@@ -85,6 +85,7 @@ from grip_initiative import (
     sample_initiative, select_response, clock_pressure_roles,
     GripResponseChoice,
     RESP_CONTEST, RESP_MATCH, RESP_PURSUE_OWN, RESP_DEFENSIVE, RESP_DISENGAGE,
+    RESP_ACCEPT_BAIT,
 )
 from chase_decision import (
     ChaseDecision, ChaseDecisionResult, make_chase_decision,
@@ -739,6 +740,8 @@ _GRIP_CASCADE_COACH_PROSE: dict[str, str] = {
     "CONTEST":    "{follower} contests the grip ({kind}).",
     "DEFENSIVE":  "{follower} fights defensively for the grip ({kind}).",
     "DISENGAGE":  "{follower} backs off the grip exchange ({kind}).",
+    "ACCEPT_BAIT": "{follower} lets {leader} keep the grip and loads a "
+                   "counter off the committed arm ({kind}).",
 }
 
 
@@ -2182,11 +2185,21 @@ class Match:
         # stalemate-ticks branch never tripped during ne-waza no matter
         # how long the fighters sat in a non-progressing position.
         # Progress = active sub/choke technique, active pin, or any tick
-        # event that signals movement (technique initiated, pin started,
-        # submission landed, escape, counter-action partial success).
+        # event that signals real movement: technique initiated, pin
+        # started, submission landed, a FULL escape to standing.
+        #
+        # NOTE: COUNTER_ACTION ("partial success" shrimp/frame/hip-out) is
+        # deliberately NOT progress. A bottom fighter half-escaping every
+        # tick without changing position or advancing toward a score is the
+        # exact stall the matte exists to break — counting those as progress
+        # reset the counter every tick, so the threshold was never reached
+        # and the referee never stood a deadlocked guard battle up (seed
+        # 1148955923: ~360 ticks of partial-success escapes, no matte). A
+        # full ESCAPE_SUCCESS still resets, since that genuinely ends the
+        # ground exchange.
         progress_event_types = {
             "OSAEKOMI_BEGIN", "OSAEKOMI_BROKEN", "OSAEKOMI_TO_SUBMISSION",
-            "SUBMISSION_VICTORY", "ESCAPE_SUCCESS", "COUNTER_ACTION",
+            "SUBMISSION_VICTORY", "ESCAPE_SUCCESS",
         }
         had_progress_event = any(
             ev.event_type in progress_event_types
@@ -2771,7 +2784,7 @@ class Match:
         return new_edges
 
     def _resolve_grip_cascade(self, tick: int, events: list[Event]) -> None:
-        """Follower picks one of five responses. v0.1 mechanical outcomes:
+        """Follower picks one of six responses. v0.1 mechanical outcomes:
 
           - MATCH: follower's standard grip pair seats (symmetric config).
           - PURSUE_OWN: same as MATCH for v0.1 (follower seats their own
@@ -2785,10 +2798,14 @@ class Match:
           - DISENGAGE: leader's grips break, both transition to
             STANDING_DISTANT, closing-phase counter restarts. Follower
             absorbs the disengage stamina cost.
+          - ACCEPT_BAIT (HAJ-226): the counter-fighter who deliberately
+            does NOT strip or contest. The leader's grip is left standing;
+            the follower seats a single grip on the leader's *committed*
+            (lead-grip) arm — "give them the grip, take the reaction."
 
-        Selection is probabilistic per HAJ-151 spec §"Five response
-        types" — weights modulated by archetype, facets, fight_iq,
-        composure, perception specificity (proxied via the leader's
+        Selection is probabilistic per HAJ-151 spec §"response types" —
+        weights modulated by archetype, facets, fight_iq, composure,
+        fatigue, perception specificity (proxied via the leader's
         disguise), and clock-pressure role.
         """
         cascade = self._grip_cascade
@@ -2878,8 +2895,14 @@ class Match:
         self, leader: Judoka, follower: Judoka, kind: str, tick: int,
         events: list[Event],
     ) -> None:
-        """Apply MATCH / PURSUE_OWN / CONTEST / DEFENSIVE outcomes.
-        Disengage is a sibling path — see _apply_disengage_response."""
+        """Apply MATCH / PURSUE_OWN / CONTEST / DEFENSIVE / ACCEPT_BAIT
+        outcomes. Disengage is a sibling path — see _apply_disengage_response.
+
+        HAJ-226 — ACCEPT_BAIT is the counter-fighter's accept-and-load: no
+        leader edge is contested or stripped; the follower seats a single grip
+        on the leader's committed (lead-grip) arm. It is the only engaged
+        response that grips the leader's loaded arm rather than seating the
+        follower's own offensive grip pair."""
         # Reset disengage streaks — engagement actually completed (or
         # at least the follower didn't disengage).
         self._disengage_streak[leader.identity.name] = 0
@@ -2930,6 +2953,56 @@ class Match:
             events.append(ev)
             self._attach_bpe(
                 ev, decompose_grip_establish(sleeve_edge, follower, tick),
+            )
+            return
+
+        if kind == RESP_ACCEPT_BAIT:
+            # HAJ-226 — accept-and-bait. The counter-fighter deliberately does
+            # NOT strip or contest: the leader's lead grip is left standing
+            # (two grips on you is the exposure a counter exploits). Instead
+            # the follower clamps a single grip onto the leader's *committed*
+            # arm — the dominant-side sleeve carrying the lead lapel grip —
+            # setting up off that commitment. "Give them the grip, take the
+            # reaction." No leader edge is touched; this is the only response
+            # that seats its grip on the leader's loaded arm by design.
+            from enums import DominantSide as _DS
+            leader_is_right = leader.identity.dominant_side == _DS.RIGHT
+            committed_sleeve = (GripTarget.RIGHT_SLEEVE if leader_is_right
+                                else GripTarget.LEFT_SLEEVE)
+            follower_is_right = follower.identity.dominant_side == _DS.RIGHT
+            grasp_part = (BodyPart.RIGHT_HAND if follower_is_right
+                          else BodyPart.LEFT_HAND)
+            grasp_key  = "right_hand" if follower_is_right else "left_hand"
+            grasp_strength = min(
+                1.0, follower.effective_body_part(grasp_key) / 10.0,
+            )
+            bait_edge = self.grip_graph._new_pocket_edge(
+                attacker=follower,
+                grasper_part=grasp_part,
+                target_id=leader.identity.name,
+                target_location=committed_sleeve,
+                grip_type_v2=GripTypeV2.SLEEVE_HIGH,
+                strength=grasp_strength,
+                current_tick=tick,
+            )
+            ev = Event(
+                tick=tick, event_type="GRIP_ESTABLISH",
+                description=(
+                    f"[grip] {bait_edge.grasper_id} "
+                    f"({bait_edge.grasper_part.value}) → "
+                    f"{bait_edge.target_id} "
+                    f"({bait_edge.target_location.value}, "
+                    f"{bait_edge.grip_type_v2.name} @ "
+                    f"{bait_edge.depth_level.name})"
+                ),
+                data={"edge_id": id(bait_edge),
+                      "from_grip_cascade": "follower",
+                      "cascade_kind": kind,
+                      "accept_bait": True},
+            )
+            events.append(ev)
+            self._attach_bpe(
+                ev, decompose_grip_establish(bait_edge, follower, tick),
             )
             return
 
@@ -7198,6 +7271,19 @@ class Match:
                     "tick":       tick,
                 },
             ))
+            # Regulation→golden-score is a stop-and-restart, not a
+            # continuous roll. Pre-fix this only flipped `golden_score`
+            # True, so if the bell caught the fighters in ne-waza the GS
+            # clock simply started under them and the ground scramble ran
+            # on with no break (seed 1148955923: t242 time expires mid-
+            # scramble, ne-waza rolls straight into GS for ~360 ticks).
+            # Route through the standard matte reset so GS always opens
+            # from a clean STANDING_DISTANT dyad: the TIME_EXPIRED "Time!"
+            # line above is the stop beat, _handle_matte breaks the dyad
+            # back to standing (clearing any ne-waza / osaekomi state), and
+            # the scheduled Hajime (MATTE_TO_HAJIME_PAUSE_TICKS freeze)
+            # restarts the contest. Matte → golden score → Hajime.
+            self._handle_matte(tick)
             return
         winner = a if a_wa > b_wa else b
         self._end_match(winner, "decision", tick, events)

@@ -38,6 +38,7 @@ from grip_initiative import (
     clock_pressure_roles,
     MATCHED_WEIGHTS, MIRRORED_WEIGHTS, _BASE_ARCHETYPE,
     RESP_CONTEST, RESP_MATCH, RESP_PURSUE_OWN, RESP_DEFENSIVE, RESP_DISENGAGE,
+    RESP_ACCEPT_BAIT,
     ALL_RESPONSE_KINDS, CLOCK_PRESSURE_TICKS_REMAINING,
 )
 import main as main_module
@@ -175,8 +176,8 @@ def test_select_response_returns_valid_kind() -> None:
     assert choice.kind in ALL_RESPONSE_KINDS
 
 
-def test_response_distribution_covers_all_five_types() -> None:
-    """Across many rolls with neutral inputs, all five response kinds
+def test_response_distribution_covers_all_six_types() -> None:
+    """Across many rolls with neutral inputs, all six response kinds
     are represented (no kind has zero probability)."""
     rng = random.Random(0)
     t, s = _pair()
@@ -261,6 +262,154 @@ def test_clock_pressure_leading_picks_defensive_responses_more() -> None:
         if c.kind in (RESP_DEFENSIVE, RESP_DISENGAGE):
             leading_defensive += 1
     assert leading_defensive > base_defensive
+
+
+# ===========================================================================
+# HAJ-226 — ACCEPT_BAIT (counter-fighter who deliberately doesn't strip)
+# ===========================================================================
+def _set_facet(j, key: str, value: int) -> None:
+    j.identity.personality_facets[key] = value
+
+
+def test_accept_bait_is_selectable() -> None:
+    """ACCEPT_BAIT is a real, drawable sixth branch — never zero-probability
+    for a fighter built to use it (patient, high-IQ, counter-leaning)."""
+    rng = random.Random(0)
+    t, s = _pair()
+    _set_archetype(t, BodyArchetype.EXPLOSIVE)
+    _set_aggressive(t, 2)
+    t.capability.fight_iq = 9
+    seen = sum(
+        1 for _ in range(500)
+        if select_response(t, s, rng=rng).kind == RESP_ACCEPT_BAIT
+    )
+    assert seen > 0, "ACCEPT_BAIT was never selected by a counter-profile"
+
+
+def test_counter_fighter_accepts_bait_more_than_pressure_fighter() -> None:
+    """AC — a counter-fighter archetype (patient EXPLOSIVE, high fight_iq,
+    composed) selects ACCEPT_BAIT at a meaningfully higher rate than a
+    pressure/grip fighter (aggressive MOTOR / GRIP_FIGHTER)."""
+    n = 1000
+
+    # Counter-fighter: patient, high-IQ, composed EXPLOSIVE.
+    rng = random.Random(0)
+    t, s = _pair()
+    _set_archetype(t, BodyArchetype.EXPLOSIVE)
+    _set_aggressive(t, 2)
+    t.capability.fight_iq = 9
+    t.state.composure_current = float(t.capability.composure_ceiling)
+    counter_baits = sum(
+        1 for _ in range(n)
+        if select_response(t, s, rng=rng).kind == RESP_ACCEPT_BAIT
+    )
+
+    # Pressure fighter: aggressive MOTOR.
+    rng = random.Random(0)
+    t, s = _pair()
+    _set_archetype(t, BodyArchetype.MOTOR)
+    _set_aggressive(t, 9)
+    pressure_baits = sum(
+        1 for _ in range(n)
+        if select_response(t, s, rng=rng).kind == RESP_ACCEPT_BAIT
+    )
+
+    assert counter_baits > pressure_baits * 2, (
+        f"counter-fighter should bait far more than a pressure fighter: "
+        f"counter={counter_baits}, pressure={pressure_baits}"
+    )
+
+
+def test_clock_pressure_suppresses_accept_bait() -> None:
+    """The clock kills the patient counter — a fighter under clock pressure
+    picks ACCEPT_BAIT less than the same fighter with no clock pressure."""
+    rng = random.Random(0)
+    t, s = _pair()
+    _set_archetype(t, BodyArchetype.EXPLOSIVE)
+    _set_aggressive(t, 2)
+    t.capability.fight_iq = 9
+    base = sum(
+        1 for _ in range(800)
+        if select_response(t, s, rng=rng).kind == RESP_ACCEPT_BAIT
+    )
+    rng = random.Random(0)
+    pressured = sum(
+        1 for _ in range(800)
+        if select_response(
+            t, s, rng=rng, clock_pressure_role="leading",
+        ).kind == RESP_ACCEPT_BAIT
+    )
+    assert pressured < base, (
+        f"clock pressure should suppress ACCEPT_BAIT: "
+        f"base={base}, pressured={pressured}"
+    )
+
+
+def test_accept_bait_leaves_leader_grip_and_seats_off_committed_arm() -> None:
+    """Forcing ACCEPT_BAIT: the leader's lead grip is NOT stripped, the dyad
+    stays engaged (not STANDING_DISTANT), the follower seats a grip on the
+    leader's committed arm, and the choice is logged in the cascade log."""
+    random.seed(0)
+    t, s = _pair()
+    m = Match(fighter_a=t, fighter_b=s, referee=build_suzuki(),
+              max_ticks=20, seed=0)
+    captured: list = []
+    def _capture(events):
+        captured.extend(events)
+        return None
+    m._print_events = _capture
+    m.begin()
+    while m._grip_cascade is None and m.ticks_run < 15:
+        m.step()
+    assert m._grip_cascade is not None
+    leader_name = m._grip_cascade["leader_name"]
+    follower_name = m._grip_cascade["follower_name"]
+    leader = (t if t.identity.name == leader_name else s)
+    # Leader seated their lead grip at staging — record it.
+    leader_edges_pre = len(m.grip_graph.edges_owned_by(leader_name))
+    assert leader_edges_pre >= 1, "leader should hold a lead grip pre-cascade"
+
+    from grip_initiative import GripResponseChoice
+    forced = GripResponseChoice(
+        kind=RESP_ACCEPT_BAIT,
+        weights={k: 1.0 for k in ALL_RESPONSE_KINDS},
+        rolled=0.0,
+    )
+    import match as match_module
+    real = match_module.select_response
+    match_module.select_response = lambda *a, **kw: forced
+    try:
+        while m._grip_cascade is not None and m.ticks_run < 20:
+            m.step()
+    finally:
+        match_module.select_response = real
+
+    # The dyad stayed engaged (ACCEPT_BAIT is not a disengage).
+    assert m.position != Position.STANDING_DISTANT
+    # The leader's grip survived — accept-bait does NOT strip.
+    leader_edges_post = len(m.grip_graph.edges_owned_by(leader_name))
+    assert leader_edges_post >= leader_edges_pre, (
+        "ACCEPT_BAIT must not strip the leader's grip"
+    )
+    # The follower seated a grip on the leader (off the committed arm).
+    follower_on_leader = [
+        e for e in m.grip_graph.edges_owned_by(follower_name)
+        if e.target_id == leader_name
+    ]
+    assert follower_on_leader, "follower should grip the leader's committed arm"
+    # The choice is logged in the cascade log, like the other branches.
+    bait_logs = [
+        entry for entry in m._grip_cascade_log
+        if entry["kind"] == RESP_ACCEPT_BAIT
+    ]
+    assert bait_logs, "ACCEPT_BAIT should be recorded in the cascade log"
+    # And surfaced as a GRIP_CASCADE_RESPONSE event.
+    bait_events = [
+        e for e in captured
+        if e.event_type == "GRIP_CASCADE_RESPONSE"
+        and e.data.get("kind") == RESP_ACCEPT_BAIT
+    ]
+    assert bait_events, "ACCEPT_BAIT should emit a cascade-response event"
 
 
 # ===========================================================================
