@@ -158,6 +158,18 @@ _NARRATION_WINDOW_SIZE: int = 8
 # is still fresh.
 _DEFERRED_PULL_K_TICKS: int = 3
 
+# HAJ-229 — engine events that invalidate a deferred pull-without-commit
+# line if they land anywhere in the deferral window. A pre-throw PULL must
+# not surface "tugs at the sleeve — rides it out" K ticks later when, in the
+# gap, a throw resolved, someone scored, or the dyad reset / dropped to
+# ne-waza — by then the puller may be the just-thrown fighter. The COMMIT-BPE
+# check upstream only catches the *puller's own* throw; these dyad-global
+# state changes (opponent scoring, matte, ne-waza) need their own gate.
+_DEFERRED_PULL_INVALIDATING_EVENTS: frozenset[str] = frozenset({
+    "THROW_LANDING", "SCORE_AWARDED", "IPPON_AWARDED",
+    "NEWAZA_TRANSITION", "MATTE",
+})
+
 
 # Always-promote engine events — their bare description is already
 # coach-voice prose, so the clock log echoes them rather than re-authoring.
@@ -735,6 +747,34 @@ class MatSideNarrator:
         # Followup window: ticks AFTER the trigger up to and including
         # the current tick.
         followup_frames = self._window[trigger_idx + 1:]
+        # HAJ-229 — gate the whole rule when the deferral window straddles
+        # a throw resolution, score, matte, or ne-waza drop. The PULL was
+        # pre-throw; surfacing "tugs at the sleeve" now would attribute it
+        # to the just-thrown fighter (triage cluster 3.2, t011). These are
+        # dyad-global state changes, so one such event anywhere in the
+        # window (trigger tick through current) suppresses the line for
+        # every actor — the pre-throw grip context is stale.
+        for wf in self._window[trigger_idx:]:
+            if any(
+                ev.event_type in _DEFERRED_PULL_INVALIDATING_EVENTS
+                for ev in wf.events
+            ):
+                return []
+        # Backstop for transitions whose bridging event wasn't promoted
+        # into a frame: the dyad slid into ne-waza, or reset to standing-
+        # distant, between the trigger tick and now.
+        from enums import Position, SubLoopState
+        cur_snap = self._window[-1].snapshot
+        if (
+            cur_snap.sub_loop_state == SubLoopState.NE_WAZA
+            and trigger.snapshot.sub_loop_state != SubLoopState.NE_WAZA
+        ):
+            return []
+        if (
+            cur_snap.position == Position.STANDING_DISTANT
+            and trigger.snapshot.position != Position.STANDING_DISTANT
+        ):
+            return []
         in_progress = trigger.snapshot.in_progress_attackers
         out: list[MatchClockEntry] = []
         seen_actors: set[str] = set()

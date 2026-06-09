@@ -303,6 +303,60 @@ def test_deferred_pull_dedupe_does_not_fire_twice_for_same_pull() -> None:
 
 
 # ===========================================================================
+# HAJ-229 — suppress the deferred line when a throw resolves / scores in the
+# gap. A pre-throw PULL must not surface "tugs at the sleeve — rides it out"
+# attributed to the just-thrown fighter (triage cluster 3.2, t011).
+# ===========================================================================
+def test_deferred_pull_suppressed_when_throw_scores_in_window() -> None:
+    """A SCORE_AWARDED (or THROW_LANDING) in the deferral window gates
+    the rule off entirely — even though the PULL had no COMMIT BPE of
+    its own, the pre-throw grip context is stale once a throw resolves."""
+    t, s, m = _new_match()
+    edge = _seat_lapel(m.grip_graph, t, s)
+    narrator = MatSideNarrator()
+    _prime(narrator, m)
+    pull_bpes = decompose_pull(
+        t, edge, direction=(1.0, 0.0), magnitude=0.3, tick=10,
+    )
+    narrator.consume_tick(10, [], pull_bpes, m)
+    # Tick 12: the opponent's throw lands and scores during the gap.
+    score_ev = Event(
+        tick=12, event_type="SCORE_AWARDED",
+        description="[score] Sato scores waza-ari on Tanaka",
+    )
+    narrator.consume_tick(12, [score_ev], [], m)
+    # Walk the rest of the window — the deferred line must never fire.
+    entries = []
+    for n in range(13, 18):
+        entries.extend(narrator.consume_tick(n, [], [], m))
+    assert not [e for e in entries if e.source == "pull_no_commit"], (
+        "pre-throw pull surfaced 'tugs at the sleeve' after a throw scored"
+    )
+
+
+def test_deferred_pull_suppressed_when_dyad_drops_to_ne_waza() -> None:
+    """The dyad sliding into ne-waza inside the gap gates the rule even
+    when no invalidating event was promoted into a frame — the snapshot
+    backstop reads the sub-loop-state transition."""
+    t, s, m = _new_match()
+    edge = _seat_lapel(m.grip_graph, t, s)
+    narrator = MatSideNarrator()
+    _prime(narrator, m)
+    pull_bpes = decompose_pull(
+        t, edge, direction=(1.0, 0.0), magnitude=0.3, tick=10,
+    )
+    narrator.consume_tick(10, [], pull_bpes, m)
+    # The match drops to ne-waza partway through the gap (no event passed).
+    m.sub_loop_state = SubLoopState.NE_WAZA
+    entries = []
+    for n in range(11, 16):
+        entries.extend(narrator.consume_tick(n, [], [], m))
+    assert not [e for e in entries if e.source == "pull_no_commit"], (
+        "pre-throw pull surfaced after the dyad dropped to ne-waza"
+    )
+
+
+# ===========================================================================
 # Migrated rules (posture / region) read window[-2], not narrator state
 # ===========================================================================
 def test_posture_rule_reads_previous_frame_snapshot() -> None:
