@@ -88,6 +88,10 @@ from grip_initiative import (
 from chase_decision import (
     ChaseDecision, ChaseDecisionResult, make_chase_decision,
 )
+from ground_continuation import (
+    GroundContinuation, GroundContinuationResult,
+    make_ground_continuation_decision,
+)
 from defense_decision import (
     DefenseDecision, DefenseDecisionResult, make_defense_decision,
 )
@@ -4497,17 +4501,28 @@ class Match:
             defender = self._fighter_by_name(c.payload["defender_name"])
             if attacker is None or defender is None:
                 return
-            # HAJ-155 — sacrifice-throw failures force tori on the
-            # bottom (the throw committed them to the ground; the
-            # probabilistic ne_waza_start_position roll doesn't
-            # apply). Other paths keep the legacy random scramble.
-            sacrifice = c.payload.get("throw_class") == "SACRIFICE"
+            # HAJ-155 / HAJ-236 — sacrifice-throw failures and stuffed
+            # standing throws that spilled to the floor both seat the
+            # stuffed aggressor on the bottom (the probabilistic
+            # ne_waza_start_position roll doesn't apply). The enqueuing
+            # site sets `aggressor_on_bottom` explicitly; fall back to the
+            # throw-class check for any legacy payload that omitted it.
+            aggressor_on_bottom = c.payload.get(
+                "aggressor_on_bottom",
+                c.payload.get("throw_class") == "SACRIFICE",
+            )
+            source = c.payload.get("source")
             ne_events = self._resolve_newaza_transition(
                 attacker, defender, tick,
-                aggressor_on_bottom=sacrifice,
+                aggressor_on_bottom=aggressor_on_bottom,
             )
             for ev in ne_events:
                 ev.data.setdefault("from_consequence_queue", True)
+                # Tag the entry path so altitude readers can group
+                # standing-scramble entries (HAJ-236) apart from the
+                # sacrifice door (HAJ-155) and the post-score chase.
+                if ev.event_type == "NEWAZA_TRANSITION" and source:
+                    ev.data["source"] = source
             events.extend(ne_events)
         elif c.kind == "POST_SCORE_DECISION":
             decision_events = self._fire_post_score_decision(c, tick)
@@ -5420,10 +5435,32 @@ class Match:
                 from throws import is_sacrifice_throw
                 is_sacrifice = is_sacrifice_throw(throw_id)
                 self._stuffed_throw_tick = tick
+                # HAJ-236 — a stuffed STANDING throw no longer always
+                # resets. Roll the ground-continuation decision: reaping
+                # throws and ground-hungry fighters sometimes tangle to
+                # the floor (stuffed aggressor underneath, defender on
+                # top) instead of resetting. Sacrifice throws skip the
+                # roll — they always open the door (HAJ-155 geometry).
+                continue_to_ground = False
+                gc_result = None
+                if not is_sacrifice:
+                    gc_result = self._roll_ground_continuation(
+                        attacker, defender, throw_id, tick,
+                    )
+                    continue_to_ground = (
+                        gc_result.decision
+                        == GroundContinuation.CONTINUE_TO_GROUND
+                    )
                 if is_sacrifice:
                     stuff_desc = (
                         f"[throw] {a_name} stuffed on {throw_name} — "
                         f"{d_name} defends. Ne-waza window open."
+                    )
+                elif continue_to_ground:
+                    stuff_desc = (
+                        f"[throw] {a_name} stuffed on {throw_name} — "
+                        f"{d_name} defends, but they tangle to the mat. "
+                        f"Ne-waza scramble."
                     )
                 else:
                     stuff_desc = (
@@ -5438,6 +5475,29 @@ class Match:
                         "SACRIFICE" if is_sacrifice else "STANDING"
                     )},
                 ))
+                # HAJ-236 — surface the ground-continuation roll on the
+                # engineering stream (prose-silent) so the debug overlay
+                # and tests can see why a stuffed standing throw did or
+                # did not spill to the ground. Mirrors CHASE_DECISION.
+                if gc_result is not None:
+                    events.append(Event(
+                        tick=tick,
+                        event_type="GROUND_CONTINUATION",
+                        description=(
+                            f"[ground_continuation] {a_name} stuffed → "
+                            f"{gc_result.decision.name} "
+                            f"(p={gc_result.probability:.2f})"
+                        ),
+                        data={
+                            "attacker":    a_name,
+                            "defender":    d_name,
+                            "throw_id":    throw_id.name,
+                            "decision":    gc_result.decision.name,
+                            "probability": gc_result.probability,
+                            "factors":     dict(gc_result.factors),
+                            "prose_silent": True,
+                        },
+                    ))
                 # Composure hit on attacker for being stuffed
                 attacker.state.composure_current = max(
                     0.0,
@@ -5468,14 +5528,17 @@ class Match:
                 # shared between the two stuffs, so a single transition
                 # covers both.
                 #
-                # HAJ-155 — gate the door on throw class. Sacrifice throws
-                # commit tori to the ground; standing back up isn't
-                # available, so the natural continuation is ne-waza.
-                # Standing throws reset to standing instead — the door
-                # is not enqueued. The HAJ-158 grip-init recompute below
-                # still fires either way (post-stuff is still a fresh
-                # grip-fight beat).
-                if is_sacrifice:
+                # HAJ-155 / HAJ-236 — gate the door on throw class plus the
+                # ground-continuation roll. Sacrifice throws commit tori to
+                # the ground and always open the door (standing back up
+                # isn't available). Standing throws open it only when the
+                # HAJ-236 roll says the scramble spilled to the floor;
+                # otherwise they reset to standing. Both routings seat the
+                # stuffed aggressor on the bottom (defender on top) — the
+                # aggressor over-committed and ends up underneath either
+                # way. The HAJ-158 grip-init recompute below still fires
+                # regardless (post-stuff is a fresh grip-fight beat).
+                if is_sacrifice or continue_to_ground:
                     already_queued = any(
                         c.kind == "NEWAZA_TRANSITION_AFTER_STUFF"
                         and c.due_tick == tick + 1
@@ -5488,7 +5551,20 @@ class Match:
                             payload={
                                 "attacker_name": attacker.identity.name,
                                 "defender_name": defender.identity.name,
-                                "throw_class": "SACRIFICE",
+                                "throw_class": (
+                                    "SACRIFICE" if is_sacrifice
+                                    else "STANDING"
+                                ),
+                                # Both paths put the stuffed aggressor on
+                                # the bottom. The handler reads this flag
+                                # directly so the standing-scramble path
+                                # gets the same GUARD_TOP / defender-on-top
+                                # geometry as the sacrifice path.
+                                "aggressor_on_bottom": True,
+                                "source": (
+                                    "SACRIFICE_STUFF" if is_sacrifice
+                                    else "STANDING_SCRAMBLE"
+                                ),
                             },
                         ))
 
@@ -5766,6 +5842,38 @@ class Match:
             ),
             data=failed_data,
         )]
+
+    # -----------------------------------------------------------------------
+    # HAJ-236 — STUFFED-STANDING-THROW GROUND-CONTINUATION ROLL
+    # -----------------------------------------------------------------------
+    def _roll_ground_continuation(
+        self, attacker: Judoka, defender: Judoka, throw_id: ThrowID,
+        tick: int,
+    ) -> GroundContinuationResult:
+        """Decide whether a stuffed STANDING throw spills into ne-waza
+        instead of resetting to standing (HAJ-236).
+
+        The throw's `post_score_chase_advantage` doubles as the scramble-
+        tendency signal — reaping / leg throws tangle to the floor, clean
+        hip throws bounce off. The RNG is seeded off the match seed, the
+        stuffed aggressor, and the tick so the roll is reproducible and a
+        re-run of the same seed lands the same way. Exposed as a method so
+        tests can force the branch (mirrors how the ne-waza resolver's
+        `attempt_ground_commit` is patched in the HAJ-155 suite).
+        """
+        td = THROW_DEFS.get(throw_id)
+        chase_advantage = (
+            td.post_score_chase_advantage if td is not None else 0.5
+        )
+        gc_rng = random.Random(
+            f"haj236:ground:{attacker.identity.name}:{self.seed}:{tick}"
+        )
+        return make_ground_continuation_decision(
+            attacker, defender,
+            throw_id=throw_id,
+            chase_advantage=chase_advantage,
+            rng=gc_rng,
+        )
 
     # -----------------------------------------------------------------------
     # NE-WAZA TRANSITION (after stuffed throw)

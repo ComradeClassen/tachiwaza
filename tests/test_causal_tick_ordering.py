@@ -333,11 +333,16 @@ def test_match_length_neutral() -> None:
     # boundary and enters golden score, which by design runs past the tick
     # budget; re-pinned to a seed that still resolves inside the 60-tick
     # window so the budget-neutrality assertion stays meaningful.
-    random.seed(6)
+    # HAJ-236 — the stuffed-standing-throw ground-continuation path adds
+    # ne-waza segments on some seeds, again shifting trajectories: seed 6
+    # now ties into golden score. Re-pinned to seed 11, which resolves
+    # inside the 60-tick window. The guard is budget-neutrality
+    # (max_ticks stays 60), not that every seed ends early.
+    random.seed(11)
     t, s = _pair()
     m = Match(
         fighter_a=t, fighter_b=s, referee=build_suzuki(),
-        max_ticks=60, seed=6, stream="debug",
+        max_ticks=60, seed=11, stream="debug",
     )
     with contextlib.redirect_stdout(io.StringIO()):
         m.run()

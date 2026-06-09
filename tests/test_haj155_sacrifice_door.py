@@ -39,9 +39,29 @@ from throws import (
     THROW_DEFS, ThrowClass, ThrowID,
     is_sacrifice_throw, throw_class_for,
 )
+from ground_continuation import (
+    GroundContinuation, GroundContinuationResult,
+)
 import main as main_module
 import match as match_module
 from body_state import place_judoka
+
+
+# ---------------------------------------------------------------------------
+# HAJ-236 — standing-stuff ground continuation is now probabilistic. HAJ-155
+# guaranteed a standing stuff resets; HAJ-236 makes that the *default* but
+# lets reaping throws / ground-hungry fighters spill to the floor. The
+# HAJ-155 regression tests below pin the RESET branch deterministically by
+# forcing the roll, so they keep testing "a standing stuff can cleanly
+# reset" independent of HAJ-236 tuning. The continuation branch has its own
+# coverage in test_haj236_standing_ground_entry.py.
+# ---------------------------------------------------------------------------
+def _force_ground_reset(m) -> None:
+    m._roll_ground_continuation = lambda *a, **k: GroundContinuationResult(
+        decision=GroundContinuation.RESET_TO_STANDING,
+        probability=0.0,
+        factors={},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +166,7 @@ def test_o_uchi_gari_stuff_does_not_open_ne_waza_door() -> None:
     """The HAJ-144 t007 anchor: a stuffed standing throw must NOT
     enqueue a NEWAZA_TRANSITION_AFTER_STUFF consequence."""
     t, s, m = _elite_match(seed=7)
+    _force_ground_reset(m)
     events = _drive_outcome(m, t, s, ThrowID.O_UCHI_GARI, "STUFFED")
     door_consequences = [
         c for c in m._consequence_queue
@@ -161,6 +182,7 @@ def test_o_uchi_gari_stuff_does_not_open_ne_waza_door() -> None:
 
 def test_uchi_mata_stuff_does_not_open_ne_waza_door() -> None:
     t, s, m = _elite_match(seed=11)
+    _force_ground_reset(m)
     _drive_outcome(m, t, s, ThrowID.UCHI_MATA, "STUFFED")
     assert not [c for c in m._consequence_queue
                 if c.kind == "NEWAZA_TRANSITION_AFTER_STUFF"]
@@ -170,6 +192,7 @@ def test_standing_stuff_event_describes_standing_reset() -> None:
     """The STUFFED event prose for a standing throw cites 'resetting
     to standing' — outcome-bound, honest about the routing."""
     t, s, m = _elite_match(seed=3)
+    _force_ground_reset(m)
     events = _drive_outcome(m, t, s, ThrowID.UCHI_MATA, "STUFFED")
     stuffs = [e for e in events if e.event_type == "STUFFED"]
     assert stuffs
@@ -182,6 +205,7 @@ def test_standing_stuff_keeps_match_in_standing_phase() -> None:
     """After a standing-throw stuff resolves, sub_loop_state should
     NOT be NE_WAZA — the dyad is still on its feet."""
     t, s, m = _elite_match(seed=1)
+    _force_ground_reset(m)
     _drive_outcome(m, t, s, ThrowID.UCHI_MATA, "STUFFED")
     assert m.sub_loop_state != SubLoopState.NE_WAZA
 
@@ -269,6 +293,7 @@ def test_standing_stuff_does_not_assign_ne_waza_top() -> None:
     """Standing stuff resets to standing; ne_waza_top_id stays None
     (no ne-waza routing happened)."""
     t, s, m = _elite_match(seed=9)
+    _force_ground_reset(m)
     _drive_outcome(m, t, s, ThrowID.UCHI_MATA, "STUFFED")
     assert m.ne_waza_top_id is None
 
@@ -280,6 +305,7 @@ def test_haj144_t007_reproduction_no_ne_waza_door() -> None:
     """Re-run the t007 anchor (stuffed O-uchi-gari): no ne-waza door
     fires; both fighters reset to standing."""
     t, s, m = _elite_match(seed=7)
+    _force_ground_reset(m)
     events = _drive_outcome(m, t, s, ThrowID.O_UCHI_GARI, "STUFFED")
     # No ne-waza door event fires (queued or resolved).
     assert not [e for e in events if e.event_type == "NEWAZA_TRANSITION"]
