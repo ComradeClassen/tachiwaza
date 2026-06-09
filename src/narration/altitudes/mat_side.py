@@ -1192,23 +1192,60 @@ class MatSideNarrator:
 
     def _modifier_reveal_prose(self, b: BodyPartEvent) -> str:
         m = b.modifiers
+        # HAJ-233 — these reads are the player's only window into commit
+        # quality, so each names the body action *and* its consequence on
+        # uke rather than a bare adjective ("crisp and explosive" told the
+        # player nothing). Register target: the aborted-line voice — what
+        # the commit did, and what it costs. Each branch carries a small
+        # variant pool so a commit repeated across one match doesn't read
+        # identically (the t015/t328 bloat note); the pick is seeded on
+        # (actor, tick) so replays stay deterministic.
+        variants: list[str]
         if m.crispness is Crispness.CRISP and m.speed is Speed.EXPLOSIVE:
-            return f"{b.actor}'s commit lands crisp and explosive."
-        if m.crispness is Crispness.CRISP:
-            return f"{b.actor}'s commit reads clean and on-time."
-        if m.crispness is Crispness.SLOPPY:
-            return f"{b.actor}'s commit comes apart at the seams."
-        if m.tightness is Tightness.FLARING:
-            return f"{b.actor}'s elbow flares — power leaks out the side."
-        if m.timing is Timing.LATE:
-            return f"{b.actor} commits late — uke has already moved."
-        if m.timing is Timing.EARLY:
-            return f"{b.actor} commits early — the kuzushi hasn't stacked."
-        if m.commitment is Commitment.OVERCOMMITTED:
-            return f"{b.actor} throws himself at it — no recovery if it misses."
-        if m.speed is Speed.SLOW:
-            return f"{b.actor}'s commit is slow and telegraphed."
-        return prose_for_event(b)
+            variants = [
+                f"{b.actor}'s commit fires off the line before uke can read it.",
+                f"{b.actor} explodes into the entry — uke gets no warning beat.",
+                f"{b.actor}'s commit snaps in fast and clean, inside uke's reaction.",
+            ]
+        elif m.crispness is Crispness.CRISP:
+            variants = [
+                f"{b.actor}'s commit snaps in on time — the entry is set before uke can square up.",
+                f"{b.actor} times the commit clean, slotting in before uke resets.",
+            ]
+        elif m.crispness is Crispness.SLOPPY:
+            variants = [
+                f"{b.actor}'s commit drags in loose — uke feels it coming and braces.",
+                f"{b.actor}'s entry arrives ragged, telegraphed enough for uke to set against it.",
+            ]
+        elif m.tightness is Tightness.FLARING:
+            variants = [
+                f"{b.actor}'s elbow flares — the power leaks out the side instead of into uke.",
+                f"{b.actor}'s arm springs wide, the drive bleeding off before it reaches uke.",
+            ]
+        elif m.timing is Timing.LATE:
+            variants = [
+                f"{b.actor} commits late — uke has already moved off the line.",
+                f"{b.actor}'s entry lands a beat behind, uke's weight already gone.",
+            ]
+        elif m.timing is Timing.EARLY:
+            variants = [
+                f"{b.actor} commits early — the kuzushi hasn't stacked under uke yet.",
+                f"{b.actor} fires before uke's balance breaks — nothing to throw against.",
+            ]
+        elif m.commitment is Commitment.OVERCOMMITTED:
+            variants = [
+                f"{b.actor} throws himself at it — nothing left to recover if uke isn't there.",
+                f"{b.actor} pours everything into the entry, no base kept back if it misses.",
+            ]
+        elif m.speed is Speed.SLOW:
+            variants = [
+                f"{b.actor}'s commit is slow off the mark — uke has the beat to answer it.",
+                f"{b.actor} loads the entry heavy and late, uke reading it the whole way.",
+            ]
+        else:
+            return prose_for_event(b)
+        rng = random.Random(f"haj233:modreveal:{b.actor}:{b.tick}")
+        return rng.choice(variants)
 
     def _sample_phase(
         self, tick: int, match: "Match", bpes: list[BodyPartEvent],

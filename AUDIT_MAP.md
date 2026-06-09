@@ -347,7 +347,7 @@ This construct has no design doc (confirmed: it lives only in `grip_initiative.p
 
 **(a) Inline-string layer — `src/narration/altitudes/mat_side.py`** (the working "mat-side" altitude; `MatSideNarrator` produces the match-clock log). The exact sentences you asked about are authored here as inline f-strings:
 - `"{leader} secures the first grip — {follower} reaches but finds nothing."` → [src/narration/altitudes/mat_side.py:242-248](src/narration/altitudes/mat_side.py) (templated comment at 226-227).
-- `"{actor}'s commit lands crisp and explosive."` → [src/narration/altitudes/mat_side.py:1114](src/narration/altitudes/mat_side.py), inside `_modifier_reveal_prose` ([:1111-1118](src/narration/altitudes/mat_side.py)), which branches on `BodyPartEvent` modifiers (`Crispness.CRISP` + `Speed.EXPLOSIVE`, etc.). Note HAJ-154 gated this so it only fires for `COUNTER_COMMIT` events now ([:1075-1085](src/narration/altitudes/mat_side.py)).
+- `"{actor}'s commit fires off the line before uke can read it."` → [src/narration/altitudes/mat_side.py](src/narration/altitudes/mat_side.py), inside `_modifier_reveal_prose`, which branches on `BodyPartEvent` modifiers (`Crispness.CRISP` + `Speed.EXPLOSIVE`, etc.). Note HAJ-154 gated this so it only fires for `COUNTER_COMMIT` events now; HAJ-233 rewrote the branch strings from bare adjectives ("lands crisp and explosive") to consequence-bearing reads.
 
 The sibling altitude voices (`stands.py`, `review.py`, `broadcast.py`, `bench_voice.py`) and the verb register `word_verbs.py` are also inline-string Python. So the **prose sentences themselves are authored inline in engine-adjacent Python**, driven by `BodyPartEvent` data the engine emits — a separate *module*, but not a data file.
 
