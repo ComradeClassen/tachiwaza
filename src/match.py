@@ -1247,6 +1247,20 @@ class Match:
         # cosmetic — it is the matte→hajime dead time.
         self._pending_hajime_tick: Optional[int] = None
 
+        # HAJ-237 — the match clock stops at Matte and resumes at Hajime,
+        # as in real judo. The loop tick (`ticks_run`) keeps advancing
+        # through the matte→hajime freeze so the banner/render beat still
+        # plays, but those freeze ticks are *dead time* that must not burn
+        # regulation budget. This counter accumulates every freeze tick;
+        # regulation time = ticks_run - _frozen_ticks. Display clocks and
+        # the match-end check (is_done) read regulation time, so the clock
+        # visibly holds during the pause and the fighters get the paused
+        # seconds back. (Referee clock-pressure heuristics intentionally
+        # stay on the raw contest tick — a 2-3 tick offset is immaterial to
+        # them, and threading regulation time there would shift seeded
+        # trajectories for no behavioral gain.)
+        self._frozen_ticks: int = 0
+
         # HAJ-235 — pending penalty shido. Passivity/non-combativity
         # detection runs in the tick body (_update_grip_passivity,
         # _update_passivity) but the award is deferred to _post_tick so it
@@ -1593,6 +1607,13 @@ class Match:
         shido, or the GS cap. `_resolve_golden_score_cap` ends the match (sets
         match_over) when the cap is reached, so the GS branch here is a
         backstop using the same threshold in case that check is ever skipped.
+
+        HAJ-237 — regulation ends after `max_ticks` of *live* time, not raw
+        loop ticks: the matte→hajime freeze ticks are dead time and don't
+        count, so a match with one or more matte pauses runs that many extra
+        loop ticks before time-up. This keeps the displayed clock honest —
+        it reaches 0:00 exactly at time-up — and gives fighters back the
+        seconds the clock was stopped for.
         """
         if self.match_over:
             return True
@@ -1601,7 +1622,20 @@ class Match:
                 return False
             elapsed = self.ticks_run - self.golden_score_start_tick
             return elapsed >= self.golden_score_ticks
-        return self.ticks_run >= self.max_ticks
+        return (self.ticks_run - self._frozen_ticks) >= self.max_ticks
+
+    def _clock_remaining(self, abs_tick: int) -> int:
+        """HAJ-237 — regulation ticks remaining at loop tick `abs_tick`.
+        Regulation time excludes matte→hajime freeze ticks
+        (`_frozen_ticks`), so the match clock holds during a pause and
+        resumes afterward. Single source of truth for every displayed
+        clock; rendering is live and in tick order, so the running
+        `_frozen_ticks` total is correct for the tick being rendered.
+
+        Returned signed (NOT clamped): `_format_match_clock` renders a
+        negative as golden-score overtime ('+M:SS'), so clamping here
+        would erase the GS clock."""
+        return self.max_ticks - (abs_tick - self._frozen_ticks)
 
     def _renderer_drives_loop(self) -> bool:
         """Optional capability check on the renderer protocol. Defaults
@@ -1681,10 +1715,16 @@ class Match:
         # between is a render beat (the matte banner sits on screen, coach
         # prose lands), not live wrestling time. Suppressing the whole
         # standing update here is what stops the [move]/grip work the
-        # post-223 log showed leaking into the t077-t078 gap. The clock
-        # still advances and _post_tick still renders the pause.
+        # post-223 log showed leaking into the t077-t078 gap.
+        #
+        # HAJ-237 — the match clock is stopped for this dead time. Count
+        # the freeze tick BEFORE rendering so the clock the pause renders
+        # with already reflects the hold (regulation time = ticks_run -
+        # _frozen_ticks); the displayed clock therefore sits still across
+        # the whole matte→hajime window and resumes on the hajime tick.
         if (self._pending_hajime_tick is not None
                 and tick < self._pending_hajime_tick):
+            self._frozen_ticks += 1
             self._post_tick(tick, events)
             return
 
@@ -2022,9 +2062,12 @@ class Match:
         # tied) or resolve by decision. Fires before narrator/print so
         # GOLDEN_SCORE_START / MATCH_ENDED show up in this tick's stream.
         # `golden_score` guards against re-firing every tick after entry.
+        # HAJ-237 — measured in regulation time (matte→hajime freeze ticks
+        # excluded) so the boundary lands exactly when the displayed clock
+        # reaches 0:00, not a few freeze-ticks early. Mirrors is_done.
         if (not self.match_over
                 and not self.golden_score
-                and tick >= self.regulation_ticks):
+                and (tick - self._frozen_ticks) >= self.regulation_ticks):
             self._check_regulation_end(tick, events)
 
         # HAJ-234 — golden-score cap. Sudden death normally ends on a score
@@ -6819,7 +6862,7 @@ class Match:
                 # uses on its prose column. The clock lets the reader
                 # correlate beats with match time without losing the
                 # uncluttered narrative read.
-                clock = _format_match_clock(self.max_ticks - ev.tick)
+                clock = _format_match_clock(self._clock_remaining(ev.tick))
                 if coach_prose:
                     print(f"{clock}  {_render_prose(str(coach_prose))}")
                     continue
@@ -6849,12 +6892,12 @@ class Match:
             # filters here too, so sub-event body-part narration shows up
             # on the prose side while the engineer-side label stays put.
             if coach_prose:
-                clock = _format_match_clock(self.max_ticks - ev.tick)
+                clock = _format_match_clock(self._clock_remaining(ev.tick))
                 prose_line = f"{clock}  {_render_prose(str(coach_prose))}"
             elif _is_debug_only_event(ev.event_type) or prose_silent:
                 prose_line = ""
             else:
-                clock = _format_match_clock(self.max_ticks - ev.tick)
+                clock = _format_match_clock(self._clock_remaining(ev.tick))
                 prose_line = f"{clock}  {_render_prose(ev.description)}"
             print(_render_side_by_side(debug_line, prose_line))
 
@@ -7149,8 +7192,12 @@ class Match:
         a, b = self.fighter_a, self.fighter_b
 
         # Format the match clock as M:SS for the outcome line.
+        # HAJ-237 — read regulation time (excludes matte→hajime freeze
+        # ticks) so the finish time matches the clock that was on screen.
+        # The match is over here, so the running `_frozen_ticks` total is
+        # the count as of the deciding tick.
         def clock(tick: int) -> str:
-            remaining = max(0, self.max_ticks - tick)
+            remaining = max(0, self._clock_remaining(tick))
             return f"{remaining // 60}:{remaining % 60:02d}"
 
         if self.win_method == "draw":

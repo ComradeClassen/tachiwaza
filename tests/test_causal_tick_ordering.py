@@ -325,8 +325,8 @@ def test_landing_and_score_share_a_tick_on_n_plus_three() -> None:
 # ===========================================================================
 def test_match_length_neutral() -> None:
     """A 60-tick match with the new causal-ordering rules still consumes
-    exactly 60 ticks. Bumping or shrinking the tick budget would be a
-    calibration regression."""
+    exactly 60 ticks of *regulation* time. Bumping or shrinking the tick
+    budget would be a calibration regression."""
     import contextlib, io
     # HAJ-235 — the matte→hajime freeze removes live-action ticks during the
     # pause, shifting seeded trajectories. Seed 5 now ties at the regulation
@@ -334,10 +334,15 @@ def test_match_length_neutral() -> None:
     # budget; re-pinned to a seed that still resolves inside the 60-tick
     # window so the budget-neutrality assertion stays meaningful.
     # HAJ-236 — the stuffed-standing-throw ground-continuation path adds
-    # ne-waza segments on some seeds, again shifting trajectories: seed 6
-    # now ties into golden score. Re-pinned to seed 11, which resolves
-    # inside the 60-tick window. The guard is budget-neutrality
-    # (max_ticks stays 60), not that every seed ends early.
+    # ne-waza segments on some seeds, again shifting trajectories. Re-pinned
+    # to seed 11, which resolves inside the regulation window.
+    # HAJ-237 — the match clock now STOPS during the matte→hajime freeze, so
+    # the raw loop tick (`ticks_run`) legitimately overshoots `max_ticks` by
+    # the number of freeze ticks: regulation time = ticks_run - _frozen_ticks
+    # is what the budget bounds, not raw loop ticks. Seed 11 runs 64 loop
+    # ticks with 4 frozen → exactly 60 ticks of regulation (a clean time-up,
+    # no golden score), which is precisely the budget-neutrality the test
+    # guards. The assertion now checks regulation time, the right invariant.
     random.seed(11)
     t, s = _pair()
     m = Match(
@@ -346,12 +351,12 @@ def test_match_length_neutral() -> None:
     )
     with contextlib.redirect_stdout(io.StringIO()):
         m.run()
-    # Match either ran to time-up (ticks_run == max_ticks) or ended early
-    # by ippon/two-waza-ari. In both cases ticks_run is bounded by
-    # max_ticks; the budget itself is what we're guarding.
-    assert m.ticks_run <= 60
-    # And the post-148 tick budget didn't artificially inflate via bonus
-    # ticks — m.max_ticks remains 60 throughout the run.
+    # Regulation time (raw loop ticks minus the matte→hajime freeze ticks)
+    # is bounded by the budget — the freeze gives those seconds back rather
+    # than inflating regulation. This is the invariant; raw ticks_run may
+    # legitimately exceed 60 by the freeze count.
+    assert m.ticks_run - m._frozen_ticks <= 60
+    # And the budget itself didn't inflate — m.max_ticks remains 60.
     assert m.max_ticks == 60
 
 
