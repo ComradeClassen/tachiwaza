@@ -230,7 +230,11 @@ class State:
 
     # --- MATCH POSITION ---
     position: Position   # where the judoka is in the match space
-    current_stance: Stance
+    current_stance: Stance   # the stance carried this exchange; HAJ-232 makes it live
+    # HAJ-232 — the fighter's natural handedness lead. `current_stance` starts
+    # equal to it and can shift mid-match (deliberately or under grip pressure);
+    # `base_stance` is the anchor it drifts from and does not change.
+    base_stance: Stance
 
     # --- GRIP STATE ---
     # Phase 1 was a dict. Phase 2: grip state lives on the Match's GripGraph.
@@ -241,6 +245,17 @@ class State:
     # Continuous body state — CoM, trunk angles, feet, facing. Posture
     # (above, @property) is derived from this.
     body_state: BodyState = field(default_factory=fresh_body_state)
+
+    # --- STANCE COMFORT (HAJ-232) ---
+    # Comfort vector (0–1 per axis): per-stance comfort ("orthodox" /
+    # "southpaw") plus a separate kenka-yotsu / cross-grip axis. Belt-gated at
+    # match start (see stance.initial_stance_comfort); the per-axis XP that
+    # moves it is Phase 3. Empty for stance-static (identity-less) fighters.
+    stance_comfort: dict = field(default_factory=dict)
+    # Ticks remaining in the post-switch "settling" window — the clumsy beat
+    # after a stance change. While > 0 the fighter pays a flat grip-initiative
+    # penalty and cannot switch again. Decays 1 per tick.
+    stance_settling_ticks: int = 0
 
     # --- STUN ---
     stun_ticks: int = 0   # match-level stun (composure hit, disorientation)
@@ -312,13 +327,22 @@ class State:
         for foot_key in ("left_foot", "right_foot"):
             body_parts[foot_key].contact_state = ContactState.SUPPORTING_GROUND
 
+        # HAJ-232 — base_stance is the handedness lead the fighter starts from
+        # (today: ORTHODOX for everyone; current_stance starts equal to it).
+        # The belt-gated comfort vector is seeded from identity here; without
+        # an identity the vector stays empty and the fighter is stance-static.
+        from stance import initial_stance_comfort
+        base_stance = Stance.ORTHODOX
+
         return cls(
             body=body_parts,
             cardio_current=1.0,
             composure_current=float(capability.composure_ceiling),
             last_event_emotional_weight=0.0,
             position=Position.STANDING_DISTANT,
-            current_stance=Stance.ORTHODOX,
+            current_stance=base_stance,
+            base_stance=base_stance,
+            stance_comfort=initial_stance_comfort(identity, base_stance),
             body_state=body_state,
             grip_configuration={},
             stun_ticks=0,

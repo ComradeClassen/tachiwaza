@@ -26,11 +26,12 @@ from dataclasses import dataclass, field
 from typing import Optional, Protocol, runtime_checkable
 
 from enums import (
-    BodyArchetype, DominantSide, Position, StanceMatchup,
+    BodyArchetype, DominantSide, Position, Stance, StanceMatchup,
     SubLoopState, LandingProfile, GripMode, MatteReason,
     BodyPart, GripTarget, GripTypeV2,
 )
 from judoka import Judoka
+import stance as stance_mod
 from throws import ThrowID, ThrowDef, THROW_REGISTRY, THROW_DEFS
 from grip_graph import GripGraph, GripEdge, Event
 from position_machine import PositionMachine
@@ -1676,6 +1677,9 @@ class Match:
         self._accumulate_base_fatigue(self.fighter_b)
         self._decay_stun(self.fighter_a)
         self._decay_stun(self.fighter_b)
+        # HAJ-232 — tick down the post-switch stance settling window.
+        self._decay_stance_settling(self.fighter_a)
+        self._decay_stance_settling(self.fighter_b)
 
         # HAJ-148 phase 1 — RESOLVE_CONSEQUENCES. Fire any deferred effects
         # whose due_tick has arrived (N=1 throw landings, post-stuff ne-waza
@@ -1771,6 +1775,11 @@ class Match:
         # rolling-window drop signal has data to work from, then recompute
         # each fighter's active state and emit transition events.
         self._update_defensive_desperation(tick, events)
+
+        # HAJ-232 — dynamic stance. Evaluate whether either fighter shifts
+        # stance this tick (deliberately, or rotated off by grip pressure)
+        # before action selection reads current_stance / the live matchup.
+        self._evaluate_stance_switches(tick, events)
 
         # Action selection (Part 3.3). Each judoka picks up to two actions
         # based on the priority ladder; COMMIT_THROW supersedes the cap.
@@ -2541,6 +2550,11 @@ class Match:
             familiarity_delta=b_fam - a_fam,
             rng=rng_b,
         )
+        # HAJ-232 — hybrid stance switch cost. A fighter who has just switched
+        # (settling window) or who is standing in a low-comfort stance reaches
+        # more slowly; in MIRRORED, low kenka-yotsu comfort adds to it.
+        a_init -= stance_mod.stance_initiative_penalty(self.fighter_a, matchup)
+        b_init -= stance_mod.stance_initiative_penalty(self.fighter_b, matchup)
         if a_init >= b_init:
             leader, follower = self.fighter_a, self.fighter_b
             leader_init, follower_init = a_init, b_init
@@ -2664,6 +2678,10 @@ class Match:
             familiarity_delta=b_fam - a_fam,
             rng=rng_b,
         )
+        # HAJ-232 — stance switch cost on the post-failure initiative re-roll
+        # too (a fighter still settling reaches slower here as well).
+        a_init -= stance_mod.stance_initiative_penalty(self.fighter_a, matchup)
+        b_init -= stance_mod.stance_initiative_penalty(self.fighter_b, matchup)
         if a_init >= b_init:
             leader, follower = self.fighter_a, self.fighter_b
             leader_init, follower_init = a_init, b_init
@@ -6342,6 +6360,72 @@ class Match:
             self.fighter_b.state.current_stance,
         )
 
+    def _evaluate_stance_switches(self, tick: int, events: list[Event]) -> None:
+        """HAJ-232 Phase 1 — per-tick dynamic stance.
+
+        For each fighter, decide whether they shift stance this tick: either
+        deliberately (to deny the opponent their matchup / open their own
+        kenka-yotsu game) or rotated off involuntarily by losing the grip war.
+        Each decision draws from its own seeded RNG so it never perturbs the
+        other RNG streams. A switch flips `current_stance`, opens the settling
+        window, and emits a STANCE_CHANGE event into the live stance thread.
+        """
+        matchup = self._compute_stance_matchup()
+        for fighter, opponent in (
+            (self.fighter_a, self.fighter_b),
+            (self.fighter_b, self.fighter_a),
+        ):
+            # Opponent's grip advantage over this fighter — positive means this
+            # fighter is losing the grip war (the forced-switch pressure signal).
+            grip_delta_against = self.grip_graph.compute_grip_delta(
+                opponent, fighter, matchup
+            )
+            rng = random.Random(
+                f"haj232:stance:{fighter.identity.name}:{self.seed}:{tick}"
+            )
+            decision = stance_mod.evaluate_switch(
+                fighter, opponent,
+                matchup=matchup,
+                grip_delta_against=grip_delta_against,
+                rng=rng,
+            )
+            if decision is None:
+                continue
+            self._apply_stance_switch(fighter, decision, tick, events)
+            # Recompute so the second fighter's decision reads the live matchup
+            # this tick rather than the pre-switch one.
+            matchup = self._compute_stance_matchup()
+
+    def _apply_stance_switch(
+        self, fighter: Judoka, decision, tick: int, events: list[Event],
+    ) -> None:
+        """Apply a stance switch: flip the stance, open the settling window,
+        and emit the stance-thread event (debug line + mat-side prose)."""
+        old_stance = fighter.state.current_stance
+        fighter.state.current_stance = decision.target
+        fighter.state.stance_settling_ticks = stance_mod.STANCE_SETTLING_TICKS
+        matchup_after = self._compute_stance_matchup()
+        nickname = stance_mod.matchup_nickname(matchup_after)
+        name = fighter.identity.name
+        events.append(Event(
+            tick=tick, event_type="STANCE_CHANGE",
+            description=(
+                f"[stance] {name} switches to {decision.target.name.lower()} "
+                f"({decision.reason}) — now {matchup_after.name} ({nickname})"
+            ),
+            data={
+                "fighter": name,
+                "old_stance": old_stance.name,
+                "new_stance": decision.target.name,
+                "reason": decision.reason,
+                "matchup_after": matchup_after.name,
+                "coach_prose": stance_mod.stance_change_coach_prose(
+                    name, decision.target, matchup_after, decision.reason,
+                ),
+            },
+            significance=4,
+        ))
+
     def _build_match_state(self, tick: int) -> MatchState:
         return MatchState(
             tick=tick,
@@ -6613,6 +6697,13 @@ class Match:
         # closes. Uke's per-state counter-bonus expires at the same moment.
         if judoka.state.stun_ticks == 0:
             self._compromised_states.pop(judoka.identity.name, None)
+
+    def _decay_stance_settling(self, judoka: Judoka) -> None:
+        """HAJ-232 — tick down the post-switch settling window. While it is
+        positive the fighter pays the flat grip-initiative penalty and is
+        locked out of switching again."""
+        if judoka.state.stance_settling_ticks > 0:
+            judoka.state.stance_settling_ticks -= 1
 
     def _update_grip_passivity(self, tick: int, events: list[Event]) -> None:
         """Part 2.6 passivity clocks.
@@ -6982,6 +7073,9 @@ class Match:
         # HAJ-51 — stance matchup is one of the most consequential setup
         # facts in a match (drives grip leverage and which throws fit), so
         # it gets a header line at tick 0.
+        # HAJ-232 — this is now the *opening* state of a live stance thread:
+        # the matchup can change mid-match as fighters switch stance, each
+        # shift emitting a STANCE_CHANGE event into the stream.
         a_stance = self.fighter_a.state.current_stance.name.lower()
         b_stance = self.fighter_b.state.current_stance.name.lower()
         matchup = self._compute_stance_matchup()
