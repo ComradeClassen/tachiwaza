@@ -40,6 +40,46 @@ from referee import build_suzuki, build_petrov
 DEFAULT_OUT_DIR = os.path.join(_REPO, "design-notes", "qa", "variety")
 DEFAULT_REPS = 5   # QA-pass-size principle: small batches, eyeballable
 
+# ---------------------------------------------------------------------------
+# SINGLE-AXIS PAIRING PRESETS — the eyeball-first battery.
+# Each varies exactly ONE axis with everything else held equal and asks a
+# binary, coachable question: does this axis express itself in the log at all?
+# Crossed matchups are deliberately NOT here — they come after the owner
+# confirms the single-axis contrasts read true.
+# ---------------------------------------------------------------------------
+PRESETS: dict[str, dict] = {
+    "grip": {
+        "a": "grip_monster", "b": "passive_median",
+        "question": "Does the grip fighter visibly win reach/strip/depth and "
+                    "convert grip dominance into kuzushi?",
+    },
+    "ground": {
+        "a": "ground_hunter", "b": "standing_wall",
+        "question": "Does ground work get entered at all, and does the "
+                    "specialist dominate once there? (Near-zero entry is "
+                    "itself the finding - no deliberate drag-down exists.)",
+    },
+    "height": {
+        "a": "tower", "b": "fireplug",
+        "question": "Does a 38 cm height gap show up in the grip exchange? "
+                    "(Expect modest - height is a 0.4-weight initiative term.)",
+    },
+    "iq": {
+        "a": "professor", "b": "brawler",
+        "question": "Do plans/combos/reads/reaction beat a stat-identical "
+                    "novice? Loudest wired axis - should be unmistakable.",
+    },
+    "cardio": {
+        "a": "diesel", "b": "gasser",
+        "question": "Does fatigue visibly flip the match in the second half?",
+    },
+    "kenka": {
+        "a": "kenka_hunter", "b": "aiyotsu_purist",
+        "question": "Does the kenka hunter force/thrive in MIRRORED while "
+                    "the purist avoids it and eats penalties when caught?",
+    },
+}
+
 # Coach-prose markers for the stance thread (stance.py stance_change_coach_prose).
 _STANCE_SWITCH_RE = re.compile(
     r"drops into|squares back to|steered off", re.IGNORECASE
@@ -113,6 +153,7 @@ def run_batch(
     ref_builder,
     out_dir: str,
     label: str | None = None,
+    question: str | None = None,
 ) -> list[dict]:
     """Run `reps` matches (seeds base_seed..base_seed+reps-1), one log file
     each, plus a summary.txt in the pairing directory."""
@@ -140,6 +181,10 @@ def run_batch(
     summary_lines = [
         f"Pairing: {pairing}  ({fixture_a} = blue, {fixture_b} = white)",
         f"Seeds: {base_seed}..{base_seed + reps - 1}   stream: {stream}",
+    ]
+    if question:
+        summary_lines.append(f"Question: {question}")
+    summary_lines += [
         "",
         f"{'seed':>6}  {'winner':<16} {'method':<26} {'ticks':>5} "
         f"{'ne-waza':>8} {'switches':>9}",
@@ -183,6 +228,10 @@ def main(argv: list[str] | None = None) -> int:
         description="Fight two variety-harness fixtures and write comparable "
                     "per-match logs.",
     )
+    parser.add_argument("--preset", choices=sorted(PRESETS),
+                        help="Run a named single-axis pairing. `all` via "
+                             "--preset is not offered on purpose: run and "
+                             "eyeball one axis at a time.")
     parser.add_argument("--a", dest="fixture_a", metavar="FIXTURE",
                         help="Blue-side fixture name. Available: "
                              + ", ".join(sorted(archetypes.FIXTURES)))
@@ -204,8 +253,20 @@ def main(argv: list[str] | None = None) -> int:
 
     ref_builder = build_suzuki if args.referee == "suzuki" else build_petrov
 
-    if not (args.fixture_a and args.fixture_b):
-        parser.error("--a and --b are required (fixture names).")
+    label = None
+    if args.preset:
+        if args.fixture_a or args.fixture_b:
+            parser.error("--preset and --a/--b are mutually exclusive.")
+        preset = PRESETS[args.preset]
+        args.fixture_a, args.fixture_b = preset["a"], preset["b"]
+        label = args.preset
+        print(f"\n=== Variety harness preset '{args.preset}' ===")
+        print(f"Question: {preset['question']}")
+    else:
+        if not (args.fixture_a and args.fixture_b):
+            parser.error("either --preset or both --a and --b are required.")
+        print(f"\n=== Variety harness: {args.fixture_a} vs {args.fixture_b} ===")
+
     for name in (args.fixture_a, args.fixture_b):
         if name not in archetypes.FIXTURES:
             parser.error(
@@ -217,11 +278,11 @@ def main(argv: list[str] | None = None) -> int:
         # collapse both fighters into one node.
         parser.error("--a and --b must be different fixtures.")
 
-    print(f"\n=== Variety harness: {args.fixture_a} vs {args.fixture_b} ===")
     run_batch(
         args.fixture_a, args.fixture_b,
         base_seed=args.seed, reps=args.reps, stream=args.stream,
-        ref_builder=ref_builder, out_dir=args.out,
+        ref_builder=ref_builder, out_dir=args.out, label=label,
+        question=PRESETS[args.preset]["question"] if args.preset else None,
     )
     return 0
 
