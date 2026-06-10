@@ -357,6 +357,33 @@ MATCHUPS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Variety-harness pairings (diagnostic caricature fixtures, recon 2026-06-10).
+# Appended to the menu so a flagged harness matchup can be re-watched live
+# from the interactive loop: pick the pairing, pass the log's seed via
+# --seed, and the match replays identically. Defensive load — if the fixture
+# library is absent, main.py still runs its core matchups.
+# ---------------------------------------------------------------------------
+def _register_variety_matchups() -> None:
+    try:
+        from variety_harness import PRESETS
+        import archetypes  # tests/fixtures — variety_harness puts it on sys.path
+    except Exception:
+        return
+    for preset_name in ("grip", "ground", "height", "iq", "cardio", "kenka"):
+        spec = PRESETS[preset_name]
+        a, b = spec["a"], spec["b"]
+        key = str(len(MATCHUPS) + 1)
+        MATCHUPS[key] = (
+            f"VARIETY {preset_name}: {a} vs {b}",
+            (lambda n=a: archetypes.build(n)),
+            (lambda n=b: archetypes.build(n)),
+        )
+
+
+_register_variety_matchups()
+
+
 def _print_match_header(a: Judoka, b: Judoka, ref) -> None:
     from throws import THROW_REGISTRY as TR
     a_sig = TR[a.capability.signature_throws[0]].name
