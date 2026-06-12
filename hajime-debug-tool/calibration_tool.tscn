@@ -1,0 +1,698 @@
+[gd_scene format=3 uid="uid://b8xmb1q5lor5a"]
+
+[ext_resource type="Script" uid="uid://dolospkcl43ro" path="res://calibration_tool.gd" id="1_m8f5x"]
+
+[node name="CalibrationTool" type="Control" unique_id=590071053]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_m8f5x")
+
+[node name="Root" type="VBoxContainer" parent="." unique_id=282543933]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = 362.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopRow" type="HBoxContainer" parent="Root" unique_id=178636468]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Fighter1Panel" type="VBoxContainer" parent="Root/TopRow" unique_id=1057998272]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="NameLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1139229140]
+layout_mode = 2
+text = "Name"
+
+[node name="NameField" type="LineEdit" parent="Root/TopRow/Fighter1Panel" unique_id=178550521]
+layout_mode = 2
+
+[node name="AgeLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1859972720]
+layout_mode = 2
+text = "Age"
+
+[node name="AgeField" type="SpinBox" parent="Root/TopRow/Fighter1Panel" unique_id=1442759613]
+layout_mode = 2
+min_value = 16.0
+max_value = 40.0
+value = 25.0
+
+[node name="HeightLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1001173645]
+layout_mode = 2
+text = "Height"
+
+[node name="HeightField" type="SpinBox" parent="Root/TopRow/Fighter1Panel" unique_id=1611049372]
+layout_mode = 2
+min_value = 165.0
+max_value = 195.0
+value = 175.0
+
+[node name="WeightClassLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=435760403]
+layout_mode = 2
+text = "Weight Class"
+
+[node name="WeightClassField" type="OptionButton" parent="Root/TopRow/Fighter1Panel" unique_id=1182437339]
+layout_mode = 2
+item_count = 1
+popup/item_0/text = "-90kg"
+popup/item_0/id = 0
+
+[node name="BodyArchetypeLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=625000023]
+layout_mode = 2
+text = "Body Archetype"
+
+[node name="BodyArchetypeField" type="OptionButton" parent="Root/TopRow/Fighter1Panel" unique_id=645152268]
+layout_mode = 2
+item_count = 5
+popup/item_0/text = "LEVER"
+popup/item_0/id = 0
+popup/item_1/text = "MOTOR"
+popup/item_1/id = 1
+popup/item_2/text = "GRIP_FIGHTER"
+popup/item_2/id = 2
+popup/item_3/text = "GROUND_SPECIALIST"
+popup/item_3/id = 3
+popup/item_4/text = "EXPLOSIVE"
+popup/item_4/id = 4
+
+[node name="BeltLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=751687550]
+layout_mode = 2
+text = "Belt"
+
+[node name="BeltField" type="OptionButton" parent="Root/TopRow/Fighter1Panel" unique_id=2102124383]
+layout_mode = 2
+item_count = 11
+popup/item_0/text = "WHITE"
+popup/item_0/id = 0
+popup/item_1/text = "YELLOW"
+popup/item_1/id = 1
+popup/item_2/text = "ORANGE"
+popup/item_2/id = 2
+popup/item_3/text = "GREEN"
+popup/item_3/id = 3
+popup/item_4/text = "BLUE"
+popup/item_4/id = 4
+popup/item_5/text = "BROWN"
+popup/item_5/id = 5
+popup/item_6/text = "BLACK_1"
+popup/item_6/id = 6
+popup/item_7/text = "BLACK_2"
+popup/item_7/id = 7
+popup/item_8/text = "BLACK_3"
+popup/item_8/id = 8
+popup/item_9/text = "BLACK_4"
+popup/item_9/id = 9
+popup/item_10/text = "BLACK_5"
+popup/item_10/id = 10
+
+[node name="DominantSideLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1136323116]
+layout_mode = 2
+text = "Dominant Side"
+
+[node name="DominantSideField" type="OptionButton" parent="Root/TopRow/Fighter1Panel" unique_id=585170944]
+layout_mode = 2
+item_count = 2
+popup/item_0/text = "RIGHT"
+popup/item_0/id = 0
+popup/item_1/text = "LEFT"
+popup/item_1/id = 1
+
+[node name="AggressivePatientLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1743244901]
+layout_mode = 2
+text = "Aggressive / Patient"
+
+[node name="AggressivePatientSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1932691434]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="TechnicalAthleticLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=41348578]
+layout_mode = 2
+text = "Technical / Athletic"
+
+[node name="TechnicalAthleticSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1468687817]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ConfidentAnxiousLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1196158448]
+layout_mode = 2
+text = "Confident / Anxious"
+
+[node name="ConfidentAnxiousSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=453548713]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LoyalImprovLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=376772654]
+layout_mode = 2
+text = "Loyal / Improv"
+
+[node name="LoyalImprovSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=601844825]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="HandsLeftLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=99176184]
+layout_mode = 2
+text = "Hands Left"
+
+[node name="HandsLeftSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1382654434]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="HandsRightLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1870650573]
+layout_mode = 2
+text = "Hands Right"
+
+[node name="HandsRightSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=986166383]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ForearmsLeftLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1204651662]
+layout_mode = 2
+text = "Forearms Left"
+
+[node name="ForearmsLeftSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1672451723]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ForearmsRightLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1587375753]
+layout_mode = 2
+text = "Forearms Right"
+
+[node name="ForearmsRightSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=824832128]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LegsLeftLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1042864249]
+layout_mode = 2
+text = "Legs Left"
+
+[node name="LegsLeftSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1573000306]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LegsRightLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1819544477]
+layout_mode = 2
+text = "Legs Right"
+
+[node name="LegsRightSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=270010361]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="CoreLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1048182449]
+layout_mode = 2
+text = "Core"
+
+[node name="CoreSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=2113210710]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LowerBackLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1604442116]
+layout_mode = 2
+text = "Lower Back"
+
+[node name="LowerBackSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=2004363809]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="NeckLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=129188604]
+layout_mode = 2
+text = "Neck"
+
+[node name="NeckSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1626589527]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="CardioCapacityLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=571676704]
+layout_mode = 2
+text = "Cardio Capacity"
+
+[node name="CardioCapacitySlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=892743489]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="Cardio EfficiencyLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=235927829]
+layout_mode = 2
+text = "Cardio Efficiency"
+
+[node name="CardioEfficiencySlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1167744626]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="FightIQLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=477683636]
+layout_mode = 2
+text = "Fight IQ"
+
+[node name="FightIQSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1735770300]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ComposureCeilingLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1499464742]
+layout_mode = 2
+text = "Composure Ceiling"
+
+[node name="ComposureCeilingSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=1469435175]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="NeWazaSkillLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1290251455]
+layout_mode = 2
+text = "Ne-Waza Skill"
+
+[node name="NeWazaSkillSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=842748487]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="OtherBodyPartsGlobalLabel" type="Label" parent="Root/TopRow/Fighter1Panel" unique_id=1120401489]
+layout_mode = 2
+text = "Other Body Parts Global"
+
+[node name="OtherBodyPartsGlobalSlider" type="HSlider" parent="Root/TopRow/Fighter1Panel" unique_id=729616608]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="Fighter2Panel" type="VBoxContainer" parent="Root/TopRow" unique_id=151518418]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="NameLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=268641142]
+layout_mode = 2
+text = "Name"
+
+[node name="NameField" type="LineEdit" parent="Root/TopRow/Fighter2Panel" unique_id=385131198]
+layout_mode = 2
+
+[node name="AgeLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1790068105]
+layout_mode = 2
+text = "Age"
+
+[node name="AgeField" type="SpinBox" parent="Root/TopRow/Fighter2Panel" unique_id=1098274667]
+layout_mode = 2
+min_value = 16.0
+max_value = 40.0
+value = 25.0
+
+[node name="HeightLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1354326421]
+layout_mode = 2
+text = "Height"
+
+[node name="HeightField" type="SpinBox" parent="Root/TopRow/Fighter2Panel" unique_id=338466034]
+layout_mode = 2
+min_value = 165.0
+max_value = 195.0
+value = 175.0
+
+[node name="WeightClassLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1546471643]
+layout_mode = 2
+text = "Weight Class"
+
+[node name="WeightClassField" type="OptionButton" parent="Root/TopRow/Fighter2Panel" unique_id=1973560084]
+layout_mode = 2
+item_count = 1
+popup/item_0/text = "-90kg"
+popup/item_0/id = 0
+
+[node name="BodyArchetypeLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=985698946]
+layout_mode = 2
+text = "Body Archetype"
+
+[node name="BodyArchetypeField" type="OptionButton" parent="Root/TopRow/Fighter2Panel" unique_id=88014948]
+layout_mode = 2
+item_count = 5
+popup/item_0/text = "LEVER"
+popup/item_0/id = 0
+popup/item_1/text = "MOTOR"
+popup/item_1/id = 1
+popup/item_2/text = "GRIP_FIGHTER"
+popup/item_2/id = 2
+popup/item_3/text = "GROUND_SPECIALIST"
+popup/item_3/id = 3
+popup/item_4/text = "EXPLOSIVE"
+popup/item_4/id = 4
+
+[node name="BeltLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1325646461]
+layout_mode = 2
+text = "Belt"
+
+[node name="BeltField" type="OptionButton" parent="Root/TopRow/Fighter2Panel" unique_id=345651319]
+layout_mode = 2
+item_count = 11
+popup/item_0/text = "WHITE"
+popup/item_0/id = 0
+popup/item_1/text = "YELLOW"
+popup/item_1/id = 1
+popup/item_2/text = "ORANGE"
+popup/item_2/id = 2
+popup/item_3/text = "GREEN"
+popup/item_3/id = 3
+popup/item_4/text = "BLUE"
+popup/item_4/id = 4
+popup/item_5/text = "BROWN"
+popup/item_5/id = 5
+popup/item_6/text = "BLACK_1"
+popup/item_6/id = 6
+popup/item_7/text = "BLACK_2"
+popup/item_7/id = 7
+popup/item_8/text = "BLACK_3"
+popup/item_8/id = 8
+popup/item_9/text = "BLACK_4"
+popup/item_9/id = 9
+popup/item_10/text = "BLACK_5"
+popup/item_10/id = 10
+
+[node name="DominantSideLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1863412853]
+layout_mode = 2
+text = "Dominant Side"
+
+[node name="DominantSideField" type="OptionButton" parent="Root/TopRow/Fighter2Panel" unique_id=1399892234]
+layout_mode = 2
+item_count = 2
+popup/item_0/text = "RIGHT"
+popup/item_0/id = 0
+popup/item_1/text = "LEFT"
+popup/item_1/id = 1
+
+[node name="AggressivePatientLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=832197217]
+layout_mode = 2
+text = "Aggressive / Patient"
+
+[node name="AggressivePatientSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=688173151]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="TechnicalAthleticLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=521077280]
+layout_mode = 2
+text = "Technical / Athletic"
+
+[node name="TechnicalAthleticSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1236115495]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ConfidentAnxiousLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=23981909]
+layout_mode = 2
+text = "Confident / Anxious"
+
+[node name="ConfidentAnxiousSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=429385509]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LoyalImprovLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1046708740]
+layout_mode = 2
+text = "Loyal / Improv"
+
+[node name="LoyalImprovSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1587890901]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="HandsLeftLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=22039035]
+layout_mode = 2
+text = "Hands Left"
+
+[node name="HandsLeftSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1948453446]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="HandsRightLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1996404045]
+layout_mode = 2
+text = "Hands Right"
+
+[node name="HandsRightSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=956699375]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ForearmsLeftLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1262299977]
+layout_mode = 2
+text = "Forearms Left"
+
+[node name="ForearmsLeftSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=846201884]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ForearmsRightLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=975368916]
+layout_mode = 2
+text = "Forearms Right"
+
+[node name="ForearmsRightSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1837108734]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LegsLeftLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1496783369]
+layout_mode = 2
+text = "Legs Left"
+
+[node name="LegsLeftSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1593984120]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LegsRightLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1930726515]
+layout_mode = 2
+text = "Legs Right"
+
+[node name="LegsRightSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1043112843]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="CoreLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=249181777]
+layout_mode = 2
+text = "Core"
+
+[node name="CoreSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=991381233]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="LowerBackLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=265717288]
+layout_mode = 2
+text = "Lower Back"
+
+[node name="LowerBackSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1141210379]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="NeckLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=139896481]
+layout_mode = 2
+text = "Neck"
+
+[node name="NeckSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=88771657]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="CardioCapacityLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=561166558]
+layout_mode = 2
+text = "Cardio Capacity"
+
+[node name="CardioCapacitySlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1406476032]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="CardioEfficiencyLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1959308490]
+layout_mode = 2
+text = "Cardio Efficiency"
+
+[node name="CardioEfficiencySlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=726895264]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="FightIQLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=2077478817]
+layout_mode = 2
+text = "Fight IQ"
+
+[node name="FightIQSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1492071976]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="ComposureCeilingLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=748086084]
+layout_mode = 2
+text = "Composure Ceiling"
+
+[node name="ComposureCeilingSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=403064768]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="NeWazaSkillLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=1361590114]
+layout_mode = 2
+text = "Ne-Waza Skill"
+
+[node name="NeWazaSkillSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=945016449]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="OtherBodyPartsGlobalLabel" type="Label" parent="Root/TopRow/Fighter2Panel" unique_id=911309259]
+layout_mode = 2
+text = "Other Body Parts Global"
+
+[node name="OtherBodyPartsGlobalSlider" type="HSlider" parent="Root/TopRow/Fighter2Panel" unique_id=1481229091]
+layout_mode = 2
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="MatchPanel" type="VBoxContainer" parent="Root/TopRow" unique_id=1542806790]
+layout_mode = 2
+
+[node name="StartingPositionLabel" type="Label" parent="Root/TopRow/MatchPanel" unique_id=1125618985]
+layout_mode = 2
+text = "Starting Position"
+
+[node name="StartingPositionField" type="OptionButton" parent="Root/TopRow/MatchPanel" unique_id=1598573610]
+layout_mode = 2
+item_count = 5
+popup/item_0/text = "STANDING_NEUTRAL"
+popup/item_0/id = 0
+popup/item_1/text = "STANDING_GRIPPED"
+popup/item_1/id = 1
+popup/item_2/text = "GROUND_NEUTRAL"
+popup/item_2/id = 2
+popup/item_3/text = "GROUND_TOP_FIGHTER1"
+popup/item_3/id = 3
+popup/item_4/text = "GROUND_TOP_FIGHTER2"
+popup/item_4/id = 4
+
+[node name="TimeOnClockLabel" type="Label" parent="Root/TopRow/MatchPanel" unique_id=654480001]
+layout_mode = 2
+text = "Time On Clock"
+
+[node name="TimeOnClockField" type="SpinBox" parent="Root/TopRow/MatchPanel" unique_id=620603948]
+layout_mode = 2
+max_value = 300.0
+value = 240.0
+
+[node name="ForcedThrowLabel" type="Label" parent="Root/TopRow/MatchPanel" unique_id=1626805249]
+layout_mode = 2
+text = "Forced Throw"
+
+[node name="ForcedThrowField" type="OptionButton" parent="Root/TopRow/MatchPanel" unique_id=1931702166]
+layout_mode = 2
+item_count = 5
+popup/item_0/text = "NONE"
+popup/item_0/id = 0
+popup/item_1/text = "SEOI_NAGE"
+popup/item_1/id = 1
+popup/item_2/text = "O_SOTO_GARI"
+popup/item_2/id = 2
+popup/item_3/text = "UCHI_MATA"
+popup/item_3/id = 3
+popup/item_4/text = "TAI_OTOSHI"
+popup/item_4/id = 4
+
+[node name="RefPersonalityLabel" type="Label" parent="Root/TopRow/MatchPanel" unique_id=733962549]
+layout_mode = 2
+text = "Ref Personality"
+
+[node name="RefPersonalityField" type="OptionButton" parent="Root/TopRow/MatchPanel" unique_id=1912789475]
+layout_mode = 2
+item_count = 3
+popup/item_0/text = "GENEROUS"
+popup/item_0/id = 0
+popup/item_1/text = "STRICT"
+popup/item_1/id = 1
+popup/item_2/text = "NEUTRAL"
+popup/item_2/id = 2
+
+[node name="ButtonRow" type="HBoxContainer" parent="Root" unique_id=2137586838]
+layout_mode = 2
+
+[node name="PresetSelector" type="OptionButton" parent="Root/ButtonRow" unique_id=1807967420]
+layout_mode = 2
+
+[node name="RunMatchButton" type="Button" parent="Root/ButtonRow" unique_id=196452185]
+layout_mode = 2
+text = "Run Match"
+
+[node name="SaveButton" type="Button" parent="Root/ButtonRow" unique_id=207615512]
+layout_mode = 2
+text = "Save Config"
+
+[node name="LoadButton" type="Button" parent="Root/ButtonRow" unique_id=861558893]
+layout_mode = 2
+text = "Load Config"
+
+[node name="LogOutput" type="RichTextLabel" parent="Root" unique_id=1726166619]
+layout_mode = 2
+size_flags_vertical = 3
+scroll_following = true
+scroll_following_visible_characters = true
+
+[connection signal="item_selected" from="Root/ButtonRow/PresetSelector" to="." method="_on_preset_selector_item_selected"]
+[connection signal="pressed" from="Root/ButtonRow/RunMatchButton" to="." method="_on_run_match_button_pressed"]
+[connection signal="pressed" from="Root/ButtonRow/SaveButton" to="." method="_on_save_button_pressed"]
+[connection signal="pressed" from="Root/ButtonRow/LoadButton" to="." method="_on_load_button_pressed"]
