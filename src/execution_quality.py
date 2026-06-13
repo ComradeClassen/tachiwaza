@@ -159,12 +159,12 @@ _GENERIC_NARRATION: dict[QualityBand, str] = {
 
 THROW_QUALITY_NARRATION: dict[ThrowID, dict[QualityBand, str]] = {
     ThrowID.UCHI_MATA: {
-        QualityBand.HIGH: "full hip rotation, uke airborne and flat",
+        QualityBand.HIGH: "full hip rotation, uke launched clear over the lifting leg",
         QualityBand.MED:  "reaping leg catches, uke rolls through the landing",
         QualityBand.LOW:  "hip-loaded top-leg variant — lift became a bump, uke steps out",
     },
     ThrowID.O_SOTO_GARI: {
-        QualityBand.HIGH: "thigh-to-thigh contact at chest closure, uke dropped flat",
+        QualityBand.HIGH: "thigh-to-thigh contact at chest closure, uke driven backward off both feet",
         QualityBand.MED:  "calf contact at mid-range, uke pitches but posts a hand",
         QualityBand.LOW:  "heel-to-calf at arm's length, sweep glances — uke stays up",
     },
@@ -214,7 +214,7 @@ THROW_QUALITY_NARRATION: dict[ThrowID, dict[QualityBand, str]] = {
         QualityBand.LOW:  "tori on their back, uke standing — ne-waza opens",
     },
     ThrowID.TOMOE_NAGE: {
-        QualityBand.HIGH: "foot on belt, full overhead arc, uke flat",
+        QualityBand.HIGH: "foot on belt, full overhead arc, uke driven over the top",
         QualityBand.MED:  "arc incomplete — uke comes down in scramble",
         QualityBand.LOW:  "tori on both knees, uke steps over — posture lost",
     },
