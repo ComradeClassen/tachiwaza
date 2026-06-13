@@ -681,6 +681,7 @@ _DEBUG_ONLY_EVENT_TYPES: frozenset[str] = frozenset({
     "GRIPS_RESET",
     "KUZUSHI_INDUCED",
     "THROW_ABORTED",
+    "COUNTER_NULLIFIED",
 })
 
 # Also debug-only: any event whose event_type begins with SUB_ (the skill-
@@ -1421,6 +1422,17 @@ class Match:
         # entries per match.
         self._scoring_events: list[Event] = []
 
+        # HAJ-70 — tick-order discipline. Names of attackers (tori) whose
+        # throw reached a LANDED_OR_SCORING resolution *this tick* — populated
+        # in _apply_throw_result, reset at the top of _tick. Once tori's throw
+        # has fully resolved (Step 11), any uke counter against that tori is
+        # firing "too late": uke is already on the mat / the score is in. The
+        # counter check (Step 11 fresh counters) and the consequence queue
+        # (a counter staged on a prior tick whose commit is due now) both
+        # consult this set and discard the late counter rather than letting it
+        # compromise tori post-hoc.
+        self._throws_resolved_this_tick: set[str] = set()
+
         # HAJ-152 — post-score follow-up state. None when no follow-up is
         # active; otherwise a dict carrying the scorer (tori), the
         # scored-on (uke), the throw_id, the score-tick, and the chase
@@ -1667,6 +1679,13 @@ class Match:
         for name in self._intent_force:
             self._intent_force[name] = (0.0, 0.0)
             self._actual_force[name] = (0.0, 0.0)
+
+        # HAJ-70 — clear the per-tick throw-resolution set before any
+        # consequence or in-progress throw resolves this tick. A landing /
+        # score later in this method re-populates it; the counter paths read
+        # it to enforce tick-order discipline (a counter that lands after the
+        # throw it answers has already scored is discarded).
+        self._throws_resolved_this_tick.clear()
 
         # HAJ-160 — restart-hajime emission. Fires MATTE_TO_HAJIME_PAUSE_TICKS
         # after a matte resolved, marking the start of the next exchange so
@@ -4709,6 +4728,33 @@ class Match:
         if c.kind == "FIRE_COMMIT_FROM_INTENT":
             attacker = self._fighter_by_name(c.payload["attacker_name"])
             defender = self._fighter_by_name(c.payload["defender_name"])
+            # HAJ-70 — tick-order discipline. This staged commit targets
+            # `defender_name`; if that fighter already resolved a throw to
+            # LANDED_OR_SCORING earlier this same tick, this commit is a uke
+            # counter that fired too late (tori threw first, uke is on the
+            # mat). Discard it before _resolve_commit_throw can start a fresh
+            # attempt against the already-resolved state. Pop the placeholder
+            # TIP the staging layer left so the counter-fighter isn't stuck
+            # mid-attempt, and leave a debug breadcrumb.
+            if c.payload["defender_name"] in self._throws_resolved_this_tick:
+                self._throws_in_progress.pop(c.payload["attacker_name"], None)
+                events.append(Event(
+                    tick=tick, event_type="COUNTER_NULLIFIED",
+                    description=(
+                        f"[counter] {c.payload['attacker_name']}'s queued "
+                        f"counter against {c.payload['defender_name']} "
+                        f"nullified — {c.payload['defender_name']}'s throw "
+                        f"already resolved this tick (tick-order discipline)."
+                    ),
+                    data={
+                        "defender": c.payload["attacker_name"],
+                        "attacker": c.payload["defender_name"],
+                        "reason":   "throw_resolved_this_tick",
+                        "from_consequence_queue": True,
+                        "prose_silent": True,
+                    },
+                ))
+                return
             # Pop the placeholder TIP so _resolve_commit_throw's
             # "already in progress?" guard doesn't reject this firing.
             self._throws_in_progress.pop(c.payload["attacker_name"], None)
@@ -5230,6 +5276,31 @@ class Match:
         if actual == CounterWindow.NONE:
             return None
 
+        # HAJ-70 — tick-order discipline. The counter window above is read
+        # against the attacker's mid-throw vulnerability, but if the
+        # attacker's throw already resolved to LANDED_OR_SCORING earlier this
+        # same tick, that window is stale: tori has completed the throw and
+        # uke is on the mat. A counter fired now is the Match-4 Ura-nage that
+        # "doesn't count" — the throw was already resolved. Discard it (no
+        # COUNTER_COMMIT, no abort of the now-finished attempt) and leave a
+        # debug breadcrumb noting the nullification.
+        if attacker.identity.name in self._throws_resolved_this_tick:
+            return [Event(
+                tick=tick, event_type="COUNTER_NULLIFIED",
+                description=(
+                    f"[counter] {defender.identity.name}'s counter against "
+                    f"{attacker.identity.name} nullified — "
+                    f"{attacker.identity.name}'s throw already resolved this "
+                    f"tick (tick-order discipline)."
+                ),
+                data={
+                    "defender": defender.identity.name,
+                    "attacker": attacker.identity.name,
+                    "reason":   "throw_resolved_this_tick",
+                    "prose_silent": True,
+                },
+            )]
+
         # HAJ-35 — defensive desperation: tired eyes reading patterns let
         # the defender see real attacks more reliably, and the "break the
         # pattern" instinct bumps the counter-fire probability.
@@ -5562,6 +5633,14 @@ class Match:
         self._apply_throw_fatigue(attacker, throw_id, outcome)
 
         if outcome in ("IPPON", "WAZA_ARI"):
+            # HAJ-70 — the kake sequence resolved to a landing this tick.
+            # Mark tori so the counter paths (Step 11 fresh counters + any
+            # counter commit queued for this same tick) discard a uke counter
+            # that fired too late: the throw is already scored / uke is on the
+            # mat, so a counter resolved against the mid-throw state must not
+            # compromise tori post-hoc. Covers IPPON, WAZA_ARI, and the
+            # ref-downgraded no-score landing (all reached inside this block).
+            self._throws_resolved_this_tick.add(a_name)
             # Ask referee for the score
             score_result = self.referee.score_throw(landing, tick)
             effective_award = score_result.award

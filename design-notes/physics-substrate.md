@@ -411,6 +411,8 @@ com_position_new = com_position_old + com_velocity_new × dt
 - If the *actual* signature match exceeds the throw's commit threshold, execute the throw's kake sequence (Parts 4–5).
 - If not, the throw fails and the judoka enters a compromised state (Part 6.3) whose specifics depend on which signature dimension failed.
 
+*Tick-order discipline (HAJ-70).* Throw resolution is strictly ordered ahead of the counter check **within** this step. Once tori's kake sequence has fully resolved to a landing/score this tick, the throw is no longer in progress and uke is on the mat — uke's counter for the same tick is resolved against the **post-throw** state, not the mid-throw state, which means it is discarded rather than applied. This covers both a counter the Step-11 check would fire *fresh* after the throw resolved earlier in the tick and a counter *queued* on a prior tick whose commit is due now. A counter fired "too late" must not retroactively compromise a tori whose throw has already scored (the Match-4 Ura-nage that "doesn't count"). The discarded counter leaves a debug-only `COUNTER_NULLIFIED` breadcrumb; no compromised state is applied to tori.
+
 **Step 12 — Fatigue, composure, clock updates.** Driving-mode actions add hand-part and core fatigue proportional to force magnitude × ticks sustained. Connective-mode grips recover hand-part fatigue at a slow rate. Composure updates based on tick outcomes (kuzushi suffered → composure decreases; kuzushi induced on opponent → composure increases). Both passivity clocks (kumi-kata and unconventional-grip) increment or reset per Part 2.6.
 
 Tick complete. Log events emit. Advance to t+1.
